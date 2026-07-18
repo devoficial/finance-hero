@@ -69,6 +69,15 @@ export async function updateLiability(id: string, input: UpdateLiabilityRequest)
   return liabilitySchema.parse(await response.json());
 }
 
+export async function undoLiabilityClear(id: string): Promise<Liability> {
+  const response = await fetch(`/api/v1/liabilities/${encodeURIComponent(id)}/undo-clear`, { method: "POST" });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return liabilitySchema.parse(await response.json());
+}
+
 export async function createPersonalBalance(input: CreatePersonalBalanceRequest): Promise<PersonalBalance> {
   const response = await fetch("/api/v1/personal-balances", {
     method: "POST",

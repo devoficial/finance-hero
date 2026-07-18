@@ -60,6 +60,23 @@ describe("local API", () => {
     expect(liabilityUpdate.statusCode).toBe(200);
     expect(liabilitySchema.parse(liabilityUpdate.json()).currentPrincipalPaise).toBe(30000000);
 
+    const liabilityClear = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/liabilities/debt-groww",
+      payload: { status: "cleared" },
+    });
+    expect(liabilityClear.statusCode).toBe(200);
+    expect(liabilitySchema.parse(liabilityClear.json()).canUndoClear).toBe(true);
+    const liabilityUndo = await app.inject({
+      method: "POST",
+      url: "/api/v1/liabilities/debt-groww/undo-clear",
+    });
+    expect(liabilityUndo.statusCode).toBe(200);
+    const restoredLiability = liabilitySchema.parse(liabilityUndo.json());
+    expect(restoredLiability.status).toBe("active");
+    expect(restoredLiability.currentPrincipalPaise).toBe(30000000);
+    expect(restoredLiability.emiPaise).toBe(1200000);
+
     const personalBalance = await app.inject({
       method: "POST",
       url: "/api/v1/personal-balances",

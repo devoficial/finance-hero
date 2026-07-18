@@ -75,6 +75,7 @@ export interface LiabilityRecord {
   annualRateBps: number | null;
   status: "active" | "cleared";
   snowballRank: number | null;
+  canUndoClear: boolean;
 }
 
 export interface LiabilitiesRecord {
@@ -126,6 +127,42 @@ export interface UpdatePersonalBalanceInput {
 
 export class LedgerRepository {
   constructor(private readonly database: FinanceHeroDatabase) {}
+
+  private findClearSnapshot(id: string): { currentPrincipalPaise: number; emiPaise: number } | null {
+    const events = this.database.connection
+      .prepare(`
+        SELECT detail_json AS detailJson
+        FROM audit_events
+        WHERE entity_type = 'debt' AND entity_id = ?
+          AND action IN ('liability.cleared', 'liability.updated')
+        ORDER BY created_at DESC, rowid DESC
+      `)
+      .all(id) as Array<{ detailJson: string }>;
+
+    for (const event of events) {
+      try {
+        const detail = JSON.parse(event.detailJson) as {
+          before?: { status?: string; currentPrincipalPaise?: number; emiPaise?: number };
+          after?: { status?: string };
+        };
+        const principal = detail.before?.currentPrincipalPaise;
+        const emi = detail.before?.emiPaise;
+        if (
+          detail.before?.status === "active" &&
+          detail.after?.status === "cleared" &&
+          Number.isSafeInteger(principal) &&
+          Number.isSafeInteger(emi) &&
+          (principal ?? -1) >= 0 &&
+          (emi ?? -1) >= 0
+        ) {
+          return { currentPrincipalPaise: principal as number, emiPaise: emi as number };
+        }
+      } catch {
+        // Ignore malformed historical audit data and continue to an earlier clear event.
+      }
+    }
+    return null;
+  }
 
   getReferenceData(): ReferenceDataRecord {
     return {
@@ -189,7 +226,7 @@ export class LedgerRepository {
         FROM debts
         ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, current_principal_paise DESC, lender ASC
       `)
-      .all() as Array<Omit<LiabilityRecord, "paidPaise" | "snowballRank">>;
+      .all() as Array<Omit<LiabilityRecord, "paidPaise" | "snowballRank" | "canUndoClear">>;
     const snowballOrder = [...rows]
       .filter((item) => item.status === "active" && item.currentPrincipalPaise > 0)
       .sort((left, right) => left.currentPrincipalPaise - right.currentPrincipalPaise);
@@ -198,6 +235,7 @@ export class LedgerRepository {
       ...item,
       paidPaise: Math.max(0, item.originalAmountPaise - item.currentPrincipalPaise),
       snowballRank: rankById.get(item.id) ?? null,
+      canUndoClear: item.status === "cleared" && this.findClearSnapshot(item.id) !== null,
     }));
     const active = liabilities.filter((item) => item.status === "active");
     const personalBalances = this.listPersonalBalances();
@@ -353,9 +391,15 @@ export class LedgerRepository {
       this.database.connection
         .prepare(`
           INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
-          VALUES (?, 'liability.updated', 'debt', ?, ?, ?)
+          VALUES (?, ?, 'debt', ?, ?, ?)
         `)
-        .run(randomUUID(), id, JSON.stringify({ before: existing, after: next }), now);
+        .run(
+          randomUUID(),
+          existing.status === "active" && next.status === "cleared" ? "liability.cleared" : "liability.updated",
+          id,
+          JSON.stringify({ before: existing, after: next }),
+          now,
+        );
     });
     write.immediate();
 
@@ -364,6 +408,59 @@ export class LedgerRepository {
       throw new Error("Updated liability could not be read.");
     }
     return updated;
+  }
+
+  undoLiabilityClear(id: string): LiabilityRecord {
+    const existing = this.database.connection
+      .prepare(`
+        SELECT id, lender AS name, product_type AS productType,
+               original_amount_paise AS originalAmountPaise,
+               current_principal_paise AS currentPrincipalPaise,
+               emi_paise AS emiPaise, annual_rate_bps AS annualRateBps, status
+        FROM debts WHERE id = ?
+      `)
+      .get(id) as Omit<LiabilityRecord, "paidPaise" | "snowballRank" | "canUndoClear"> | undefined;
+    if (!existing) {
+      throw new Error("Liability does not exist.");
+    }
+    if (existing.status !== "cleared") {
+      throw new Error("Only a cleared liability can be restored.");
+    }
+
+    const snapshot = this.findClearSnapshot(id);
+    if (!snapshot) {
+      throw new Error("No clear action is available to undo.");
+    }
+    const now = new Date().toISOString();
+    const after = {
+      ...existing,
+      currentPrincipalPaise: snapshot.currentPrincipalPaise,
+      emiPaise: snapshot.emiPaise,
+      status: "active" as const,
+    };
+
+    const write = this.database.connection.transaction(() => {
+      this.database.connection
+        .prepare(`
+          UPDATE debts
+          SET current_principal_paise = ?, emi_paise = ?, status = 'active', updated_at = ?
+          WHERE id = ?
+        `)
+        .run(after.currentPrincipalPaise, after.emiPaise, now, id);
+      this.database.connection
+        .prepare(`
+          INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+          VALUES (?, 'liability.clear_undone', 'debt', ?, ?, ?)
+        `)
+        .run(randomUUID(), id, JSON.stringify({ before: existing, after }), now);
+    });
+    write.immediate();
+
+    const restored = this.getLiabilities().liabilities.find((liability) => liability.id === id);
+    if (!restored) {
+      throw new Error("Restored liability could not be read.");
+    }
+    return restored;
   }
 
   getDashboard(month: string, localDay: number): DashboardRecord {

@@ -124,6 +124,21 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
   });
 
+  app.post("/api/v1/liabilities/:id/undo-clear", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+      return reply.send(liabilitySchema.parse(ledger.undoLiabilityClear(id)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Liability clear could not be undone.";
+      const statusCode = message === "Liability does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_LIABILITY_UNDO", message } });
+    }
+  });
+
   app.post("/api/v1/personal-balances", async (request, reply) => {
     if (!ledger) {
       return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });

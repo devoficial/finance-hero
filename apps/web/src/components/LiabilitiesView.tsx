@@ -8,7 +8,7 @@ import type {
 } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { createPersonalBalance, updateLiability, updatePersonalBalance } from "../lib/api";
+import { createPersonalBalance, undoLiabilityClear, updateLiability, updatePersonalBalance } from "../lib/api";
 
 interface LiabilitiesViewProps {
   data?: LiabilitiesResponse;
@@ -74,6 +74,15 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
       ]);
     },
   });
+  const undoClearMutation = useMutation({
+    mutationFn: (id: string) => undoLiabilityClear(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["liabilities"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+    },
+  });
   const personalMutation = useMutation({
     mutationFn: async (form: PersonalBalanceForm) => {
       const amountPaise = rupeesToPaise(form.amount);
@@ -125,6 +134,10 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
 
   function markCleared(liability: Liability) {
     mutation.mutate({ id: liability.id, input: { status: "cleared" } });
+  }
+
+  function undoClear(liability: Liability) {
+    undoClearMutation.mutate(liability.id);
   }
 
   function submitEdit(event: FormEvent<HTMLFormElement>) {
@@ -532,6 +545,18 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
                             {mutation.isPending && mutation.variables?.id === liability.id
                               ? "Clearing..."
                               : "Mark cleared"}
+                          </button>
+                        )}
+                        {liability.status === "cleared" && liability.canUndoClear && (
+                          <button
+                            className="undo-clear-button"
+                            disabled={undoClearMutation.isPending}
+                            onClick={() => undoClear(liability)}
+                            type="button"
+                          >
+                            {undoClearMutation.isPending && undoClearMutation.variables === liability.id
+                              ? "Restoring..."
+                              : "Undo clear"}
                           </button>
                         )}
                         <button className="edit-liability-button" onClick={() => beginEdit(liability)} type="button">

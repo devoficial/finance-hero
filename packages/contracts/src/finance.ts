@@ -80,6 +80,7 @@ export const liabilitySchema = z.object({
   annualRateBps: z.number().int().nonnegative().nullable(),
   status: z.enum(["active", "cleared"]),
   snowballRank: z.number().int().positive().nullable(),
+  canUndoClear: z.boolean(),
 });
 
 export const personalBalanceSchema = z.object({

@@ -117,11 +117,45 @@ describe("ledger repository", () => {
     expect(cleared.status).toBe("cleared");
     expect(cleared.currentPrincipalPaise).toBe(0);
     expect(cleared.emiPaise).toBe(0);
+    expect(cleared.canUndoClear).toBe(true);
     const portfolio = repository.getLiabilities();
     expect(portfolio.activeCount).toBe(9);
     expect(portfolio.clearedCount).toBe(2);
     expect(portfolio.totalPrincipalPaise).toBe(701040600);
     expect(portfolio.totalEmiPaise).toBe(11611100);
+
+    const clearAudit = database.connection
+      .prepare(
+        "SELECT id, action FROM audit_events WHERE entity_id = 'debt-dmi' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+      )
+      .get() as { id: string; action: string };
+    expect(clearAudit.action).toBe("liability.cleared");
+
+    // Clear actions created by the previous app version used the generic action name.
+    database.connection.prepare("UPDATE audit_events SET action = 'liability.updated' WHERE id = ?").run(clearAudit.id);
+    const restored = repository.undoLiabilityClear("debt-dmi");
+    expect(restored.status).toBe("active");
+    expect(restored.currentPrincipalPaise).toBe(23814000);
+    expect(restored.emiPaise).toBe(1134000);
+    expect(restored.canUndoClear).toBe(false);
+    expect(repository.getLiabilities().totalPrincipalPaise).toBe(724854600);
+    expect(repository.getLiabilities().totalEmiPaise).toBe(12745100);
+    const undoAudit = database.connection
+      .prepare(
+        "SELECT action FROM audit_events WHERE entity_id = 'debt-dmi' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+      )
+      .get() as { action: string };
+    expect(undoAudit.action).toBe("liability.clear_undone");
+    database.close();
+  });
+
+  it("does not offer undo for a liability that was already cleared in the source sheet", () => {
+    const { database, repository } = createRepository();
+    const twoWheeler = repository.getLiabilities().liabilities.find((item) => item.id === "debt-two-wheeler");
+
+    expect(twoWheeler?.status).toBe("cleared");
+    expect(twoWheeler?.canUndoClear).toBe(false);
+    expect(() => repository.undoLiabilityClear("debt-two-wheeler")).toThrow("No clear action is available to undo.");
     database.close();
   });
 
