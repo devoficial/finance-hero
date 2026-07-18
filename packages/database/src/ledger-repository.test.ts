@@ -75,4 +75,24 @@ describe("ledger repository", () => {
     expect(balance.total).toBe(0);
     database.close();
   });
+
+  it("updates a liability and recalculates portfolio totals", () => {
+    const { database, repository } = createRepository();
+    const updated = repository.updateLiability("debt-dmi", {
+      currentPrincipalPaise: 20000000,
+      emiPaise: 1200000,
+      annualRateBps: 1550,
+    });
+
+    expect(updated.currentPrincipalPaise).toBe(20000000);
+    expect(updated.emiPaise).toBe(1200000);
+    expect(updated.annualRateBps).toBe(1550);
+    expect(repository.getLiabilities().totalPrincipalPaise).toBe(721040600);
+    expect(repository.getLiabilities().totalEmiPaise).toBe(12811100);
+    const audit = database.connection
+      .prepare("SELECT action FROM audit_events WHERE entity_id = 'debt-dmi' ORDER BY created_at DESC LIMIT 1")
+      .get() as { action: string };
+    expect(audit.action).toBe("liability.updated");
+    database.close();
+  });
 });

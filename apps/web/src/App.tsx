@@ -49,7 +49,7 @@ export function App() {
     .format(new Date(`${visibleMonth}-01T00:00:00Z`))
     .toUpperCase();
   const hasViewError =
-    (activeNav === "Home" && dashboard.isError) ||
+    (activeNav === "Home" && (dashboard.isError || liabilities.isError)) ||
     (activeNav === "Ledger" && (ledger.isError || referenceData.isError)) ||
     (activeNav === "Expenses" && (expenseYear.isError || selectedExpense.isError)) ||
     (activeNav === "Liabilities" && liabilities.isError);
@@ -131,15 +131,20 @@ export function App() {
         ) : activeNav === "Home" ? (
           <DashboardView
             dashboard={dashboard.data}
-            loading={dashboard.isLoading}
+            liabilities={liabilities.data}
+            loading={dashboard.isLoading || liabilities.isLoading}
             money={money}
             onOpenLedger={openCurrentLedger}
+            onOpenLiabilities={() => setActiveNav("Liabilities")}
           />
         ) : activeNav === "Expenses" ? (
           <ExpensesView
             loading={expenseYear.isLoading || selectedExpense.isLoading}
             money={money}
-            onOpenStatement={() => setActiveNav("Ledger")}
+            onOpenStatement={(month) => {
+              setSelectedMonth(month);
+              setActiveNav("Ledger");
+            }}
             onSelectMonth={setSelectedMonth}
             onYearChange={changeExpenseYear}
             selectedDashboard={selectedExpense.data}

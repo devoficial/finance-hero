@@ -33,6 +33,7 @@ FINANCE_HERO_DATABASE_KEY="your-development-key-of-at-least-32-characters" pnpm 
 - Ledger: `http://127.0.0.1:4317/api/v1/ledger?month=2026-07`
 - Expense year: `http://127.0.0.1:4317/api/v1/expenses/year?year=2026`
 - Liabilities: `http://127.0.0.1:4317/api/v1/liabilities`
+- Liability update: `PATCH /api/v1/liabilities/:id`
 - Reference data: `http://127.0.0.1:4317/api/v1/reference-data`
 
 Development binds only to loopback. LAN HTTPS, Bonjour discovery, and iPhone certificate

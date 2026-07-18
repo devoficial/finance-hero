@@ -19,6 +19,8 @@ export {
   monthSchema,
   type ReferenceDataResponse,
   referenceDataResponseSchema,
+  type UpdateLiabilityRequest,
+  updateLiabilityRequestSchema,
   yearSchema,
 } from "./finance";
 export { type HealthResponse, healthResponseSchema } from "./health";

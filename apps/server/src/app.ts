@@ -7,8 +7,10 @@ import {
   healthResponseSchema,
   ledgerResponseSchema,
   liabilitiesResponseSchema,
+  liabilitySchema,
   monthSchema,
   referenceDataResponseSchema,
+  updateLiabilityRequestSchema,
   yearSchema,
 } from "@finance-hero/contracts";
 import {
@@ -101,6 +103,22 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
 
     return reply.header("cache-control", "no-store").send(liabilitiesResponseSchema.parse(ledger.getLiabilities()));
+  });
+
+  app.patch("/api/v1/liabilities/:id", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+      const input = updateLiabilityRequestSchema.parse(request.body);
+      return reply.send(liabilitySchema.parse(ledger.updateLiability(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Liability could not be updated.";
+      const statusCode = message === "Liability does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_LIABILITY", message } });
+    }
   });
 
   app.get("/api/v1/reference-data", async (_request, reply) => {

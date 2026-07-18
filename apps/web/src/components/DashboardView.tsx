@@ -1,16 +1,30 @@
-import type { DashboardResponse } from "@finance-hero/contracts";
+import type { DashboardResponse, LiabilitiesResponse } from "@finance-hero/contracts";
 
 interface DashboardViewProps {
   dashboard?: DashboardResponse;
+  liabilities?: LiabilitiesResponse;
   loading: boolean;
   money: (paise: number) => string;
   onOpenLedger: () => void;
+  onOpenLiabilities: () => void;
 }
 
-export function DashboardView({ dashboard, loading, money, onOpenLedger }: DashboardViewProps) {
-  if (loading || !dashboard) {
+export function DashboardView({
+  dashboard,
+  liabilities,
+  loading,
+  money,
+  onOpenLedger,
+  onOpenLiabilities,
+}: DashboardViewProps) {
+  if (loading || !dashboard || !liabilities) {
     return <section className="panel loading-panel">Reading the encrypted ledger...</section>;
   }
+
+  const visibleLiabilities = liabilities.liabilities
+    .filter((liability) => liability.status === "active" && liability.currentPrincipalPaise > 0)
+    .slice(0, 4);
+  const snowballTarget = liabilities.liabilities.find((liability) => liability.snowballRank === 1);
 
   const metrics = [
     {
@@ -128,22 +142,33 @@ export function DashboardView({ dashboard, loading, money, onOpenLedger }: Dashb
           <article className="panel debt-panel">
             <div className="panel-heading compact">
               <div>
-                <p className="eyebrow">SNOWBALL TARGET / LIVE DEBT</p>
-                <h2>{dashboard.snowballTarget?.name ?? "No active debt"}</h2>
+                <p className="eyebrow">LIABILITY PORTFOLIO / LIVE DEBT</p>
+                <h2>{money(liabilities.totalPrincipalPaise)}</h2>
               </div>
-              {dashboard.snowballTarget?.annualRateBps != null && (
-                <span className="risk-pill">{(dashboard.snowballTarget.annualRateBps / 100).toFixed(2)}%</span>
-              )}
+              <span className="risk-pill">{liabilities.activeCount} ACTIVE</span>
             </div>
-            <p className="debt-value">{money(dashboard.snowballTarget?.principalPaise ?? 0)}</p>
             <div className="debt-meta">
-              <span>EMI {money(dashboard.snowballTarget?.emiPaise ?? 0)}</span>
-              <span>Priority 01</span>
+              <span>Monthly EMI {money(liabilities.totalEmiPaise)}</span>
+              <span>{liabilities.clearedCount} cleared</span>
             </div>
-            <div className="debt-track">
-              <i />
+            <div className="home-liability-list">
+              {visibleLiabilities.map((liability) => (
+                <div key={liability.id}>
+                  <span>{liability.name}</span>
+                  <strong>{money(liability.currentPrincipalPaise)}</strong>
+                </div>
+              ))}
             </div>
-            <button type="button">Run prepayment scenario</button>
+            {snowballTarget && (
+              <div className="snowball-callout">
+                <span>Snowball priority #1</span>
+                <strong>{snowballTarget.name}</strong>
+                <small>{money(snowballTarget.currentPrincipalPaise)} outstanding</small>
+              </div>
+            )}
+            <button onClick={onOpenLiabilities} type="button">
+              Open complete liability sheet
+            </button>
           </article>
 
           <article className="panel sync-panel">

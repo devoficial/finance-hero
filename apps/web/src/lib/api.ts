@@ -9,11 +9,14 @@ import {
   type LedgerResponse,
   type LedgerTransaction,
   type LiabilitiesResponse,
+  type Liability,
   ledgerResponseSchema,
   ledgerTransactionSchema,
   liabilitiesResponseSchema,
+  liabilitySchema,
   type ReferenceDataResponse,
   referenceDataResponseSchema,
+  type UpdateLiabilityRequest,
 } from "@finance-hero/contracts";
 
 async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
@@ -46,6 +49,20 @@ export async function getExpenseYear(year: string, signal?: AbortSignal): Promis
 
 export async function getLiabilities(signal?: AbortSignal): Promise<LiabilitiesResponse> {
   return liabilitiesResponseSchema.parse(await getJson("/api/v1/liabilities", signal));
+}
+
+export async function updateLiability(id: string, input: UpdateLiabilityRequest): Promise<Liability> {
+  const response = await fetch(`/api/v1/liabilities/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return liabilitySchema.parse(await response.json());
 }
 
 export async function getReferenceData(signal?: AbortSignal): Promise<ReferenceDataResponse> {

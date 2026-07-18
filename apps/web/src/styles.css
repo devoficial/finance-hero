@@ -523,6 +523,47 @@ h2 {
   width: 73%;
   background: var(--red);
 }
+.home-liability-list {
+  display: grid;
+  margin: 15px 0;
+  border-top: 1px solid var(--line);
+}
+.home-liability-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.home-liability-list span {
+  max-width: 58%;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-liability-list strong {
+  font:
+    10px "DM Mono",
+    monospace;
+}
+.snowball-callout {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 13px;
+  padding: 10px;
+  background: #f1d995;
+}
+.snowball-callout span,
+.snowball-callout small {
+  color: #66756f;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.snowball-callout strong {
+  font-size: 11px;
+}
 .debt-panel button,
 .sync-panel > button {
   width: 100%;
@@ -923,12 +964,20 @@ h2 {
 .liability-metrics {
   grid-template-columns: repeat(4, 1fr);
 }
+.liability-metric-card strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: clamp(22px, 2vw, 30px);
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .liabilities-panel {
   min-width: 0;
 }
 .liabilities-table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 980px;
   border-collapse: collapse;
   font-size: 10px;
 }
@@ -948,14 +997,23 @@ h2 {
     monospace;
 }
 .liabilities-table td:first-child {
-  min-width: 190px;
+  min-width: 180px;
 }
-.liabilities-table td:nth-child(n + 3) {
+.liabilities-table td:nth-child(n + 2) {
   font-family: "DM Mono", monospace;
+}
+.liabilities-table td:first-child small {
+  display: block;
+  margin-top: 3px;
+  color: #728078;
+  font-size: 8px;
 }
 .liabilities-table .principal-cell {
   color: #a13524;
   font-weight: 700;
+}
+.liabilities-table tr.editing td {
+  background: #f5ebcf;
 }
 .liabilities-table tr.cleared td {
   color: #6e7a75;
@@ -991,6 +1049,69 @@ h2 {
   background: var(--yellow);
   color: var(--green);
   font-weight: 700;
+}
+.edit-liability-button,
+.editor-close-button {
+  border: 1px solid var(--green);
+  background: transparent;
+  color: var(--green);
+  padding: 6px 9px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+.edit-liability-button:hover,
+.editor-close-button:hover {
+  background: var(--green);
+  color: white;
+}
+.liability-editor-panel {
+  margin-bottom: 16px;
+  border-left: 5px solid var(--yellow);
+}
+.liability-editor-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.liability-editor-form label {
+  display: grid;
+  gap: 6px;
+}
+.liability-editor-form label > span {
+  color: #64736c;
+  text-transform: uppercase;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.liability-editor-form input,
+.liability-editor-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: #f8f5ed;
+  color: var(--ink);
+  padding: 8px 9px;
+}
+.save-liability-button {
+  min-height: 40px;
+  align-self: end;
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: white;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+.save-liability-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.liability-editor-error {
+  grid-column: 1 / -1;
 }
 .mobile-nav {
   display: none;
@@ -1030,6 +1151,9 @@ h2 {
   }
   .liability-metrics .metric-card:nth-child(-n + 2) {
     border-bottom: 1px solid var(--line);
+  }
+  .liability-editor-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .metric-card:nth-child(2) {
     border-right: 0;
@@ -1157,6 +1281,9 @@ h2 {
   }
   .statement-button {
     width: 100%;
+  }
+  .liability-editor-form {
+    grid-template-columns: 1fr;
   }
   .entry-form {
     grid-template-columns: 1fr;

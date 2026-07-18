@@ -91,6 +91,18 @@ export const liabilitiesResponseSchema = z.object({
   liabilities: z.array(liabilitySchema),
 });
 
+export const updateLiabilityRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160).optional(),
+    productType: z.string().trim().min(1).max(80).optional(),
+    originalAmountPaise: paiseSchema.nonnegative().optional(),
+    currentPrincipalPaise: paiseSchema.nonnegative().optional(),
+    emiPaise: paiseSchema.nonnegative().optional(),
+    annualRateBps: z.number().int().nonnegative().nullable().optional(),
+    status: z.enum(["active", "cleared"]).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, { message: "At least one liability field is required." });
+
 export const createManualTransactionRequestSchema = z.object({
   occurredOn: localDateSchema,
   payee: z.string().trim().min(1).max(160),
@@ -110,4 +122,5 @@ export type ExpenseMonthSummary = z.infer<typeof expenseMonthSummarySchema>;
 export type ExpenseYearResponse = z.infer<typeof expenseYearResponseSchema>;
 export type Liability = z.infer<typeof liabilitySchema>;
 export type LiabilitiesResponse = z.infer<typeof liabilitiesResponseSchema>;
+export type UpdateLiabilityRequest = z.infer<typeof updateLiabilityRequestSchema>;
 export type CreateManualTransactionRequest = z.infer<typeof createManualTransactionRequestSchema>;

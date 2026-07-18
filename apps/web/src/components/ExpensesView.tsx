@@ -9,7 +9,7 @@ interface ExpensesViewProps {
   money: (paise: number) => string;
   onYearChange: (year: string) => void;
   onSelectMonth: (month: string) => void;
-  onOpenStatement: () => void;
+  onOpenStatement: (month: string) => void;
 }
 
 const pieColors = ["#173f35", "#f4b942", "#d64b35", "#32765e", "#8f6a3d", "#8ca99c", "#d49a75"];
@@ -98,29 +98,37 @@ export function ExpensesView({
         </div>
 
         <div className="expense-month-grid">
-          {yearData.months.map((month) => (
-            <button
-              className={`month-card ${month.month === selectedMonth ? "selected" : ""} ${month.transactionCount > 0 ? "has-data" : "empty"}`}
-              key={month.month}
-              onClick={() => onSelectMonth(month.month)}
-              type="button"
-            >
-              <div>
-                <span>{monthName(month.month, "short").toUpperCase()}</span>
-                <small>{month.transactionCount > 0 ? `${month.transactionCount} entries` : "No entries"}</small>
-              </div>
-              <strong>{money(month.regularExpensePaise)}</strong>
-              <div className="progress-track">
-                <i style={{ width: `${Math.min(100, month.budgetUsedPercentage)}%` }} />
-              </div>
-              <footer>
-                <span>
-                  {month.regularBudgetPaise > 0 ? `Budget ${money(month.regularBudgetPaise)}` : "Budget not set"}
-                </span>
-                <b>{month.budgetUsedPercentage > 0 ? `${month.budgetUsedPercentage}%` : "OPEN"}</b>
-              </footer>
-            </button>
-          ))}
+          {yearData.months.map((month) => {
+            const imported = month.transactionCount > 0 || month.regularBudgetPaise > 0;
+            return (
+              <button
+                className={`month-card ${month.month === selectedMonth ? "selected" : ""} ${imported ? "has-data" : "empty"}`}
+                key={month.month}
+                onClick={() => {
+                  onSelectMonth(month.month);
+                  onOpenStatement(month.month);
+                }}
+                type="button"
+              >
+                <div>
+                  <span>{monthName(month.month, "short").toUpperCase()}</span>
+                  <small>{imported ? `${month.transactionCount} entries` : "Awaiting import"}</small>
+                </div>
+                <strong>{imported ? money(month.regularExpensePaise) : "Not imported"}</strong>
+                <div className="progress-track">
+                  <i style={{ width: `${Math.min(100, month.budgetUsedPercentage)}%` }} />
+                </div>
+                <footer>
+                  <span>
+                    {imported && month.regularBudgetPaise > 0
+                      ? `Budget ${money(month.regularBudgetPaise)}`
+                      : "No source data"}
+                  </span>
+                  <b>{imported && month.budgetUsedPercentage > 0 ? `${month.budgetUsedPercentage}%` : "OPEN →"}</b>
+                </footer>
+              </button>
+            );
+          })}
         </div>
       </article>
 
@@ -130,7 +138,7 @@ export function ExpensesView({
             <p className="eyebrow">SELECTED MONTH / {selectedMonth}</p>
             <h2>{monthName(selectedMonth)} expense breakdown</h2>
           </div>
-          <button className="statement-button" onClick={onOpenStatement} type="button">
+          <button className="statement-button" onClick={() => onOpenStatement(selectedMonth)} type="button">
             Open detailed statement
           </button>
         </div>

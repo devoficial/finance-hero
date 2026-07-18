@@ -86,6 +86,16 @@ export interface LiabilitiesRecord {
   liabilities: LiabilityRecord[];
 }
 
+export interface UpdateLiabilityInput {
+  name?: string;
+  productType?: string;
+  originalAmountPaise?: number;
+  currentPrincipalPaise?: number;
+  emiPaise?: number;
+  annualRateBps?: number | null;
+  status?: "active" | "cleared";
+}
+
 export class LedgerRepository {
   constructor(private readonly database: FinanceHeroDatabase) {}
 
@@ -171,6 +181,68 @@ export class LedgerRepository {
       clearedCount: liabilities.length - active.length,
       liabilities,
     };
+  }
+
+  updateLiability(id: string, input: UpdateLiabilityInput): LiabilityRecord {
+    const existing = this.database.connection
+      .prepare(`
+        SELECT id, account_id AS accountId, lender AS name, product_type AS productType,
+               original_amount_paise AS originalAmountPaise,
+               current_principal_paise AS currentPrincipalPaise,
+               emi_paise AS emiPaise, annual_rate_bps AS annualRateBps, status
+        FROM debts WHERE id = ?
+      `)
+      .get(id) as (Omit<LiabilityRecord, "paidPaise" | "snowballRank"> & { accountId: string }) | undefined;
+    if (!existing) {
+      throw new Error("Liability does not exist.");
+    }
+
+    const next = {
+      name: input.name?.trim() ?? existing.name,
+      productType: input.productType?.trim() ?? existing.productType,
+      originalAmountPaise: input.originalAmountPaise ?? existing.originalAmountPaise,
+      currentPrincipalPaise: input.currentPrincipalPaise ?? existing.currentPrincipalPaise,
+      emiPaise: input.emiPaise ?? existing.emiPaise,
+      annualRateBps: input.annualRateBps === undefined ? existing.annualRateBps : input.annualRateBps,
+      status: input.status ?? existing.status,
+    };
+    const now = new Date().toISOString();
+
+    const write = this.database.connection.transaction(() => {
+      this.database.connection
+        .prepare(`
+          UPDATE debts SET lender = ?, product_type = ?, original_amount_paise = ?,
+            current_principal_paise = ?, emi_paise = ?, annual_rate_bps = ?, status = ?, updated_at = ?
+          WHERE id = ?
+        `)
+        .run(
+          next.name,
+          next.productType,
+          next.originalAmountPaise,
+          next.currentPrincipalPaise,
+          next.emiPaise,
+          next.annualRateBps,
+          next.status,
+          now,
+          id,
+        );
+      this.database.connection
+        .prepare("UPDATE accounts SET name = ?, account_type = ?, institution = ? WHERE id = ?")
+        .run(next.name, next.productType, next.name, existing.accountId);
+      this.database.connection
+        .prepare(`
+          INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+          VALUES (?, 'liability.updated', 'debt', ?, ?, ?)
+        `)
+        .run(randomUUID(), id, JSON.stringify({ before: existing, after: next }), now);
+    });
+    write.immediate();
+
+    const updated = this.getLiabilities().liabilities.find((liability) => liability.id === id);
+    if (!updated) {
+      throw new Error("Updated liability could not be read.");
+    }
+    return updated;
   }
 
   getDashboard(month: string, localDay: number): DashboardRecord {

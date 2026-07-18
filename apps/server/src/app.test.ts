@@ -7,6 +7,7 @@ import {
   healthResponseSchema,
   ledgerTransactionSchema,
   liabilitiesResponseSchema,
+  liabilitySchema,
 } from "@finance-hero/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app";
@@ -47,6 +48,14 @@ describe("local API", () => {
     const liabilities = await app.inject({ method: "GET", url: "/api/v1/liabilities" });
     expect(liabilities.statusCode).toBe(200);
     expect(liabilitiesResponseSchema.parse(liabilities.json()).totalPrincipalPaise).toBe(724854600);
+
+    const liabilityUpdate = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/liabilities/debt-groww",
+      payload: { currentPrincipalPaise: 30000000, emiPaise: 1200000 },
+    });
+    expect(liabilityUpdate.statusCode).toBe(200);
+    expect(liabilitySchema.parse(liabilityUpdate.json()).currentPrincipalPaise).toBe(30000000);
 
     const manual = await app.inject({
       method: "POST",
