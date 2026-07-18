@@ -1,229 +1,266 @@
-import type { DashboardResponse, LiabilitiesResponse } from "@finance-hero/contracts";
+import type { DashboardResponse, ExpenseYearResponse, LiabilitiesResponse } from "@finance-hero/contracts";
 
 interface DashboardViewProps {
   dashboard?: DashboardResponse;
+  expenseYear?: ExpenseYearResponse;
   liabilities?: LiabilitiesResponse;
   loading: boolean;
   money: (paise: number) => string;
   onOpenLedger: () => void;
+  onOpenExpenses: () => void;
   onOpenLiabilities: () => void;
+}
+
+function percentage(value: number, total: number) {
+  return total > 0 ? Math.round((value / total) * 100) : 0;
+}
+
+function monthLabel(month: string, style: "short" | "long" = "short") {
+  return new Intl.DateTimeFormat("en-IN", { month: style, timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
+}
+
+function productName(productType: string) {
+  return productType.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export function DashboardView({
   dashboard,
+  expenseYear,
   liabilities,
   loading,
   money,
   onOpenLedger,
+  onOpenExpenses,
   onOpenLiabilities,
 }: DashboardViewProps) {
-  if (loading || !dashboard || !liabilities) {
-    return <section className="panel loading-panel">Reading the encrypted ledger...</section>;
+  if (loading || !dashboard || !liabilities || !expenseYear) {
+    return <section className="panel loading-panel">Calculating your financial position...</section>;
   }
 
-  const visibleLiabilities = liabilities.liabilities
-    .filter((liability) => liability.status === "active" && liability.currentPrincipalPaise > 0)
-    .slice(0, 4);
+  const income = dashboard.plannedIncomePaise;
+  const available = Math.max(0, dashboard.availableAfterPlanPaise);
+  const emiBurden = percentage(dashboard.totalEmiPaise, income);
+  const expenseShare = percentage(dashboard.regularExpensePaise, income);
+  const surplusRate = percentage(available, income);
+  const receivableCoverage = percentage(liabilities.receivablePaise, liabilities.otherLiabilityPaise);
   const snowballTarget = liabilities.liabilities.find((liability) => liability.snowballRank === 1);
-
-  const metrics = [
-    {
-      label: "Monthly income plan",
-      value: dashboard.plannedIncomePaise,
-      detail:
-        dashboard.actualIncomePaise > 0 ? `${money(dashboard.actualIncomePaise)} received` : "Awaiting income entries",
-      kind: "positive",
-    },
-    {
-      label: "Regular expenses",
-      value: dashboard.regularExpensePaise,
-      detail: `${dashboard.budgetUsedPercentage}% of July budget`,
-      kind: dashboard.dangerAlert ? "warning" : "neutral",
-    },
-    {
-      label: "Total EMI",
-      value: dashboard.totalEmiPaise,
-      detail: `Debt principal ${money(dashboard.debtPrincipalPaise)}`,
-      kind: "neutral",
-    },
-    {
-      label: "Available after plan",
-      value: dashboard.availableAfterPlanPaise,
-      detail: "Income plan less expenses and EMI",
-      kind: "positive",
-    },
+  const largestLiability = liabilities.liabilities
+    .filter((liability) => liability.status === "active")
+    .toSorted((left, right) => right.currentPrincipalPaise - left.currentPrincipalPaise)[0];
+  const categoryMaximum = Math.max(1, ...dashboard.categories.map((category) => category.amountPaise));
+  const importedMonths = expenseYear.months.filter((month) => month.transactionCount > 0);
+  const trendMaximum = Math.max(1, ...importedMonths.map((month) => month.regularExpensePaise));
+  const liabilityTypes = Array.from(
+    liabilities.liabilities
+      .filter((liability) => liability.status === "active" && liability.currentPrincipalPaise > 0)
+      .reduce((groups, liability) => {
+        groups.set(liability.productType, (groups.get(liability.productType) ?? 0) + liability.currentPrincipalPaise);
+        return groups;
+      }, new Map<string, number>()),
+  )
+    .map(([type, amountPaise]) => ({ type, amountPaise }))
+    .toSorted((left, right) => right.amountPaise - left.amountPaise);
+  const allocationSegments = [
+    { label: "EMIs", amountPaise: dashboard.totalEmiPaise, share: emiBurden, color: "var(--red)" },
+    { label: "Regular expenses", amountPaise: dashboard.regularExpensePaise, share: expenseShare, color: "#c88646" },
+    { label: "Available", amountPaise: available, share: surplusRate, color: "var(--green-bright)" },
   ];
+  const allocationTotal = Math.max(1, income, dashboard.totalEmiPaise + dashboard.regularExpensePaise + available);
+  const emiAngle = (dashboard.totalEmiPaise / allocationTotal) * 360;
+  const expenseAngle = (dashboard.regularExpensePaise / allocationTotal) * 360;
+  const allocationStyle = {
+    background: `conic-gradient(var(--red) 0 ${emiAngle}deg, #c88646 ${emiAngle}deg ${emiAngle + expenseAngle}deg, var(--green-bright) ${emiAngle + expenseAngle}deg 360deg)`,
+  };
 
   return (
     <>
-      {dashboard.dangerAlert && (
-        <section className="alert-strip" aria-label="Financial alert">
-          <span className="alert-code">RISK 01</span>
-          <p>
-            <strong>Regular spending crossed 60% before day 20.</strong> {dashboard.budgetUsedPercentage}% of the
-            approved budget is already used.
-          </p>
-          <button onClick={onOpenLedger} type="button">
-            Review July
-          </button>
-        </section>
-      )}
-
-      <section className="metric-grid" aria-label="Financial summary">
-        {metrics.map((metric) => (
-          <article className={`metric-card ${metric.kind}`} key={metric.label}>
-            <span>{metric.label}</span>
-            <strong>{money(metric.value)}</strong>
-            <small>{metric.detail}</small>
-          </article>
-        ))}
+      <section className={`financial-signal ${dashboard.dangerAlert ? "danger" : "stable"}`}>
+        <div>
+          <span>MONTHLY FINANCIAL SIGNAL</span>
+          <strong>{dashboard.dangerAlert ? "Spending intervention required" : "Cash flow is within plan"}</strong>
+        </div>
+        <p>
+          {dashboard.dangerAlert
+            ? `${dashboard.budgetUsedPercentage}% of the regular budget is already consumed before day 20.`
+            : `${dashboard.budgetUsedPercentage}% of the regular budget is used with ${money(available)} still available.`}
+        </p>
+        <button onClick={onOpenLedger} type="button">
+          Inspect ledger
+        </button>
       </section>
 
-      <section className="workspace-grid">
-        <article className="panel cash-flow-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">JULY CASH-FLOW PLAN / LIVE POSITION</p>
-              <h2>Where the salary is committed</h2>
-            </div>
-            <span className="live-pill">{dashboard.transactionCount} RECORDS</span>
+      <section className="finance-kpi-grid" aria-label="Core financial indicators">
+        <article className="finance-kpi primary">
+          <span>Available after plan</span>
+          <strong>{money(dashboard.availableAfterPlanPaise)}</strong>
+          <div>
+            <b>{surplusRate}%</b>
+            <small>of planned income remains</small>
           </div>
+        </article>
+        <article className={`finance-kpi ${emiBurden >= 40 ? "critical" : ""}`}>
+          <span>EMI burden</span>
+          <strong>{emiBurden}%</strong>
+          <div>
+            <b>{money(dashboard.totalEmiPaise)}</b>
+            <small>{emiBurden >= 40 ? "High fixed commitment" : "of monthly income"}</small>
+          </div>
+        </article>
+        <article className={`finance-kpi ${dashboard.budgetUsedPercentage >= 60 ? "warning" : ""}`}>
+          <span>Expense budget used</span>
+          <strong>{dashboard.budgetUsedPercentage}%</strong>
+          <div>
+            <b>{money(dashboard.regularExpensePaise)}</b>
+            <small>of {money(dashboard.regularBudgetPaise)}</small>
+          </div>
+        </article>
+        <article className="finance-kpi debt">
+          <span>Net obligations</span>
+          <strong>{money(liabilities.netObligationPaise)}</strong>
+          <div>
+            <b>{liabilities.activeCount} accounts</b>
+            <small>bank debt plus personal balances</small>
+          </div>
+        </article>
+      </section>
 
-          <div className="cash-flow-chart" role="img" aria-label="July planned cash flow">
-            {[
-              ["Monthly income", dashboard.plannedIncomePaise, "income"],
-              ["EMI commitments", dashboard.totalEmiPaise, "emi"],
-              ["Regular expenses", dashboard.regularExpensePaise, "expense"],
-              ["Available after plan", dashboard.availableAfterPlanPaise, "available"],
-            ].map(([label, value, kind]) => {
-              const amount = value as number;
-              const width =
-                dashboard.plannedIncomePaise > 0
-                  ? Math.max(2, (Math.max(0, amount) / dashboard.plannedIncomePaise) * 100)
-                  : 0;
+      <section className="dashboard-chart-grid">
+        <article className="panel allocation-panel">
+          <div className="panel-heading compact">
+            <div>
+              <p className="eyebrow">INCOME ALLOCATION / {monthLabel(dashboard.month, "long").toUpperCase()}</p>
+              <h2>Where each rupee is going</h2>
+            </div>
+            <span className="live-pill">{money(income)} PLAN</span>
+          </div>
+          <div className="allocation-content">
+            <div className="allocation-donut" style={allocationStyle} role="img" aria-label="Monthly income allocation">
+              <div>
+                <strong>{surplusRate}%</strong>
+                <span>available</span>
+              </div>
+            </div>
+            <div className="allocation-legend">
+              {allocationSegments.map((segment) => (
+                <div key={segment.label}>
+                  <i style={{ background: segment.color }} />
+                  <span>{segment.label}</span>
+                  <strong>{money(segment.amountPaise)}</strong>
+                  <small>{segment.share}%</small>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="allocation-callout">
+            <span>Fixed commitments consume</span>
+            <strong>{emiBurden}% of monthly income</strong>
+            <small>Reducing EMI load has the largest impact on monthly flexibility.</small>
+          </div>
+        </article>
+
+        <article className="panel trend-panel">
+          <div className="panel-heading compact">
+            <div>
+              <p className="eyebrow">12-MONTH EXPENSE VIEW / {expenseYear.year}</p>
+              <h2>Regular spending trend</h2>
+            </div>
+            <button className="text-action" onClick={onOpenExpenses} type="button">
+              Open expenses
+            </button>
+          </div>
+          <div className="expense-trend-chart" role="img" aria-label={`${expenseYear.year} monthly expense chart`}>
+            {expenseYear.months.map((month) => {
+              const hasData = month.transactionCount > 0;
+              const height = hasData ? Math.max(8, (month.regularExpensePaise / trendMaximum) * 100) : 3;
               return (
-                <div className="cash-flow-row" key={label as string}>
-                  <div>
-                    <span>{label}</span>
-                    <strong>{money(amount)}</strong>
-                  </div>
-                  <div className="cash-flow-track">
-                    <i className={kind as string} style={{ width: `${Math.min(100, width)}%` }} />
-                  </div>
+                <div className={month.month === dashboard.month ? "current" : ""} key={month.month}>
+                  <span>{hasData ? money(month.regularExpensePaise) : "Not imported"}</span>
+                  <i className={hasData ? "imported" : "empty"} style={{ height: `${height}%` }} />
+                  <b>{monthLabel(month.month).slice(0, 3)}</b>
                 </div>
               );
             })}
           </div>
+          <footer className="trend-footer">
+            <span>{importedMonths.length} of 12 months imported</span>
+            <strong>Current: {money(dashboard.regularExpensePaise)}</strong>
+          </footer>
+        </article>
+      </section>
 
-          <div className="dashboard-notes">
-            <article>
-              <span>Budget pressure</span>
-              <strong>{dashboard.budgetUsedPercentage}%</strong>
-              <small>{dashboard.dangerAlert ? "Action needed before day 20" : "Within configured threshold"}</small>
-            </article>
-            <article>
-              <span>Largest expense</span>
-              <strong>{dashboard.categories[0]?.name ?? "No entries"}</strong>
-              <small>{money(dashboard.categories[0]?.amountPaise ?? 0)} recorded</small>
-            </article>
-            <article>
-              <span>Next action</span>
-              <strong>Review ledger</strong>
-              <small>Confirm aggregates with detailed statements</small>
-            </article>
+      <section className="dashboard-detail-grid">
+        <article className="panel category-panel">
+          <div className="panel-heading compact">
+            <div>
+              <p className="eyebrow">SPENDING CONTROL / LIVE CATEGORIES</p>
+              <h2>What is driving expenses</h2>
+            </div>
+            <span className="risk-pill">{dashboard.categories.length} CATEGORIES</span>
           </div>
-
+          <div className="dashboard-category-chart">
+            {dashboard.categories.map((category, index) => (
+              <div key={category.id}>
+                <span>
+                  <b>{String(index + 1).padStart(2, "0")}</b>
+                  {category.name}
+                </span>
+                <div>
+                  <i style={{ width: `${Math.max(2, (category.amountPaise / categoryMaximum) * 100)}%` }} />
+                </div>
+                <strong>{money(category.amountPaise)}</strong>
+                <small>{percentage(category.amountPaise, dashboard.regularExpensePaise)}%</small>
+              </div>
+            ))}
+          </div>
           <button className="dashboard-ledger-button" onClick={onOpenLedger} type="button">
-            Review all July ledger entries
+            Review category transactions
           </button>
         </article>
 
-        <aside className="right-stack">
-          <article className="panel debt-panel">
-            <div className="panel-heading compact">
-              <div>
-                <p className="eyebrow">LIABILITY PORTFOLIO / LIVE DEBT</p>
-                <h2>{money(liabilities.totalPrincipalPaise)}</h2>
-              </div>
-              <span className="risk-pill">{liabilities.activeCount} ACTIVE</span>
+        <article className="panel portfolio-panel">
+          <div className="panel-heading compact">
+            <div>
+              <p className="eyebrow">DEBT PORTFOLIO / SNOWBALL</p>
+              <h2>{money(liabilities.totalPrincipalPaise)}</h2>
             </div>
-            <div className="debt-meta">
-              <span>Monthly EMI {money(liabilities.totalEmiPaise)}</span>
-              <span>{liabilities.clearedCount} cleared</span>
-            </div>
-            <div className="home-balance-summary">
-              <div>
-                <span>Other liabilities</span>
-                <strong>{money(liabilities.otherLiabilityPaise)}</strong>
-              </div>
-              <div>
-                <span>Money to get back</span>
-                <strong className="receivable">-{money(liabilities.receivablePaise)}</strong>
-              </div>
-              <div>
-                <span>Net obligations</span>
-                <strong>{money(liabilities.netObligationPaise)}</strong>
-              </div>
-            </div>
-            <div className="home-liability-list">
-              {visibleLiabilities.map((liability) => (
-                <div key={liability.id}>
-                  <span>{liability.name}</span>
-                  <strong>{money(liability.currentPrincipalPaise)}</strong>
-                </div>
-              ))}
-            </div>
-            {snowballTarget && (
-              <div className="snowball-callout">
-                <span>Snowball priority #1</span>
-                <strong>{snowballTarget.name}</strong>
-                <small>{money(snowballTarget.currentPrincipalPaise)} outstanding</small>
-              </div>
-            )}
-            <button onClick={onOpenLiabilities} type="button">
-              Open complete liability sheet
-            </button>
-          </article>
-
-          <article className="panel sync-panel">
-            <div className="panel-heading compact">
-              <div>
-                <p className="eyebrow">IMPORT STATUS</p>
-                <h2>No pending discoveries</h2>
-              </div>
-              <span className="source-time">Not connected</span>
-            </div>
-            <ul>
-              <li>
-                <span className="source gmail">G</span>
+            <span className="risk-pill">{liabilities.activeCount} ACTIVE</span>
+          </div>
+          <div className="portfolio-bars">
+            {liabilityTypes.map((group) => (
+              <div key={group.type}>
+                <span>{productName(group.type)}</span>
+                <strong>{money(group.amountPaise)}</strong>
                 <div>
-                  <strong>Gmail</strong>
-                  <small>Connector scheduled for Phase 4</small>
+                  <i style={{ width: `${percentage(group.amountPaise, liabilities.totalPrincipalPaise)}%` }} />
                 </div>
-                <b>0</b>
-              </li>
-              <li>
-                <span className="source sms">S</span>
-                <div>
-                  <strong>iPhone messages</strong>
-                  <small>Shortcut not paired</small>
-                </div>
-                <b>0</b>
-              </li>
-              <li>
-                <span className="source file">F</span>
-                <div>
-                  <strong>Statements</strong>
-                  <small>Upload pipeline is next</small>
-                </div>
-                <b>0</b>
-              </li>
-            </ul>
-            <button disabled type="button">
-              Connectors coming next
-            </button>
-          </article>
-        </aside>
+              </div>
+            ))}
+          </div>
+          <div className="portfolio-facts">
+            <div>
+              <span>Largest exposure</span>
+              <strong>{largestLiability?.name ?? "None"}</strong>
+              <small>{money(largestLiability?.currentPrincipalPaise ?? 0)}</small>
+            </div>
+            <div>
+              <span>Personal receivable cover</span>
+              <strong>{receivableCoverage}%</strong>
+              <small>{money(liabilities.receivablePaise)} to get back</small>
+            </div>
+          </div>
+          {snowballTarget && (
+            <div className="snowball-callout dashboard-snowball">
+              <span>Next snowball target</span>
+              <strong>{snowballTarget.name}</strong>
+              <small>
+                {money(snowballTarget.currentPrincipalPaise)} outstanding · EMI {money(snowballTarget.emiPaise)}
+              </small>
+            </div>
+          )}
+          <button className="portfolio-button" onClick={onOpenLiabilities} type="button">
+            Manage liabilities
+          </button>
+        </article>
       </section>
     </>
   );

@@ -1,24 +1,55 @@
 import { formatInr } from "@finance-hero/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardView } from "./components/DashboardView";
 import { ExpensesView } from "./components/ExpensesView";
 import { LedgerView } from "./components/LedgerView";
 import { LiabilitiesView } from "./components/LiabilitiesView";
 import { getDashboard, getExpenseYear, getHealth, getLedger, getLiabilities, getReferenceData } from "./lib/api";
 
-const navItems = ["Home", "Ledger", "Expenses", "Imports", "Liabilities", "Goals", "Projects"];
+const navItems = ["Home", "Ledger", "Expenses", "Imports", "Liabilities", "Goals", "Projects"] as const;
+type NavItem = (typeof navItems)[number];
 const ACTIVE_MONTH = "2026-07";
 
+const navSlugs: Record<NavItem, string> = {
+  Home: "home",
+  Ledger: "ledger",
+  Expenses: "expenses",
+  Imports: "imports",
+  Liabilities: "liabilities",
+  Goals: "goals",
+  Projects: "projects",
+};
+
+export function parseRouteHash(hash: string): { nav: NavItem; month: string; year: string } {
+  const [path = "home", search = ""] = hash.replace(/^#\/?/, "").split("?");
+  const nav = navItems.find((item) => navSlugs[item] === path) ?? "Home";
+  const params = new URLSearchParams(search);
+  const routeMonth = params.get("month");
+  const month = routeMonth && /^\d{4}-\d{2}$/.test(routeMonth) ? routeMonth : ACTIVE_MONTH;
+  const routeYear = params.get("year");
+  const year = routeYear && /^\d{4}$/.test(routeYear) ? routeYear : month.slice(0, 4);
+  return { nav, month, year };
+}
+
+function readRoute() {
+  return parseRouteHash(window.location.hash);
+}
+
+export function routeHash(nav: NavItem, month: string, year: string) {
+  return `#/${navSlugs[nav]}?month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}`;
+}
+
 export function App() {
+  const initialRoute = useMemo(readRoute, []);
   const [privacy, setPrivacy] = useState(false);
-  const [activeNav, setActiveNav] = useState("Home");
-  const [year, setYear] = useState("2026");
-  const [selectedMonth, setSelectedMonth] = useState(ACTIVE_MONTH);
+  const [activeNav, setActiveNav] = useState<NavItem>(initialRoute.nav);
+  const [year, setYear] = useState(initialRoute.year);
+  const [selectedMonth, setSelectedMonth] = useState(initialRoute.month);
   const health = useQuery({ queryKey: ["health"], queryFn: ({ signal }) => getHealth(signal) });
   const dashboard = useQuery({
-    queryKey: ["dashboard", ACTIVE_MONTH],
-    queryFn: ({ signal }) => getDashboard(ACTIVE_MONTH, signal),
+    queryKey: ["dashboard", selectedMonth],
+    queryFn: ({ signal }) => getDashboard(selectedMonth, signal),
   });
   const ledger = useQuery({
     queryKey: ["ledger", selectedMonth],
@@ -27,10 +58,6 @@ export function App() {
   const expenseYear = useQuery({
     queryKey: ["expenses", "year", year],
     queryFn: ({ signal }) => getExpenseYear(year, signal),
-  });
-  const selectedExpense = useQuery({
-    queryKey: ["dashboard", selectedMonth],
-    queryFn: ({ signal }) => getDashboard(selectedMonth, signal),
   });
   const liabilities = useQuery({ queryKey: ["liabilities"], queryFn: ({ signal }) => getLiabilities(signal) });
   const referenceData = useQuery({
@@ -43,25 +70,52 @@ export function App() {
     return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   }, []);
 
+  useEffect(() => {
+    if (!window.location.hash) {
+      window.history.replaceState(null, "", routeHash(initialRoute.nav, initialRoute.month, initialRoute.year));
+    }
+
+    const syncFromLocation = () => {
+      const route = readRoute();
+      setActiveNav(route.nav);
+      setSelectedMonth(route.month);
+      setYear(route.year);
+    };
+    window.addEventListener("hashchange", syncFromLocation);
+    window.addEventListener("popstate", syncFromLocation);
+    return () => {
+      window.removeEventListener("hashchange", syncFromLocation);
+      window.removeEventListener("popstate", syncFromLocation);
+    };
+  }, [initialRoute]);
+
   const money = (paise: number) => (privacy ? "Rs --,---" : formatInr(paise / 100));
-  const visibleMonth = activeNav === "Expenses" || activeNav === "Ledger" ? selectedMonth : ACTIVE_MONTH;
+  const visibleMonth = selectedMonth;
   const visiblePeriod = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" })
     .format(new Date(`${visibleMonth}-01T00:00:00Z`))
     .toUpperCase();
   const hasViewError =
     (activeNav === "Home" && (dashboard.isError || liabilities.isError)) ||
     (activeNav === "Ledger" && (ledger.isError || referenceData.isError)) ||
-    (activeNav === "Expenses" && (expenseYear.isError || selectedExpense.isError)) ||
+    (activeNav === "Expenses" && (expenseYear.isError || dashboard.isError)) ||
     (activeNav === "Liabilities" && liabilities.isError);
 
+  function navigate(nav: NavItem, month = selectedMonth, nextYear = year) {
+    const hash = routeHash(nav, month, nextYear);
+    if (window.location.hash !== hash) {
+      window.history.pushState(null, "", hash);
+    }
+    setActiveNav(nav);
+    setSelectedMonth(month);
+    setYear(nextYear);
+  }
+
   function openCurrentLedger() {
-    setSelectedMonth(ACTIVE_MONTH);
-    setActiveNav("Ledger");
+    navigate("Ledger");
   }
 
   function changeExpenseYear(nextYear: string) {
-    setYear(nextYear);
-    setSelectedMonth(`${nextYear}-${selectedMonth.slice(5, 7)}`);
+    navigate("Expenses", `${nextYear}-${selectedMonth.slice(5, 7)}`, nextYear);
   }
 
   return (
@@ -80,7 +134,7 @@ export function App() {
             <button
               className={activeNav === item ? "active" : ""}
               key={item}
-              onClick={() => setActiveNav(item)}
+              onClick={() => navigate(item)}
               type="button"
             >
               <span className="nav-index">0{index + 1}</span>
@@ -131,23 +185,24 @@ export function App() {
         ) : activeNav === "Home" ? (
           <DashboardView
             dashboard={dashboard.data}
+            expenseYear={expenseYear.data}
             liabilities={liabilities.data}
             loading={dashboard.isLoading || liabilities.isLoading}
             money={money}
             onOpenLedger={openCurrentLedger}
-            onOpenLiabilities={() => setActiveNav("Liabilities")}
+            onOpenExpenses={() => navigate("Expenses")}
+            onOpenLiabilities={() => navigate("Liabilities")}
           />
         ) : activeNav === "Expenses" ? (
           <ExpensesView
-            loading={expenseYear.isLoading || selectedExpense.isLoading}
+            loading={expenseYear.isLoading || dashboard.isLoading}
             money={money}
             onOpenStatement={(month) => {
-              setSelectedMonth(month);
-              setActiveNav("Ledger");
+              navigate("Ledger", month, month.slice(0, 4));
             }}
-            onSelectMonth={setSelectedMonth}
+            onSelectMonth={(month) => navigate("Expenses", month, month.slice(0, 4))}
             onYearChange={changeExpenseYear}
-            selectedDashboard={selectedExpense.data}
+            selectedDashboard={dashboard.data}
             selectedMonth={selectedMonth}
             year={year}
             yearData={expenseYear.data}
@@ -186,7 +241,7 @@ export function App() {
           <button
             className={activeNav === item ? "active" : ""}
             key={item}
-            onClick={() => setActiveNav(item)}
+            onClick={() => navigate(item)}
             type="button"
           >
             {item}
