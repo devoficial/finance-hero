@@ -33,7 +33,7 @@ describe("encrypted database", () => {
     const row = reopened.connection.prepare("SELECT value FROM app_metadata WHERE key = ?").get("schema_version") as {
       value: string;
     };
-    expect(row.value).toBe("phase-0");
+    expect(row.value).toBe("phase-1");
     reopened.close();
   });
 });

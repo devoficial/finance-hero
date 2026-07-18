@@ -29,6 +29,9 @@ FINANCE_HERO_DATABASE_KEY="your-development-key-of-at-least-32-characters" pnpm 
 - PWA: `http://127.0.0.1:4318`
 - Local API: `http://127.0.0.1:4317`
 - Health contract: `http://127.0.0.1:4317/api/v1/health`
+- Dashboard: `http://127.0.0.1:4317/api/v1/dashboard?month=2026-07`
+- Ledger: `http://127.0.0.1:4317/api/v1/ledger?month=2026-07`
+- Reference data: `http://127.0.0.1:4317/api/v1/reference-data`
 
 Development binds only to loopback. LAN HTTPS, Bonjour discovery, and iPhone certificate
 installation remain a Phase 0 spike and must not be simulated by exposing the HTTP server.
@@ -70,10 +73,12 @@ security add-generic-password \
 Do not paste or print the resulting key. The Mac launcher will create this entry during guided
 setup and will not use a checked-in environment variable.
 
-## Current Phase 0 limitations
+## Current limitations
 
-- Dashboard figures are an explicit UI prototype using the accepted opening values.
-- The foundation database contains metadata only; the complete ledger schema is next.
+- The accepted July 2026 opening snapshot is seeded once into the encrypted ledger. Full
+  transaction-by-transaction Google Sheet migration and reconciliation are still pending.
+- Dashboard totals, category spending, debts, and the ledger are live database queries.
+  Manual income and expense transactions are supported; transfers and split entries are next.
 - Google login, device pairing, LAN HTTPS, Gmail, SMS, and statement parsing are not connected yet.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
 - PWA SVG branding is sufficient for development; release-quality iOS PNG icons are pending.

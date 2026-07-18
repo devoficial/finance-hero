@@ -180,6 +180,7 @@ h2 {
   display: flex;
   gap: 8px;
 }
+.add-button,
 .ghost-button,
 .sync-button {
   min-height: 42px;
@@ -188,6 +189,13 @@ h2 {
   cursor: pointer;
   background: rgba(241, 238, 229, 0.74);
 }
+.add-button {
+  background: var(--yellow);
+  border-color: #d6a030;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 800;
+}
 .sync-button {
   background: var(--green);
   border-color: var(--green);
@@ -195,6 +203,10 @@ h2 {
   display: flex;
   gap: 9px;
   align-items: center;
+}
+.sync-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.66;
 }
 .sync-button > span {
   width: 7px;
@@ -332,6 +344,9 @@ h2 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 9px;
+}
+.month-row.single-month {
+  grid-template-columns: minmax(220px, 1fr) 1fr 1fr;
 }
 .month-card {
   padding: 13px;
@@ -584,6 +599,153 @@ h2 {
     monospace;
   letter-spacing: 0.05em;
 }
+.loading-panel,
+.feature-placeholder {
+  min-height: 280px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+}
+.feature-placeholder > p:last-child {
+  max-width: 580px;
+  color: #66756f;
+  line-height: 1.7;
+}
+.ledger-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.62fr) minmax(0, 1.38fr);
+  gap: 16px;
+  align-items: start;
+}
+.entry-panel {
+  position: sticky;
+  top: 20px;
+}
+.live-pill {
+  padding: 5px 7px;
+  background: #c6dfd4;
+  color: var(--green);
+  font:
+    9px "DM Mono",
+    monospace;
+}
+.entry-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.entry-form label {
+  display: grid;
+  gap: 6px;
+}
+.entry-form label > span {
+  color: #64736c;
+  font:
+    9px "DM Mono",
+    monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.entry-form input,
+.entry-form select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: #f8f5ed;
+  color: var(--ink);
+  padding: 9px 10px;
+}
+.entry-form input:focus,
+.entry-form select:focus {
+  border-color: var(--green-bright);
+  outline: 2px solid rgba(50, 118, 94, 0.18);
+  outline-offset: 1px;
+}
+.span-two {
+  grid-column: 1 / -1;
+}
+.post-button {
+  min-height: 46px;
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: white;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+.post-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.form-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #a13524;
+  font-size: 11px;
+}
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.ledger-panel table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+.ledger-panel th {
+  position: sticky;
+  top: 0;
+  background: #deddd5;
+  color: #596a62;
+  text-align: left;
+  text-transform: uppercase;
+  font:
+    8px "DM Mono",
+    monospace;
+  letter-spacing: 0.05em;
+}
+.ledger-panel th,
+.ledger-panel td {
+  padding: 10px 9px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.ledger-panel td:nth-child(2) {
+  min-width: 180px;
+  white-space: normal;
+}
+.ledger-panel td:nth-child(2) small {
+  display: block;
+  margin-top: 2px;
+  color: #75817c;
+}
+.ledger-panel td:last-child {
+  text-align: right;
+  font:
+    10px "DM Mono",
+    monospace;
+}
+.ledger-panel td.expense {
+  color: #9f3424;
+}
+.ledger-panel td.income {
+  color: #267151;
+}
+.origin-pill {
+  padding: 4px 6px;
+  background: #deddd5;
+  color: #66756f;
+  font:
+    8px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.origin-pill.manual {
+  background: #c6dfd4;
+  color: var(--green);
+}
 .mobile-nav {
   display: none;
 }
@@ -594,6 +756,16 @@ h2 {
   }
   .workspace-grid {
     grid-template-columns: 1fr;
+  }
+  .ledger-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .entry-panel,
+  .ledger-panel {
+    min-width: 0;
+  }
+  .entry-panel {
+    position: static;
   }
   .right-stack {
     grid-template-columns: 1fr 1fr;
@@ -630,6 +802,15 @@ h2 {
   .ghost-button {
     display: none;
   }
+  .add-button {
+    min-height: 42px;
+    padding: 0 10px;
+    font-size: 0;
+  }
+  .add-button::after {
+    content: "+ Add";
+    font-size: 10px;
+  }
   .sync-button {
     padding: 0 11px;
     font-size: 0;
@@ -659,6 +840,13 @@ h2 {
     padding-bottom: 5px;
     scroll-snap-type: x mandatory;
   }
+  .month-row.single-month {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .month-row.single-month .month-card {
+    min-width: 0;
+  }
   .month-card {
     min-width: 80%;
     scroll-snap-align: start;
@@ -672,6 +860,12 @@ h2 {
   }
   .right-stack {
     grid-template-columns: 1fr;
+  }
+  .entry-form {
+    grid-template-columns: 1fr;
+  }
+  .entry-form .span-two {
+    grid-column: 1;
   }
   .mobile-nav {
     position: fixed;

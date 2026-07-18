@@ -4,3 +4,11 @@ export {
   EnvironmentDatabaseKeyProvider,
   MacOSKeychainDatabaseKeyProvider,
 } from "./key-provider";
+export {
+  type DashboardRecord,
+  LedgerRepository,
+  type LedgerTransactionRecord,
+  type ManualTransactionInput,
+  type ReferenceDataRecord,
+} from "./ledger-repository";
+export { seedAcceptedOpeningSnapshot } from "./opening-seed";

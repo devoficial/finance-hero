@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { healthResponseSchema } from "@finance-hero/contracts";
+import { dashboardResponseSchema, healthResponseSchema, ledgerTransactionSchema } from "@finance-hero/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app";
 
@@ -29,6 +29,26 @@ describe("local API", () => {
     const response = await app.inject({ method: "GET", url: "/api/v1/health" });
     expect(response.statusCode).toBe(200);
     expect(healthResponseSchema.parse(response.json()).database).toBe("encrypted");
+
+    const dashboard = await app.inject({ method: "GET", url: "/api/v1/dashboard?month=2026-07" });
+    expect(dashboard.statusCode).toBe(200);
+    expect(dashboardResponseSchema.parse(dashboard.json()).regularExpensePaise).toBe(6004800);
+
+    const manual = await app.inject({
+      method: "POST",
+      url: "/api/v1/transactions/manual",
+      payload: {
+        occurredOn: "2026-07-19",
+        payee: "Test Pharmacy",
+        kind: "expense",
+        amountPaise: 79900,
+        assetAccountId: "account-primary-bank",
+        categoryId: "category-medical",
+        idempotencyKey: "api-test-device:1",
+      },
+    });
+    expect(manual.statusCode).toBe(201);
+    expect(ledgerTransactionSchema.parse(manual.json()).amountPaise).toBe(79900);
     await app.close();
   });
 });

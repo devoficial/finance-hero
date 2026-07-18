@@ -1,7 +1,20 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { healthResponseSchema } from "@finance-hero/contracts";
-import { type FinanceHeroDatabase, initializeFoundationSchema, openEncryptedDatabase } from "@finance-hero/database";
+import {
+  createManualTransactionRequestSchema,
+  dashboardResponseSchema,
+  healthResponseSchema,
+  ledgerResponseSchema,
+  monthSchema,
+  referenceDataResponseSchema,
+} from "@finance-hero/contracts";
+import {
+  type FinanceHeroDatabase,
+  initializeFoundationSchema,
+  LedgerRepository,
+  openEncryptedDatabase,
+  seedAcceptedOpeningSnapshot,
+} from "@finance-hero/database";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { ServerConfig } from "./config";
 
@@ -14,6 +27,7 @@ export interface BuildAppOptions {
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: options.logger ?? false });
   let database: FinanceHeroDatabase | undefined;
+  let ledger: LedgerRepository | undefined;
 
   if (options.config.databaseKey) {
     mkdirSync(options.config.dataDirectory, { recursive: true, mode: 0o700 });
@@ -22,6 +36,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       Buffer.from(options.config.databaseKey, "utf8"),
     );
     initializeFoundationSchema(database);
+    seedAcceptedOpeningSnapshot(database);
+    ledger = new LedgerRepository(database);
   }
 
   app.get("/api/v1/health", async (_request, reply) => {
@@ -34,6 +50,58 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     });
 
     return reply.header("cache-control", "no-store").send(payload);
+  });
+
+  app.get("/api/v1/dashboard", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    const query = request.query as { month?: string };
+    const month = monthSchema.parse(query.month ?? "2026-07");
+    const localDay = Number(
+      new Intl.DateTimeFormat("en-IN", { day: "numeric", timeZone: "Asia/Kolkata" }).format(new Date()),
+    );
+    return reply
+      .header("cache-control", "no-store")
+      .send(dashboardResponseSchema.parse(ledger.getDashboard(month, localDay)));
+  });
+
+  app.get("/api/v1/ledger", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    const query = request.query as { month?: string };
+    const month = monthSchema.parse(query.month ?? "2026-07");
+    return reply.header("cache-control", "no-store").send(
+      ledgerResponseSchema.parse({
+        month,
+        transactions: ledger.listTransactions(month),
+      }),
+    );
+  });
+
+  app.get("/api/v1/reference-data", async (_request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    return reply.header("cache-control", "no-store").send(referenceDataResponseSchema.parse(ledger.getReferenceData()));
+  });
+
+  app.post("/api/v1/transactions/manual", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const input = createManualTransactionRequestSchema.parse(request.body);
+      return reply.code(201).send(ledger.createManualTransaction(input));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Transaction could not be created.";
+      return reply.code(400).send({ error: { code: "INVALID_TRANSACTION", message } });
+    }
   });
 
   app.addHook("onClose", async () => {

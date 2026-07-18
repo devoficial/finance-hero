@@ -19,6 +19,7 @@
   "main": "./dist/index.js",
   "types": "./src/index.ts",
   "dependencies": {
+    "@finance-hero/domain": "workspace:*",
     "better-sqlite3-multiple-ciphers": "^12.11.1"
   },
   "devDependencies": {
