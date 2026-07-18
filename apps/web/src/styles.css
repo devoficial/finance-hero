@@ -993,7 +993,12 @@ h2 {
   gap: 16px;
   margin-bottom: 16px;
 }
+.allocation-panel {
+  min-width: 0;
+  container-type: inline-size;
+}
 .allocation-content {
+  min-width: 0;
   display: grid;
   grid-template-columns: 172px minmax(0, 1fr);
   gap: 25px;
@@ -1035,6 +1040,8 @@ h2 {
     monospace;
 }
 .allocation-legend {
+  width: 100%;
+  min-width: 0;
   display: grid;
 }
 .allocation-legend > div {
@@ -1061,6 +1068,16 @@ h2 {
 .allocation-legend small {
   color: #6e7c75;
   text-align: right;
+}
+@container (max-width: 480px) {
+  .allocation-content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    justify-items: center;
+  }
+  .allocation-legend > div {
+    grid-template-columns: 7px minmax(0, 1fr) minmax(64px, auto) 30px;
+  }
 }
 .allocation-callout {
   display: grid;
