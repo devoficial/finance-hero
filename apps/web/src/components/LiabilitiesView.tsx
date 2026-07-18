@@ -123,6 +123,10 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
     setValidationError(null);
   }
 
+  function markCleared(liability: Liability) {
+    mutation.mutate({ id: liability.id, input: { status: "cleared" } });
+  }
+
   function submitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingId || !form) {
@@ -517,9 +521,23 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
                       )}
                     </td>
                     <td>
-                      <button className="edit-liability-button" onClick={() => beginEdit(liability)} type="button">
-                        Edit
-                      </button>
+                      <div className="liability-row-actions">
+                        {liability.status === "active" && (
+                          <button
+                            className="clear-liability-button"
+                            disabled={mutation.isPending}
+                            onClick={() => markCleared(liability)}
+                            type="button"
+                          >
+                            {mutation.isPending && mutation.variables?.id === liability.id
+                              ? "Clearing..."
+                              : "Mark cleared"}
+                          </button>
+                        )}
+                        <button className="edit-liability-button" onClick={() => beginEdit(liability)} type="button">
+                          Edit
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

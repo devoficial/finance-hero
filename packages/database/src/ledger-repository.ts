@@ -323,6 +323,10 @@ export class LedgerRepository {
       annualRateBps: input.annualRateBps === undefined ? existing.annualRateBps : input.annualRateBps,
       status: input.status ?? existing.status,
     };
+    if (next.status === "cleared") {
+      next.currentPrincipalPaise = 0;
+      next.emiPaise = 0;
+    }
     const now = new Date().toISOString();
 
     const write = this.database.connection.transaction(() => {

@@ -101,6 +101,21 @@ describe("ledger repository", () => {
     database.close();
   });
 
+  it("clears a liability and removes its principal and EMI from active totals", () => {
+    const { database, repository } = createRepository();
+    const cleared = repository.updateLiability("debt-dmi", { status: "cleared" });
+
+    expect(cleared.status).toBe("cleared");
+    expect(cleared.currentPrincipalPaise).toBe(0);
+    expect(cleared.emiPaise).toBe(0);
+    const portfolio = repository.getLiabilities();
+    expect(portfolio.activeCount).toBe(9);
+    expect(portfolio.clearedCount).toBe(2);
+    expect(portfolio.totalPrincipalPaise).toBe(701040600);
+    expect(portfolio.totalEmiPaise).toBe(11611100);
+    database.close();
+  });
+
   it("creates and settles an audited personal balance", () => {
     const { database, repository } = createRepository();
     const created = repository.createPersonalBalance({
