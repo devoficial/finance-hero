@@ -51,6 +51,41 @@ export interface ReferenceDataRecord {
   categories: Array<{ id: string; name: string }>;
 }
 
+export interface ExpenseMonthSummaryRecord {
+  month: string;
+  regularExpensePaise: number;
+  regularBudgetPaise: number;
+  budgetUsedPercentage: number;
+  transactionCount: number;
+}
+
+export interface ExpenseYearRecord {
+  year: string;
+  months: ExpenseMonthSummaryRecord[];
+}
+
+export interface LiabilityRecord {
+  id: string;
+  name: string;
+  productType: string;
+  originalAmountPaise: number;
+  currentPrincipalPaise: number;
+  paidPaise: number;
+  emiPaise: number;
+  annualRateBps: number | null;
+  status: "active" | "cleared";
+  snowballRank: number | null;
+}
+
+export interface LiabilitiesRecord {
+  totalOriginalPaise: number;
+  totalPrincipalPaise: number;
+  totalEmiPaise: number;
+  activeCount: number;
+  clearedCount: number;
+  liabilities: LiabilityRecord[];
+}
+
 export class LedgerRepository {
   constructor(private readonly database: FinanceHeroDatabase) {}
 
@@ -62,6 +97,79 @@ export class LedgerRepository {
       categories: this.database.connection
         .prepare("SELECT id, name FROM categories WHERE budget_eligible = 1 ORDER BY name")
         .all() as ReferenceDataRecord["categories"],
+    };
+  }
+
+  getExpenseYear(year: string): ExpenseYearRecord {
+    const spending = this.database.connection
+      .prepare(`
+        SELECT t.effective_month AS month,
+               COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.alert_eligible = 1 THEN p.amount_paise ELSE 0 END), 0) AS regularExpensePaise,
+               COUNT(DISTINCT t.id) AS transactionCount
+        FROM journal_transactions t
+        JOIN postings p ON p.transaction_id = t.id
+        JOIN accounts a ON a.id = p.account_id
+        LEFT JOIN categories c ON c.id = p.category_id
+        WHERE t.effective_month LIKE ? AND t.status = 'posted'
+        GROUP BY t.effective_month
+      `)
+      .all(`${year}-%`) as Array<{ month: string; regularExpensePaise: number; transactionCount: number }>;
+    const budgets = this.database.connection
+      .prepare(`
+        SELECT month, regular_budget_paise AS regularBudgetPaise
+        FROM budget_periods WHERE month LIKE ?
+      `)
+      .all(`${year}-%`) as Array<{ month: string; regularBudgetPaise: number }>;
+    const spendingByMonth = new Map(spending.map((item) => [item.month, item]));
+    const budgetByMonth = new Map(budgets.map((item) => [item.month, item.regularBudgetPaise]));
+
+    return {
+      year,
+      months: Array.from({ length: 12 }, (_, index) => {
+        const month = `${year}-${String(index + 1).padStart(2, "0")}`;
+        const regularExpensePaise = spendingByMonth.get(month)?.regularExpensePaise ?? 0;
+        const regularBudgetPaise = budgetByMonth.get(month) ?? 0;
+        return {
+          month,
+          regularExpensePaise,
+          regularBudgetPaise,
+          budgetUsedPercentage:
+            regularBudgetPaise > 0 ? Math.round((regularExpensePaise / regularBudgetPaise) * 100) : 0,
+          transactionCount: spendingByMonth.get(month)?.transactionCount ?? 0,
+        };
+      }),
+    };
+  }
+
+  getLiabilities(): LiabilitiesRecord {
+    const rows = this.database.connection
+      .prepare(`
+        SELECT id, lender AS name, product_type AS productType,
+               original_amount_paise AS originalAmountPaise,
+               current_principal_paise AS currentPrincipalPaise,
+               emi_paise AS emiPaise, annual_rate_bps AS annualRateBps, status
+        FROM debts
+        ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, current_principal_paise DESC, lender ASC
+      `)
+      .all() as Array<Omit<LiabilityRecord, "paidPaise" | "snowballRank">>;
+    const snowballOrder = [...rows]
+      .filter((item) => item.status === "active" && item.currentPrincipalPaise > 0)
+      .sort((left, right) => left.currentPrincipalPaise - right.currentPrincipalPaise);
+    const rankById = new Map(snowballOrder.map((item, index) => [item.id, index + 1]));
+    const liabilities = rows.map((item) => ({
+      ...item,
+      paidPaise: Math.max(0, item.originalAmountPaise - item.currentPrincipalPaise),
+      snowballRank: rankById.get(item.id) ?? null,
+    }));
+    const active = liabilities.filter((item) => item.status === "active");
+
+    return {
+      totalOriginalPaise: liabilities.reduce((sum, item) => sum + item.originalAmountPaise, 0),
+      totalPrincipalPaise: active.reduce((sum, item) => sum + item.currentPrincipalPaise, 0),
+      totalEmiPaise: active.reduce((sum, item) => sum + item.emiPaise, 0),
+      activeCount: active.length,
+      clearedCount: liabilities.length - active.length,
+      liabilities,
     };
   }
 

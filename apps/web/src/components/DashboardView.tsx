@@ -4,25 +4,10 @@ interface DashboardViewProps {
   dashboard?: DashboardResponse;
   loading: boolean;
   money: (paise: number) => string;
-  year: string;
-  onYearChange: (year: string) => void;
   onOpenLedger: () => void;
 }
 
-function Donut({ percentage }: { percentage: number }) {
-  const safe = Math.min(100, Math.max(0, percentage));
-
-  return (
-    <div className="donut" style={{ "--percentage": `${safe * 3.6}deg` } as React.CSSProperties}>
-      <div>
-        <strong>{safe}%</strong>
-        <span>used</span>
-      </div>
-    </div>
-  );
-}
-
-export function DashboardView({ dashboard, loading, money, year, onYearChange, onOpenLedger }: DashboardViewProps) {
+export function DashboardView({ dashboard, loading, money, onOpenLedger }: DashboardViewProps) {
   if (loading || !dashboard) {
     return <section className="panel loading-panel">Reading the encrypted ledger...</section>;
   }
@@ -81,59 +66,62 @@ export function DashboardView({ dashboard, loading, money, year, onYearChange, o
       </section>
 
       <section className="workspace-grid">
-        <article className="panel expense-panel">
+        <article className="panel cash-flow-panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">LIVE LEDGER / {dashboard.transactionCount} RECORDS</p>
-              <h2>Monthly field notes</h2>
+              <p className="eyebrow">JULY CASH-FLOW PLAN / LIVE POSITION</p>
+              <h2>Where the salary is committed</h2>
             </div>
-            <label>
-              <span>Year</span>
-              <select value={year} onChange={(event) => onYearChange(event.target.value)}>
-                <option>2026</option>
-                <option>2025</option>
-              </select>
-            </label>
+            <span className="live-pill">{dashboard.transactionCount} RECORDS</span>
           </div>
 
-          <div className="month-row single-month">
-            <button className="month-card live" onClick={onOpenLedger} type="button">
-              <div>
-                <span>July {year}</span>
-                <small>Open</small>
-              </div>
-              <strong>{money(dashboard.regularExpensePaise)}</strong>
-              <div className="progress-track">
-                <i style={{ width: `${Math.min(100, dashboard.budgetUsedPercentage)}%` }} />
-              </div>
-              <footer>
-                <span>Budget {money(dashboard.regularBudgetPaise)}</span>
-                <b>Ledger -&gt;</b>
-              </footer>
-            </button>
-          </div>
-
-          <div className="category-breakdown">
-            <Donut percentage={dashboard.budgetUsedPercentage} />
-            <div className="category-list">
-              {dashboard.categories.map((category) => {
-                const percentage =
-                  dashboard.regularExpensePaise > 0
-                    ? Math.round((category.amountPaise / dashboard.regularExpensePaise) * 100)
-                    : 0;
-                return (
-                  <div key={category.id}>
-                    <span>
-                      <i />
-                      {category.name}
-                    </span>
-                    <strong>{money(category.amountPaise)}</strong>
-                    <small>{percentage}%</small>
+          <div className="cash-flow-chart" role="img" aria-label="July planned cash flow">
+            {[
+              ["Monthly income", dashboard.plannedIncomePaise, "income"],
+              ["EMI commitments", dashboard.totalEmiPaise, "emi"],
+              ["Regular expenses", dashboard.regularExpensePaise, "expense"],
+              ["Available after plan", dashboard.availableAfterPlanPaise, "available"],
+            ].map(([label, value, kind]) => {
+              const amount = value as number;
+              const width =
+                dashboard.plannedIncomePaise > 0
+                  ? Math.max(2, (Math.max(0, amount) / dashboard.plannedIncomePaise) * 100)
+                  : 0;
+              return (
+                <div className="cash-flow-row" key={label as string}>
+                  <div>
+                    <span>{label}</span>
+                    <strong>{money(amount)}</strong>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="cash-flow-track">
+                    <i className={kind as string} style={{ width: `${Math.min(100, width)}%` }} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
+
+          <div className="dashboard-notes">
+            <article>
+              <span>Budget pressure</span>
+              <strong>{dashboard.budgetUsedPercentage}%</strong>
+              <small>{dashboard.dangerAlert ? "Action needed before day 20" : "Within configured threshold"}</small>
+            </article>
+            <article>
+              <span>Largest expense</span>
+              <strong>{dashboard.categories[0]?.name ?? "No entries"}</strong>
+              <small>{money(dashboard.categories[0]?.amountPaise ?? 0)} recorded</small>
+            </article>
+            <article>
+              <span>Next action</span>
+              <strong>Review ledger</strong>
+              <small>Confirm aggregates with detailed statements</small>
+            </article>
+          </div>
+
+          <button className="dashboard-ledger-button" onClick={onOpenLedger} type="button">
+            Review all July ledger entries
+          </button>
         </article>
 
         <aside className="right-stack">

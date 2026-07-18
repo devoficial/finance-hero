@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const monthSchema = z.string().regex(/^\d{4}-\d{2}$/);
+export const yearSchema = z.string().regex(/^\d{4}$/);
 export const localDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const paiseSchema = z.number().int().safe();
 
@@ -55,6 +56,41 @@ export const referenceDataResponseSchema = z.object({
   categories: z.array(z.object({ id: z.string(), name: z.string() })),
 });
 
+export const expenseMonthSummarySchema = z.object({
+  month: monthSchema,
+  regularExpensePaise: paiseSchema.nonnegative(),
+  regularBudgetPaise: paiseSchema.nonnegative(),
+  budgetUsedPercentage: z.number().int().nonnegative(),
+  transactionCount: z.number().int().nonnegative(),
+});
+
+export const expenseYearResponseSchema = z.object({
+  year: yearSchema,
+  months: z.array(expenseMonthSummarySchema).length(12),
+});
+
+export const liabilitySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  productType: z.string(),
+  originalAmountPaise: paiseSchema.nonnegative(),
+  currentPrincipalPaise: paiseSchema.nonnegative(),
+  paidPaise: paiseSchema.nonnegative(),
+  emiPaise: paiseSchema.nonnegative(),
+  annualRateBps: z.number().int().nonnegative().nullable(),
+  status: z.enum(["active", "cleared"]),
+  snowballRank: z.number().int().positive().nullable(),
+});
+
+export const liabilitiesResponseSchema = z.object({
+  totalOriginalPaise: paiseSchema.nonnegative(),
+  totalPrincipalPaise: paiseSchema.nonnegative(),
+  totalEmiPaise: paiseSchema.nonnegative(),
+  activeCount: z.number().int().nonnegative(),
+  clearedCount: z.number().int().nonnegative(),
+  liabilities: z.array(liabilitySchema),
+});
+
 export const createManualTransactionRequestSchema = z.object({
   occurredOn: localDateSchema,
   payee: z.string().trim().min(1).max(160),
@@ -70,4 +106,8 @@ export type DashboardResponse = z.infer<typeof dashboardResponseSchema>;
 export type LedgerTransaction = z.infer<typeof ledgerTransactionSchema>;
 export type LedgerResponse = z.infer<typeof ledgerResponseSchema>;
 export type ReferenceDataResponse = z.infer<typeof referenceDataResponseSchema>;
+export type ExpenseMonthSummary = z.infer<typeof expenseMonthSummarySchema>;
+export type ExpenseYearResponse = z.infer<typeof expenseYearResponseSchema>;
+export type Liability = z.infer<typeof liabilitySchema>;
+export type LiabilitiesResponse = z.infer<typeof liabilitiesResponseSchema>;
 export type CreateManualTransactionRequest = z.infer<typeof createManualTransactionRequestSchema>;

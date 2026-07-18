@@ -1,7 +1,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dashboardResponseSchema, healthResponseSchema, ledgerTransactionSchema } from "@finance-hero/contracts";
+import {
+  dashboardResponseSchema,
+  expenseYearResponseSchema,
+  healthResponseSchema,
+  ledgerTransactionSchema,
+  liabilitiesResponseSchema,
+} from "@finance-hero/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app";
 
@@ -33,6 +39,14 @@ describe("local API", () => {
     const dashboard = await app.inject({ method: "GET", url: "/api/v1/dashboard?month=2026-07" });
     expect(dashboard.statusCode).toBe(200);
     expect(dashboardResponseSchema.parse(dashboard.json()).regularExpensePaise).toBe(6004800);
+
+    const expenseYear = await app.inject({ method: "GET", url: "/api/v1/expenses/year?year=2026" });
+    expect(expenseYear.statusCode).toBe(200);
+    expect(expenseYearResponseSchema.parse(expenseYear.json()).months).toHaveLength(12);
+
+    const liabilities = await app.inject({ method: "GET", url: "/api/v1/liabilities" });
+    expect(liabilities.statusCode).toBe(200);
+    expect(liabilitiesResponseSchema.parse(liabilities.json()).totalPrincipalPaise).toBe(724854600);
 
     const manual = await app.inject({
       method: "POST",

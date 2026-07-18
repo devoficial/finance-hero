@@ -746,6 +746,252 @@ h2 {
   background: #c6dfd4;
   color: var(--green);
 }
+.cash-flow-chart {
+  display: grid;
+  gap: 18px;
+}
+.cash-flow-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 7px;
+}
+.cash-flow-row span {
+  color: #596a62;
+  font-size: 11px;
+}
+.cash-flow-row strong {
+  font:
+    11px "DM Mono",
+    monospace;
+}
+.cash-flow-track {
+  height: 13px;
+  overflow: hidden;
+  background: #deddd5;
+}
+.cash-flow-track i {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  background: var(--green);
+}
+.cash-flow-track i.emi {
+  background: var(--red);
+}
+.cash-flow-track i.expense {
+  background: #c88646;
+}
+.cash-flow-track i.available {
+  background: var(--yellow);
+}
+.dashboard-notes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 25px 0 16px;
+  border: 1px solid var(--line);
+}
+.dashboard-notes article {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-right: 1px solid var(--line);
+}
+.dashboard-notes article:last-child {
+  border-right: 0;
+}
+.dashboard-notes span {
+  color: #68766f;
+  text-transform: uppercase;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.dashboard-notes strong {
+  font-size: 12px;
+}
+.dashboard-notes small {
+  color: #6d7974;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.dashboard-ledger-button,
+.statement-button {
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: white;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+.expense-overview-grid,
+.liability-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--line);
+  background: rgba(241, 238, 229, 0.9);
+  margin-bottom: 16px;
+}
+.expense-overview-grid .metric-card:last-child,
+.liability-metrics .metric-card:last-child {
+  border-right: 0;
+}
+.expense-year-panel,
+.selected-expense-panel {
+  margin-bottom: 16px;
+}
+.expense-month-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.expense-month-grid .month-card {
+  min-width: 0;
+}
+.expense-month-grid .month-card.empty {
+  opacity: 0.62;
+}
+.expense-month-grid .month-card.selected {
+  border-color: var(--green);
+  box-shadow: inset 0 -4px var(--yellow);
+  opacity: 1;
+}
+.expense-month-grid .month-card.has-data > strong {
+  color: var(--green);
+}
+.expense-detail-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 34px;
+  align-items: center;
+}
+.category-pie {
+  width: 220px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  box-shadow: inset 0 0 0 1px rgba(21, 34, 30, 0.08);
+}
+.category-pie::after {
+  content: "";
+  position: absolute;
+  width: 118px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--paper);
+}
+.category-pie div {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 4px;
+  text-align: center;
+}
+.category-pie strong {
+  font:
+    18px "Newsreader",
+    serif;
+}
+.category-pie span {
+  color: #6f7b76;
+  text-transform: uppercase;
+  font:
+    7px "DM Mono",
+    monospace;
+}
+.expense-category-list {
+  max-height: 310px;
+  overflow-y: auto;
+}
+.empty-month-state {
+  min-height: 180px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 8px;
+  color: #68766f;
+}
+.empty-month-state strong {
+  color: var(--ink);
+  font:
+    22px "Newsreader",
+    serif;
+}
+.liability-metrics {
+  grid-template-columns: repeat(4, 1fr);
+}
+.liabilities-panel {
+  min-width: 0;
+}
+.liabilities-table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+.liabilities-table th,
+.liabilities-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.liabilities-table th {
+  background: #deddd5;
+  color: #596a62;
+  text-transform: uppercase;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.liabilities-table td:first-child {
+  min-width: 190px;
+}
+.liabilities-table td:nth-child(n + 3) {
+  font-family: "DM Mono", monospace;
+}
+.liabilities-table .principal-cell {
+  color: #a13524;
+  font-weight: 700;
+}
+.liabilities-table tr.cleared td {
+  color: #6e7a75;
+}
+.liability-progress {
+  width: 130px;
+  height: 3px;
+  margin-top: 7px;
+  overflow: hidden;
+  background: #d9d8d0;
+}
+.liability-progress i {
+  display: block;
+  height: 100%;
+  background: var(--green-bright);
+}
+.status-pill,
+.rank-pill {
+  display: inline-block;
+  padding: 4px 7px;
+  background: #f0c6ba;
+  color: #9e321f;
+  text-transform: uppercase;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.status-pill.cleared {
+  background: #c6dfd4;
+  color: var(--green);
+}
+.rank-pill {
+  background: var(--yellow);
+  color: var(--green);
+  font-weight: 700;
+}
 .mobile-nav {
   display: none;
 }
@@ -772,6 +1018,18 @@ h2 {
   }
   .metric-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .expense-month-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .liability-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .liability-metrics .metric-card:nth-child(2) {
+    border-right: 0;
+  }
+  .liability-metrics .metric-card:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
   }
   .metric-card:nth-child(2) {
     border-right: 0;
@@ -860,6 +1118,45 @@ h2 {
   }
   .right-stack {
     grid-template-columns: 1fr;
+  }
+  .dashboard-notes {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-notes article {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .dashboard-notes article:last-child {
+    border-bottom: 0;
+  }
+  .expense-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  .expense-overview-grid .metric-card {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .expense-overview-grid .metric-card:last-child {
+    border-bottom: 0;
+  }
+  .expense-month-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .expense-month-grid .month-card {
+    min-width: 0;
+  }
+  .expense-detail-grid {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .expense-category-list {
+    width: 100%;
+  }
+  .selected-expense-panel .panel-heading {
+    display: grid;
+  }
+  .statement-button {
+    width: 100%;
   }
   .entry-form {
     grid-template-columns: 1fr;

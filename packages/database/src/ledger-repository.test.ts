@@ -37,6 +37,18 @@ describe("ledger repository", () => {
     expect(dashboard.debtPrincipalPaise).toBe(724854600);
     expect(dashboard.availableAfterPlanPaise).toBe(11339400);
     expect(dashboard.transactionCount).toBe(11);
+
+    const expenseYear = repository.getExpenseYear("2026");
+    expect(expenseYear.months).toHaveLength(12);
+    expect(expenseYear.months[6]?.regularExpensePaise).toBe(6004800);
+    expect(expenseYear.months[0]?.regularExpensePaise).toBe(0);
+
+    const liabilities = repository.getLiabilities();
+    expect(liabilities.totalPrincipalPaise).toBe(724854600);
+    expect(liabilities.totalEmiPaise).toBe(12745100);
+    expect(liabilities.activeCount).toBe(10);
+    expect(liabilities.clearedCount).toBe(1);
+    expect(liabilities.liabilities.find((item) => item.name === "Two-wheeler loan")?.status).toBe("cleared");
     database.close();
   });
 

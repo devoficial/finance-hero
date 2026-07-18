@@ -19,19 +19,81 @@ const categories = [
 ] as const;
 
 const debts = [
-  ["debt-personal-1", "Personal loan", "personal_loan", 305558, 10381, 1199],
-  ["debt-home", "Home loan", "home_loan", 3980210, 41663, 900],
-  ["debt-personal-2", "Personal loan 2", "personal_loan", 181869, 14976, 1075],
-  ["debt-bajaj", "Bajaj personal loan", "personal_loan", 2099000, 23190, 1350],
-  ["debt-groww", "Groww personal loan", "personal_loan", 339487, 11181, 1699],
-  ["debt-dmi", "DMI finance loan", "personal_loan", 238140, 11340, 1650],
-  ["debt-icici-card", "ICICI Credit Card", "credit_card", 34265, 9863, null],
-  ["debt-axis-flipkart", "Axis Flipkart Credit Card", "credit_card", 32256, 4857, null],
-  ["debt-icici-rupay", "ICICI Rupay Credit Card", "credit_card", 37761, 0, null],
-  ["debt-axis-neo", "Axis Neo Credit Card", "credit_card", 0, 0, null],
+  ["debt-personal-1", "Personal loan", "personal_loan", 500000, 305558, 10381, 1199, "active"],
+  ["debt-home", "Home loan", "home_loan", 3989210, 3980210, 41663, 900, "active"],
+  ["debt-personal-2", "Personal loan 2", "personal_loan", 2500000, 181869, 14976, 1075, "active"],
+  ["debt-bajaj", "Bajaj personal loan", "personal_loan", 2099000, 2099000, 23190, 1350, "active"],
+  ["debt-two-wheeler", "Two-wheeler loan", "vehicle_loan", 200000, 0, 0, 1623, "cleared"],
+  ["debt-groww", "Groww personal loan", "personal_loan", 445000, 339487, 11181, 1699, "active"],
+  ["debt-dmi", "DMI finance loan", "personal_loan", 360000, 238140, 11340, 1650, "active"],
+  ["debt-icici-card", "ICICI Credit Card", "credit_card", 34265, 34265, 9863, null, "active"],
+  ["debt-axis-flipkart", "Axis Flipkart Credit Card", "credit_card", 32256, 32256, 4857, null, "active"],
+  ["debt-icici-rupay", "ICICI Rupay Credit Card", "credit_card", 37761, 37761, 0, null, "active"],
+  ["debt-axis-neo", "Axis Neo Credit Card", "credit_card", 0, 0, 0, null, "active"],
 ] as const;
 
+function seedAcceptedLiabilities(database: FinanceHeroDatabase): void {
+  const seed = database.connection.transaction(() => {
+    const existing = database.connection
+      .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_liability_seed'")
+      .get() as { value: string } | undefined;
+    if (existing) {
+      return;
+    }
+
+    const insertDebtAccount = database.connection.prepare(`
+      INSERT OR IGNORE INTO accounts
+        (id, name, account_class, account_type, institution, is_active, created_at)
+      VALUES (?, ?, 'liability', ?, ?, 1, ?)
+    `);
+    const upsertDebt = database.connection.prepare(`
+      INSERT INTO debts
+        (id, account_id, lender, product_type, original_amount_paise, current_principal_paise,
+         emi_paise, annual_rate_bps, status, source_ref, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        lender = excluded.lender,
+        product_type = excluded.product_type,
+        original_amount_paise = excluded.original_amount_paise,
+        current_principal_paise = excluded.current_principal_paise,
+        emi_paise = excluded.emi_paise,
+        annual_rate_bps = excluded.annual_rate_bps,
+        status = excluded.status,
+        source_ref = excluded.source_ref,
+        updated_at = excluded.updated_at
+    `);
+
+    for (const [debtId, lender, productType, originalRupees, principalRupees, emiRupees, rateBps, status] of debts) {
+      const accountId = `account-${debtId}`;
+      insertDebtAccount.run(accountId, lender, productType, lender, SEEDED_AT);
+      upsertDebt.run(
+        debtId,
+        accountId,
+        lender,
+        productType,
+        originalRupees * 100,
+        principalRupees * 100,
+        emiRupees * 100,
+        rateBps,
+        status,
+        `${SOURCE}:Liabilities`,
+        SEEDED_AT,
+      );
+    }
+
+    database.connection
+      .prepare(`
+        INSERT INTO app_metadata (key, value, updated_at)
+        VALUES ('accepted_liability_seed', '2026-07-v2', ?)
+      `)
+      .run(SEEDED_AT);
+  });
+  seed.immediate();
+}
+
 export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void {
+  seedAcceptedLiabilities(database);
+
   const seed = database.connection.transaction(() => {
     const existing = database.connection
       .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_opening_seed'")
@@ -104,33 +166,6 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
             SEEDED_AT,
           );
       }
-    }
-
-    const insertDebtAccount = database.connection.prepare(`
-      INSERT OR IGNORE INTO accounts
-        (id, name, account_class, account_type, institution, is_active, created_at)
-      VALUES (?, ?, 'liability', ?, ?, 1, ?)
-    `);
-    const insertDebt = database.connection.prepare(`
-      INSERT OR IGNORE INTO debts
-        (id, account_id, lender, product_type, current_principal_paise, emi_paise, annual_rate_bps, status, source_ref, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
-    `);
-
-    for (const [debtId, lender, productType, principalRupees, emiRupees, rateBps] of debts) {
-      const accountId = `account-${debtId}`;
-      insertDebtAccount.run(accountId, lender, productType, lender, SEEDED_AT);
-      insertDebt.run(
-        debtId,
-        accountId,
-        lender,
-        productType,
-        principalRupees * 100,
-        emiRupees * 100,
-        rateBps,
-        `${SOURCE}:Liabilities`,
-        SEEDED_AT,
-      );
     }
 
     database.connection

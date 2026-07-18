@@ -2,8 +2,10 @@ import { formatInr } from "@finance-hero/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { DashboardView } from "./components/DashboardView";
+import { ExpensesView } from "./components/ExpensesView";
 import { LedgerView } from "./components/LedgerView";
-import { getDashboard, getHealth, getLedger, getReferenceData } from "./lib/api";
+import { LiabilitiesView } from "./components/LiabilitiesView";
+import { getDashboard, getExpenseYear, getHealth, getLedger, getLiabilities, getReferenceData } from "./lib/api";
 
 const navItems = ["Home", "Ledger", "Expenses", "Imports", "Liabilities", "Goals", "Projects"];
 const ACTIVE_MONTH = "2026-07";
@@ -12,15 +14,25 @@ export function App() {
   const [privacy, setPrivacy] = useState(false);
   const [activeNav, setActiveNav] = useState("Home");
   const [year, setYear] = useState("2026");
+  const [selectedMonth, setSelectedMonth] = useState(ACTIVE_MONTH);
   const health = useQuery({ queryKey: ["health"], queryFn: ({ signal }) => getHealth(signal) });
   const dashboard = useQuery({
     queryKey: ["dashboard", ACTIVE_MONTH],
     queryFn: ({ signal }) => getDashboard(ACTIVE_MONTH, signal),
   });
   const ledger = useQuery({
-    queryKey: ["ledger", ACTIVE_MONTH],
-    queryFn: ({ signal }) => getLedger(ACTIVE_MONTH, signal),
+    queryKey: ["ledger", selectedMonth],
+    queryFn: ({ signal }) => getLedger(selectedMonth, signal),
   });
+  const expenseYear = useQuery({
+    queryKey: ["expenses", "year", year],
+    queryFn: ({ signal }) => getExpenseYear(year, signal),
+  });
+  const selectedExpense = useQuery({
+    queryKey: ["dashboard", selectedMonth],
+    queryFn: ({ signal }) => getDashboard(selectedMonth, signal),
+  });
+  const liabilities = useQuery({ queryKey: ["liabilities"], queryFn: ({ signal }) => getLiabilities(signal) });
   const referenceData = useQuery({
     queryKey: ["reference-data"],
     queryFn: ({ signal }) => getReferenceData(signal),
@@ -32,8 +44,25 @@ export function App() {
   }, []);
 
   const money = (paise: number) => (privacy ? "Rs --,---" : formatInr(paise / 100));
-  const showDashboard = activeNav === "Home" || activeNav === "Expenses";
-  const isDataLoading = dashboard.isLoading || ledger.isLoading || referenceData.isLoading;
+  const visibleMonth = activeNav === "Expenses" || activeNav === "Ledger" ? selectedMonth : ACTIVE_MONTH;
+  const visiblePeriod = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${visibleMonth}-01T00:00:00Z`))
+    .toUpperCase();
+  const hasViewError =
+    (activeNav === "Home" && dashboard.isError) ||
+    (activeNav === "Ledger" && (ledger.isError || referenceData.isError)) ||
+    (activeNav === "Expenses" && (expenseYear.isError || selectedExpense.isError)) ||
+    (activeNav === "Liabilities" && liabilities.isError);
+
+  function openCurrentLedger() {
+    setSelectedMonth(ACTIVE_MONTH);
+    setActiveNav("Ledger");
+  }
+
+  function changeExpenseYear(nextYear: string) {
+    setYear(nextYear);
+    setSelectedMonth(`${nextYear}-${selectedMonth.slice(5, 7)}`);
+  }
 
   return (
     <div className="app-shell">
@@ -73,11 +102,13 @@ export function App() {
       <main>
         <header className="topbar">
           <div>
-            <p className="eyebrow">{activeNav.toUpperCase()} / LIVE LOCAL DATA / JUL 2026</p>
+            <p className="eyebrow">
+              {activeNav.toUpperCase()} / LIVE LOCAL DATA / {visiblePeriod}
+            </p>
             <h1>{activeNav === "Home" ? `${greeting}, Debasis.` : activeNav}</h1>
           </div>
           <div className="top-actions">
-            <button className="add-button" onClick={() => setActiveNav("Ledger")} type="button">
+            <button className="add-button" onClick={openCurrentLedger} type="button">
               + Add transaction
             </button>
             <button className="ghost-button" onClick={() => setPrivacy((value) => !value)} type="button">
@@ -90,30 +121,42 @@ export function App() {
           </div>
         </header>
 
-        {dashboard.error || ledger.error || referenceData.error ? (
+        {hasViewError ? (
           <section className="alert-strip" aria-label="Local database error">
             <span className="alert-code">DATA</span>
             <p>
               <strong>The encrypted ledger could not be loaded.</strong> Check that the local API is running.
             </p>
           </section>
-        ) : showDashboard ? (
+        ) : activeNav === "Home" ? (
           <DashboardView
             dashboard={dashboard.data}
-            loading={isDataLoading}
+            loading={dashboard.isLoading}
             money={money}
-            onOpenLedger={() => setActiveNav("Ledger")}
-            onYearChange={setYear}
+            onOpenLedger={openCurrentLedger}
+          />
+        ) : activeNav === "Expenses" ? (
+          <ExpensesView
+            loading={expenseYear.isLoading || selectedExpense.isLoading}
+            money={money}
+            onOpenStatement={() => setActiveNav("Ledger")}
+            onSelectMonth={setSelectedMonth}
+            onYearChange={changeExpenseYear}
+            selectedDashboard={selectedExpense.data}
+            selectedMonth={selectedMonth}
             year={year}
+            yearData={expenseYear.data}
           />
         ) : activeNav === "Ledger" ? (
           <LedgerView
             ledger={ledger.data}
-            loading={isDataLoading}
+            loading={ledger.isLoading || referenceData.isLoading}
             money={money}
-            month={ACTIVE_MONTH}
+            month={selectedMonth}
             referenceData={referenceData.data}
           />
+        ) : activeNav === "Liabilities" ? (
+          <LiabilitiesView data={liabilities.data} loading={liabilities.isLoading} money={money} />
         ) : (
           <section className="panel feature-placeholder">
             <p className="eyebrow">MODULE BOUNDARY READY</p>

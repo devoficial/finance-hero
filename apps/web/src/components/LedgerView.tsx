@@ -1,6 +1,6 @@
 import type { LedgerResponse, ReferenceDataResponse } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { createManualTransaction } from "../lib/api";
 
 interface LedgerViewProps {
@@ -20,9 +20,14 @@ function currentLocalDate(): string {
   }).format(new Date());
 }
 
+function defaultDateForMonth(month: string): string {
+  const today = currentLocalDate();
+  return today.startsWith(month) ? today : `${month}-01`;
+}
+
 export function LedgerView({ month, ledger, referenceData, loading, money }: LedgerViewProps) {
   const queryClient = useQueryClient();
-  const [date, setDate] = useState(currentLocalDate());
+  const [date, setDate] = useState(() => defaultDateForMonth(month));
   const [payee, setPayee] = useState("");
   const [amount, setAmount] = useState("");
   const [kind, setKind] = useState<"expense" | "income">("expense");
@@ -39,6 +44,7 @@ export function LedgerView({ month, ledger, referenceData, loading, money }: Led
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["dashboard", month] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", month] }),
+        queryClient.invalidateQueries({ queryKey: ["expenses", "year", month.slice(0, 4)] }),
       ]);
     },
   });
@@ -47,6 +53,10 @@ export function LedgerView({ month, ledger, referenceData, loading, money }: Led
   const categories = referenceData?.categories ?? [];
   const effectiveAccountId = accountId || accounts[0]?.id || "";
   const effectiveCategoryId = categoryId || categories[0]?.id || "";
+
+  useEffect(() => {
+    setDate(defaultDateForMonth(month));
+  }, [month]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

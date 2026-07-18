@@ -45,7 +45,7 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     ) STRICT;
 
     INSERT INTO app_metadata (key, value, updated_at)
-    VALUES ('schema_version', 'phase-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    VALUES ('schema_version', 'phase-2', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     ON CONFLICT(key) DO UPDATE SET
       value = excluded.value,
       updated_at = excluded.updated_at;
@@ -111,6 +111,7 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id),
       lender TEXT NOT NULL,
       product_type TEXT NOT NULL,
+      original_amount_paise INTEGER NOT NULL DEFAULT 0 CHECK (original_amount_paise >= 0),
       current_principal_paise INTEGER NOT NULL CHECK (current_principal_paise >= 0),
       emi_paise INTEGER NOT NULL DEFAULT 0 CHECK (emi_paise >= 0),
       annual_rate_bps INTEGER CHECK (annual_rate_bps >= 0),
@@ -139,4 +140,12 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     CREATE INDEX IF NOT EXISTS postings_account_idx ON postings(account_id);
     CREATE INDEX IF NOT EXISTS transactions_month_idx ON journal_transactions(effective_month, occurred_on);
   `);
+
+  const debtColumns = database.connection.prepare("PRAGMA table_info(debts)").all() as Array<{ name: string }>;
+  if (!debtColumns.some((column) => column.name === "original_amount_paise")) {
+    database.connection.exec(
+      "ALTER TABLE debts ADD COLUMN original_amount_paise INTEGER NOT NULL DEFAULT 0 CHECK (original_amount_paise >= 0)",
+    );
+    database.connection.exec("UPDATE debts SET original_amount_paise = current_principal_paise");
+  }
 }

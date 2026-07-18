@@ -2,12 +2,16 @@ import {
   type CreateManualTransactionRequest,
   type DashboardResponse,
   dashboardResponseSchema,
+  type ExpenseYearResponse,
+  expenseYearResponseSchema,
   type HealthResponse,
   healthResponseSchema,
   type LedgerResponse,
   type LedgerTransaction,
+  type LiabilitiesResponse,
   ledgerResponseSchema,
   ledgerTransactionSchema,
+  liabilitiesResponseSchema,
   type ReferenceDataResponse,
   referenceDataResponseSchema,
 } from "@finance-hero/contracts";
@@ -32,6 +36,16 @@ export async function getDashboard(month: string, signal?: AbortSignal): Promise
 
 export async function getLedger(month: string, signal?: AbortSignal): Promise<LedgerResponse> {
   return ledgerResponseSchema.parse(await getJson(`/api/v1/ledger?month=${encodeURIComponent(month)}`, signal));
+}
+
+export async function getExpenseYear(year: string, signal?: AbortSignal): Promise<ExpenseYearResponse> {
+  return expenseYearResponseSchema.parse(
+    await getJson(`/api/v1/expenses/year?year=${encodeURIComponent(year)}`, signal),
+  );
+}
+
+export async function getLiabilities(signal?: AbortSignal): Promise<LiabilitiesResponse> {
+  return liabilitiesResponseSchema.parse(await getJson("/api/v1/liabilities", signal));
 }
 
 export async function getReferenceData(signal?: AbortSignal): Promise<ReferenceDataResponse> {

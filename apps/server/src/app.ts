@@ -3,10 +3,13 @@ import { join } from "node:path";
 import {
   createManualTransactionRequestSchema,
   dashboardResponseSchema,
+  expenseYearResponseSchema,
   healthResponseSchema,
   ledgerResponseSchema,
+  liabilitiesResponseSchema,
   monthSchema,
   referenceDataResponseSchema,
+  yearSchema,
 } from "@finance-hero/contracts";
 import {
   type FinanceHeroDatabase,
@@ -80,6 +83,24 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         transactions: ledger.listTransactions(month),
       }),
     );
+  });
+
+  app.get("/api/v1/expenses/year", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    const query = request.query as { year?: string };
+    const year = yearSchema.parse(query.year ?? "2026");
+    return reply.header("cache-control", "no-store").send(expenseYearResponseSchema.parse(ledger.getExpenseYear(year)));
+  });
+
+  app.get("/api/v1/liabilities", async (_request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    return reply.header("cache-control", "no-store").send(liabilitiesResponseSchema.parse(ledger.getLiabilities()));
   });
 
   app.get("/api/v1/reference-data", async (_request, reply) => {
