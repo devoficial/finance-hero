@@ -1328,6 +1328,47 @@ h2 {
 .expense-month-grid .month-card.has-data > strong {
   color: var(--green);
 }
+.cashflow-classification {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 26px;
+  border: 1px solid var(--line);
+}
+.cashflow-classification > div {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 16px;
+  border-right: 1px solid var(--line);
+}
+.cashflow-classification > div:last-child {
+  border-right: 0;
+  background: var(--green);
+  color: white;
+}
+.cashflow-classification span,
+.cashflow-classification small {
+  font-family: "DM Mono", monospace;
+}
+.cashflow-classification span {
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+.cashflow-classification strong {
+  font:
+    600 24px "Newsreader",
+    serif;
+}
+.cashflow-classification small {
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.45;
+}
+.cashflow-classification > div:last-child span,
+.cashflow-classification > div:last-child small {
+  color: rgba(255, 255, 255, 0.72);
+}
 .expense-detail-grid {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
@@ -1978,6 +2019,15 @@ h2 {
   .expense-detail-grid {
     grid-template-columns: 1fr;
     justify-items: center;
+  }
+  .cashflow-classification {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cashflow-classification > div:nth-child(2) {
+    border-right: 0;
+  }
+  .cashflow-classification > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
   }
   .expense-category-list {
     width: 100%;

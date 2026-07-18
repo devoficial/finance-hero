@@ -23,20 +23,20 @@ function CategoryPie({ dashboard, money }: { dashboard: DashboardResponse; money
   let cursor = 0;
   const segments = dashboard.expenseCategories.map((category, index) => {
     const start = cursor;
-    cursor += dashboard.totalExpensePaise > 0 ? (category.amountPaise / dashboard.totalExpensePaise) * 360 : 0;
+    cursor += dashboard.cashOutflowPaise > 0 ? (category.amountPaise / dashboard.cashOutflowPaise) * 360 : 0;
     return `${pieColors[index % pieColors.length]} ${start}deg ${cursor}deg`;
   });
 
   return (
     <div
-      aria-label={`Expense category pie chart. Total ${money(dashboard.totalExpensePaise)}`}
+      aria-label={`Cash outflow category pie chart. Total ${money(dashboard.cashOutflowPaise)}`}
       className="category-pie"
       role="img"
       style={{ background: segments.length > 0 ? `conic-gradient(${segments.join(", ")})` : "#d9d8d0" }}
     >
       <div>
-        <strong>{money(dashboard.totalExpensePaise)}</strong>
-        <span>month total</span>
+        <strong>{money(dashboard.cashOutflowPaise)}</strong>
+        <span>cash outflow</span>
       </div>
     </div>
   );
@@ -58,7 +58,7 @@ export function ExpensesView({
     return <section className="panel loading-panel">Building the monthly expense register...</section>;
   }
 
-  const spentYtd = yearData.months.reduce((sum, month) => sum + month.totalExpensePaise, 0);
+  const spentYtd = yearData.months.reduce((sum, month) => sum + month.cashOutflowPaise, 0);
   const budgetYtd = yearData.months.reduce((sum, month) => sum + month.regularBudgetPaise, 0);
   const trackedMonths = yearData.months.filter((month) => month.transactionCount > 0).length;
 
@@ -66,7 +66,7 @@ export function ExpensesView({
     <>
       <section className="expense-overview-grid" aria-label="Annual expense summary">
         <article className="metric-card">
-          <span>Recorded in {year}</span>
+          <span>Cash outflow in {year}</span>
           <strong>{money(spentYtd)}</strong>
           <small>
             Across {trackedMonths} populated month{trackedMonths === 1 ? "" : "s"}
@@ -79,8 +79,8 @@ export function ExpensesView({
         </article>
         <article className="metric-card">
           <span>Selected month</span>
-          <strong>{money(selectedDashboard.totalExpensePaise)}</strong>
-          <small>{money(selectedDashboard.regularExpensePaise)} counts toward the regular budget</small>
+          <strong>{money(selectedDashboard.cashOutflowPaise)}</strong>
+          <small>{money(selectedDashboard.totalExpensePaise)} is expense; the rest is debt or asset movement</small>
         </article>
       </section>
 
@@ -119,7 +119,7 @@ export function ExpensesView({
                     {imported ? `${month.transactionCount} entries` : future ? "Upcoming" : "Awaiting import"}
                   </small>
                 </div>
-                <strong>{imported ? money(month.totalExpensePaise) : future ? "Upcoming" : "Not imported"}</strong>
+                <strong>{imported ? money(month.cashOutflowPaise) : future ? "Upcoming" : "Not imported"}</strong>
                 <div className="progress-track">
                   <i style={{ width: `${Math.min(100, month.budgetUsedPercentage)}%` }} />
                 </div>
@@ -143,7 +143,7 @@ export function ExpensesView({
         <div className="panel-heading">
           <div>
             <p className="eyebrow">SELECTED MONTH / {selectedMonth}</p>
-            <h2>{monthName(selectedMonth)} expense breakdown</h2>
+            <h2>{monthName(selectedMonth)} cash-flow breakdown</h2>
           </div>
           <button className="statement-button" onClick={() => onOpenStatement(selectedMonth)} type="button">
             Open detailed statement
@@ -151,24 +151,48 @@ export function ExpensesView({
         </div>
 
         {selectedDashboard.expenseCategories.length > 0 ? (
-          <div className="expense-detail-grid">
-            <CategoryPie dashboard={selectedDashboard} money={money} />
-            <div className="category-list expense-category-list">
-              {selectedDashboard.expenseCategories.map((category, index) => {
-                const percentage = Math.round((category.amountPaise / selectedDashboard.totalExpensePaise) * 100);
-                return (
-                  <div key={category.id}>
-                    <span>
-                      <i style={{ background: pieColors[index % pieColors.length] }} />
-                      {category.name}
-                    </span>
-                    <strong>{money(category.amountPaise)}</strong>
-                    <small>{percentage}%</small>
-                  </div>
-                );
-              })}
+          <>
+            <div className="cashflow-classification">
+              <div>
+                <span>Actual expenses</span>
+                <strong>{money(selectedDashboard.totalExpensePaise)}</strong>
+                <small>Consumption and charges</small>
+              </div>
+              <div>
+                <span>Debt payments</span>
+                <strong>{money(selectedDashboard.debtPaymentPaise)}</strong>
+                <small>Not counted as normal spending</small>
+              </div>
+              <div>
+                <span>Assets and savings</span>
+                <strong>{money(selectedDashboard.assetBuildingPaise)}</strong>
+                <small>Construction and wealth-building</small>
+              </div>
+              <div>
+                <span>Total cash outflow</span>
+                <strong>{money(selectedDashboard.cashOutflowPaise)}</strong>
+                <small>Amount that left available cash</small>
+              </div>
             </div>
-          </div>
+            <div className="expense-detail-grid">
+              <CategoryPie dashboard={selectedDashboard} money={money} />
+              <div className="category-list expense-category-list">
+                {selectedDashboard.expenseCategories.map((category, index) => {
+                  const percentage = Math.round((category.amountPaise / selectedDashboard.cashOutflowPaise) * 100);
+                  return (
+                    <div key={category.id}>
+                      <span>
+                        <i style={{ background: pieColors[index % pieColors.length] }} />
+                        {category.name}
+                      </span>
+                      <strong>{money(category.amountPaise)}</strong>
+                      <small>{percentage}%</small>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
         ) : (
           <div className="empty-month-state">
             <strong>No ledger entries for {monthName(selectedMonth)}.</strong>

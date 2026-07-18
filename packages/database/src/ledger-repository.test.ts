@@ -32,36 +32,47 @@ describe("ledger repository", () => {
     const dashboard = repository.getDashboard("2026-07", 18);
 
     expect(dashboard.plannedIncomePaise).toBe(30089300);
-    expect(dashboard.regularExpensePaise).toBe(4674500);
-    expect(dashboard.totalExpensePaise).toBe(4674500);
+    expect(dashboard.regularExpensePaise).toBe(4567200);
+    expect(dashboard.totalExpensePaise).toBe(4590800);
+    expect(dashboard.cashOutflowPaise).toBe(20459200);
+    expect(dashboard.debtPaymentPaise).toBe(11273100);
+    expect(dashboard.assetBuildingPaise).toBe(4595300);
     expect(dashboard.regularBudgetPaise).toBe(6004800);
-    expect(dashboard.budgetUsedPercentage).toBe(78);
+    expect(dashboard.budgetUsedPercentage).toBe(76);
     expect(dashboard.totalEmiPaise).toBe(12745100);
     expect(dashboard.debtPrincipalPaise).toBe(724854600);
-    expect(dashboard.availableAfterPlanPaise).toBe(12669700);
-    expect(dashboard.transactionCount).toBe(11);
+    expect(dashboard.availableAfterPlanPaise).toBe(9630100);
+    expect(dashboard.transactionCount).toBe(14);
 
     const expenseYear = repository.getExpenseYear("2026");
     expect(expenseYear.months).toHaveLength(12);
     expect(expenseYear.months.map((month) => month.regularExpensePaise)).toEqual([
-      8141600, 10077300, 8553400, 6943800, 7730300, 3662600, 4674500, 0, 0, 0, 0, 0,
+      7959800, 9396000, 8372100, 6762500, 7549000, 3457400, 4567200, 0, 0, 0, 0, 0,
     ]);
     expect(expenseYear.months.map((month) => month.totalExpensePaise)).toEqual([
-      10516600, 20718400, 11327800, 18877600, 13580800, 10342000, 4674500, 0, 0, 0, 0, 0,
+      7959800, 9396000, 8372100, 6762500, 7549000, 3457400, 4590800, 0, 0, 0, 0, 0,
+    ]);
+    expect(expenseYear.months.map((month) => month.cashOutflowPaise)).toEqual([
+      10516600, 20718400, 11327800, 18877600, 13580800, 10342000, 20459200, 0, 0, 0, 0, 0,
     ]);
     expect(expenseYear.months.slice(0, 7).every((month) => month.transactionCount > 0)).toBe(true);
 
     const priorYear = repository.getExpenseYear("2025");
     expect(priorYear.months.map((month) => month.regularExpensePaise)).toEqual([
-      0, 0, 0, 0, 0, 0, 0, 0, 5072300, 14041800, 8415100, 12520700,
+      0, 0, 0, 0, 0, 0, 0, 0, 5072300, 13860000, 8233300, 12338900,
     ]);
     expect(priorYear.months.map((month) => month.totalExpensePaise)).toEqual([
+      0, 0, 0, 0, 0, 0, 0, 0, 5072300, 13860000, 8233300, 12338900,
+    ]);
+    expect(priorYear.months.map((month) => month.cashOutflowPaise)).toEqual([
       0, 0, 0, 0, 0, 0, 0, 0, 5072300, 18969700, 8415100, 21676100,
     ]);
 
     const june = repository.getDashboard("2026-06", 30);
-    expect(june.regularExpensePaise).toBe(3662600);
-    expect(june.totalExpensePaise).toBe(10342000);
+    expect(june.regularExpensePaise).toBe(3457400);
+    expect(june.totalExpensePaise).toBe(3457400);
+    expect(june.cashOutflowPaise).toBe(10342000);
+    expect(june.debtPaymentPaise).toBe(6679400);
     expect(june.expenseCategories.find((item) => item.id === "category-credit-card-bills")?.amountPaise).toBe(6679400);
 
     const liabilities = repository.getLiabilities();
@@ -94,8 +105,9 @@ describe("ledger repository", () => {
     const retry = repository.createManualTransaction(input);
 
     expect(retry.id).toBe(first.id);
-    expect(repository.getDashboard("2026-07", 19).regularExpensePaise).toBe(4717000);
-    expect(repository.getDashboard("2026-07", 19).totalExpensePaise).toBe(4717000);
+    expect(repository.getDashboard("2026-07", 19).regularExpensePaise).toBe(4609700);
+    expect(repository.getDashboard("2026-07", 19).totalExpensePaise).toBe(4633300);
+    expect(repository.getDashboard("2026-07", 19).cashOutflowPaise).toBe(20501700);
     const balance = database.connection
       .prepare("SELECT SUM(amount_paise) AS total FROM postings WHERE transaction_id = ?")
       .get(first.id) as { total: number };

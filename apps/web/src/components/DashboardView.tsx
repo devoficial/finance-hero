@@ -43,6 +43,8 @@ export function DashboardView({
   const available = Math.max(0, dashboard.availableAfterPlanPaise);
   const emiBurden = percentage(dashboard.totalEmiPaise, income);
   const expenseShare = percentage(dashboard.totalExpensePaise, income);
+  const debtPaymentShare = percentage(dashboard.debtPaymentPaise, income);
+  const assetBuildingShare = percentage(dashboard.assetBuildingPaise, income);
   const surplusRate = percentage(available, income);
   const receivableCoverage = percentage(liabilities.receivablePaise, liabilities.otherLiabilityPaise);
   const snowballTarget = liabilities.liabilities.find((liability) => liability.snowballRank === 1);
@@ -53,7 +55,7 @@ export function DashboardView({
   const importedMonths = expenseYear.months.filter((month) => month.transactionCount > 0);
   const elapsedMonths = expenseYear.months.filter((month) => month.month <= dataCutoffMonth);
   const importedElapsedMonths = elapsedMonths.filter((month) => month.transactionCount > 0);
-  const trendMaximum = Math.max(1, ...importedMonths.map((month) => month.totalExpensePaise));
+  const trendMaximum = Math.max(1, ...importedMonths.map((month) => month.cashOutflowPaise));
   const liabilityTypes = Array.from(
     liabilities.liabilities
       .filter((liability) => liability.status === "active" && liability.currentPrincipalPaise > 0)
@@ -65,15 +67,22 @@ export function DashboardView({
     .map(([type, amountPaise]) => ({ type, amountPaise }))
     .toSorted((left, right) => right.amountPaise - left.amountPaise);
   const allocationSegments = [
-    { label: "EMIs", amountPaise: dashboard.totalEmiPaise, share: emiBurden, color: "var(--red)" },
-    { label: "Tracked expenses", amountPaise: dashboard.totalExpensePaise, share: expenseShare, color: "#c88646" },
+    { label: "Actual expenses", amountPaise: dashboard.totalExpensePaise, share: expenseShare, color: "#c88646" },
+    { label: "Debt payments", amountPaise: dashboard.debtPaymentPaise, share: debtPaymentShare, color: "var(--red)" },
+    {
+      label: "Asset building",
+      amountPaise: dashboard.assetBuildingPaise,
+      share: assetBuildingShare,
+      color: "#2f6f8f",
+    },
     { label: "Available", amountPaise: available, share: surplusRate, color: "var(--green-bright)" },
   ];
-  const allocationTotal = Math.max(1, income, dashboard.totalEmiPaise + dashboard.totalExpensePaise + available);
-  const emiAngle = (dashboard.totalEmiPaise / allocationTotal) * 360;
+  const allocationTotal = Math.max(1, income, dashboard.cashOutflowPaise + available);
   const expenseAngle = (dashboard.totalExpensePaise / allocationTotal) * 360;
+  const debtAngle = (dashboard.debtPaymentPaise / allocationTotal) * 360;
+  const assetAngle = (dashboard.assetBuildingPaise / allocationTotal) * 360;
   const allocationStyle = {
-    background: `conic-gradient(var(--red) 0 ${emiAngle}deg, #c88646 ${emiAngle}deg ${emiAngle + expenseAngle}deg, var(--green-bright) ${emiAngle + expenseAngle}deg 360deg)`,
+    background: `conic-gradient(#c88646 0 ${expenseAngle}deg, var(--red) ${expenseAngle}deg ${expenseAngle + debtAngle}deg, #2f6f8f ${expenseAngle + debtAngle}deg ${expenseAngle + debtAngle + assetAngle}deg, var(--green-bright) ${expenseAngle + debtAngle + assetAngle}deg 360deg)`,
   };
 
   return (
@@ -95,7 +104,7 @@ export function DashboardView({
 
       <section className="finance-kpi-grid" aria-label="Core financial indicators">
         <article className="finance-kpi primary">
-          <span>Available after plan</span>
+          <span>Cash remaining</span>
           <strong>{money(dashboard.availableAfterPlanPaise)}</strong>
           <div>
             <b>{surplusRate}%</b>
@@ -103,7 +112,7 @@ export function DashboardView({
           </div>
         </article>
         <article className={`finance-kpi ${emiBurden >= 40 ? "critical" : ""}`}>
-          <span>EMI burden</span>
+          <span>Scheduled EMI burden</span>
           <strong>{emiBurden}%</strong>
           <div>
             <b>{money(dashboard.totalEmiPaise)}</b>
@@ -156,17 +165,20 @@ export function DashboardView({
             </div>
           </div>
           <div className="allocation-callout">
-            <span>Fixed commitments consume</span>
-            <strong>{emiBurden}% of monthly income</strong>
-            <small>Reducing EMI load has the largest impact on monthly flexibility.</small>
+            <span>Monthly cash movement</span>
+            <strong>{money(dashboard.cashOutflowPaise)} has left the plan</strong>
+            <small>
+              Includes {money(dashboard.debtPaymentPaise)} debt payments and {money(dashboard.assetBuildingPaise)}
+              toward assets; neither is labelled as normal spending.
+            </small>
           </div>
         </article>
 
         <article className="panel trend-panel">
           <div className="panel-heading compact">
             <div>
-              <p className="eyebrow">12-MONTH EXPENSE VIEW / {expenseYear.year}</p>
-              <h2>Tracked spending trend</h2>
+              <p className="eyebrow">12-MONTH CASH-FLOW VIEW / {expenseYear.year}</p>
+              <h2>Tracked outflow trend</h2>
             </div>
             <button className="text-action" onClick={onOpenExpenses} type="button">
               Open expenses
@@ -176,10 +188,10 @@ export function DashboardView({
             {expenseYear.months.map((month) => {
               const hasData = month.transactionCount > 0;
               const future = month.month > dataCutoffMonth;
-              const height = hasData ? Math.max(8, (month.totalExpensePaise / trendMaximum) * 100) : 3;
+              const height = hasData ? Math.max(8, (month.cashOutflowPaise / trendMaximum) * 100) : 3;
               return (
                 <div className={month.month === dashboard.month ? "current" : ""} key={month.month}>
-                  <span>{hasData ? money(month.totalExpensePaise) : future ? "Upcoming" : "Not imported"}</span>
+                  <span>{hasData ? money(month.cashOutflowPaise) : future ? "Upcoming" : "Not imported"}</span>
                   <i className={hasData ? "imported" : "empty"} style={{ height: `${height}%` }} />
                   <b>{monthLabel(month.month).slice(0, 3)}</b>
                 </div>
@@ -190,7 +202,7 @@ export function DashboardView({
             <span>
               {importedElapsedMonths.length} of {elapsedMonths.length} elapsed months imported
             </span>
-            <strong>Current: {money(dashboard.totalExpensePaise)}</strong>
+            <strong>Current outflow: {money(dashboard.cashOutflowPaise)}</strong>
           </footer>
         </article>
       </section>
@@ -199,8 +211,8 @@ export function DashboardView({
         <article className="panel category-panel">
           <div className="panel-heading compact">
             <div>
-              <p className="eyebrow">SPENDING CONTROL / LIVE CATEGORIES</p>
-              <h2>What is driving expenses</h2>
+              <p className="eyebrow">CASH-FLOW CONTROL / LIVE CATEGORIES</p>
+              <h2>What is driving outflow</h2>
             </div>
             <span className="risk-pill">{dashboard.expenseCategories.length} CATEGORIES</span>
           </div>
@@ -215,7 +227,7 @@ export function DashboardView({
                   <i style={{ width: `${Math.max(2, (category.amountPaise / categoryMaximum) * 100)}%` }} />
                 </div>
                 <strong>{money(category.amountPaise)}</strong>
-                <small>{percentage(category.amountPaise, dashboard.totalExpensePaise)}%</small>
+                <small>{percentage(category.amountPaise, dashboard.cashOutflowPaise)}%</small>
               </div>
             ))}
           </div>

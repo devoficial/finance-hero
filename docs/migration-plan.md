@@ -113,6 +113,14 @@ Do not fabricate merchants, dates, or individual transactions. Repeated total an
 cells validate sums but are not entries. September's older six-column layout uses its own mapper;
 October onward uses the eight-column mapper.
 
+The user-facing monthly total is a cash-flow total, not an accounting-expense total. Source rows
+are classified separately: living costs and charges are expenses, card/EMI payments are debt
+payments, and construction/savings rows are asset-building allocations. For July 2026 this yields
+Rs 45,908 expenses, Rs 1,12,731 debt payments, Rs 45,953 asset/savings building, Rs 2,04,592 cash
+outflow, and Rs 96,301 remaining from planned income. The combined `Insurance and Savings` source
+row is provisionally treated as savings; statement reconciliation can split out any insurance
+expense later without changing the original source evidence.
+
 ### Home Construction Details
 
 - Create project `Home Construction`, state `active`, freshness `needs_update`.

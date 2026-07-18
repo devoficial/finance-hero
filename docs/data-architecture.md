@@ -13,6 +13,12 @@ sum(posting.amount_paise) = 0
 This invariant prevents transfers and card payments from being counted twice and
 supports split categories without special-case arithmetic.
 
+Dashboard cash flow intentionally differs from accounting expense. `cash outflow` measures all
+money leaving available cash, while `expense` excludes debt-principal payments, transfers, and
+asset-building allocations. Historical aggregates that cannot yet be posted to a specific debt or
+asset retain this distinction through their broad bucket until statement reconciliation replaces
+them with full journal entries.
+
 Amounts are signed 64-bit integers in paise. Dates are stored separately as:
 
 - `occurred_on`: local financial date (`YYYY-MM-DD`);

@@ -3,11 +3,16 @@ import type { FinanceHeroDatabase } from "./encrypted-database";
 
 const SOURCE = "Finance tracker 2025:accepted opening snapshot";
 const SEEDED_AT = "2026-07-18T12:00:00.000Z";
-const EXPENSE_HISTORY_SEED = "2026-07-v2";
+const EXPENSE_HISTORY_SEED = "2026-07-v3";
 const CREDIT_CARD_BILLS_CATEGORY = [
   "category-credit-card-bills",
   "Credit card bills (unreconciled)",
-  "historical_nonbudget",
+  "debt_payment",
+] as const;
+const CASH_FLOW_CATEGORIES = [
+  ["category-emi-payments", "EMIs / debt payments", "debt_payment"],
+  ["category-home-construction", "Home construction", "asset_building"],
+  ["category-loan-charges", "Loan and bank charges", "nonbudget_expense"],
 ] as const;
 
 const categories = [
@@ -20,7 +25,7 @@ const categories = [
   ["category-personal", "Shopping and personal care", "regular", 3000],
   ["category-learning", "Learning and subscriptions", "regular", 5268],
   ["category-medical", "Medical", "regular", 6000],
-  ["category-insurance", "Insurance", "regular", 1900],
+  ["category-insurance", "Insurance and savings", "savings_investment", 1900],
   ["category-misc", "Miscellaneous", "regular", 2000],
 ] as const;
 
@@ -255,6 +260,9 @@ const historicalExpenseMonths = [
       ["category-medical", 5227],
       ["category-insurance", 1073],
       ["category-misc", 382],
+      ["category-emi-payments", 112731],
+      ["category-home-construction", 44880],
+      ["category-loan-charges", 236],
     ],
   },
 ] as const;
@@ -348,6 +356,9 @@ function seedAcceptedLiabilities(database: FinanceHeroDatabase): void {
 function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
   const categoryNames = new Map<string, string>(categories.map(([id, name]) => [id, name]));
   categoryNames.set(CREDIT_CARD_BILLS_CATEGORY[0], CREDIT_CARD_BILLS_CATEGORY[1]);
+  for (const [id, name] of CASH_FLOW_CATEGORIES) {
+    categoryNames.set(id, name);
+  }
   const seed = database.connection.transaction(() => {
     const existing = database.connection
       .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_expense_history_seed'")
@@ -359,16 +370,30 @@ function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
     // Replace the original July placeholder, which used category limits as actual spending.
     database.connection.prepare("DELETE FROM postings WHERE transaction_id LIKE 'migration-2026-07-category-%'").run();
     database.connection.prepare("DELETE FROM journal_transactions WHERE id LIKE 'migration-2026-07-category-%'").run();
-    // Mapper v2 replaces only source-owned aggregates; manually entered ledger records are untouched.
+    // Mapper v3 replaces only source-owned aggregates; manually entered ledger records are untouched.
     database.connection.prepare("DELETE FROM postings WHERE transaction_id LIKE 'migration-expense-history-%'").run();
     database.connection.prepare("DELETE FROM journal_transactions WHERE id LIKE 'migration-expense-history-%'").run();
+    const upsertNonBudgetCategory = database.connection.prepare(`
+      INSERT INTO categories
+        (id, name, broad_bucket, budget_eligible, alert_eligible, created_at)
+      VALUES (?, ?, ?, 0, 0, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        broad_bucket = excluded.broad_bucket,
+        budget_eligible = excluded.budget_eligible,
+        alert_eligible = excluded.alert_eligible
+    `);
+    upsertNonBudgetCategory.run(...CREDIT_CARD_BILLS_CATEGORY, SEEDED_AT);
+    for (const category of CASH_FLOW_CATEGORIES) {
+      upsertNonBudgetCategory.run(...category, SEEDED_AT);
+    }
     database.connection
       .prepare(`
-        INSERT OR IGNORE INTO categories
-          (id, name, broad_bucket, budget_eligible, alert_eligible, created_at)
-        VALUES (?, ?, ?, 0, 0, ?)
+        UPDATE categories
+        SET name = 'Insurance and savings', broad_bucket = 'savings_investment', alert_eligible = 0
+        WHERE id = 'category-insurance'
       `)
-      .run(...CREDIT_CARD_BILLS_CATEGORY, SEEDED_AT);
+      .run();
 
     const upsertBudgetPeriod = database.connection.prepare(`
       INSERT INTO budget_periods

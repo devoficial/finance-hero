@@ -31,6 +31,9 @@ export interface DashboardRecord {
   actualIncomePaise: number;
   regularExpensePaise: number;
   totalExpensePaise: number;
+  cashOutflowPaise: number;
+  debtPaymentPaise: number;
+  assetBuildingPaise: number;
   regularBudgetPaise: number;
   totalEmiPaise: number;
   debtPrincipalPaise: number;
@@ -57,6 +60,9 @@ export interface ExpenseMonthSummaryRecord {
   month: string;
   regularExpensePaise: number;
   totalExpensePaise: number;
+  cashOutflowPaise: number;
+  debtPaymentPaise: number;
+  assetBuildingPaise: number;
   regularBudgetPaise: number;
   budgetUsedPercentage: number;
   transactionCount: number;
@@ -193,7 +199,10 @@ export class LedgerRepository {
       .prepare(`
         SELECT t.effective_month AS month,
                COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.alert_eligible = 1 THEN p.amount_paise ELSE 0 END), 0) AS regularExpensePaise,
-               COALESCE(SUM(CASE WHEN a.account_class = 'expense' THEN p.amount_paise ELSE 0 END), 0) AS totalExpensePaise,
+               COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket NOT IN ('debt_payment', 'asset_building', 'savings_investment') THEN p.amount_paise ELSE 0 END), 0) AS totalExpensePaise,
+               COALESCE(SUM(CASE WHEN a.account_class = 'expense' THEN p.amount_paise ELSE 0 END), 0) AS cashOutflowPaise,
+               COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket = 'debt_payment' THEN p.amount_paise ELSE 0 END), 0) AS debtPaymentPaise,
+               COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket IN ('asset_building', 'savings_investment') THEN p.amount_paise ELSE 0 END), 0) AS assetBuildingPaise,
                COUNT(DISTINCT t.id) AS transactionCount
         FROM journal_transactions t
         JOIN postings p ON p.transaction_id = t.id
@@ -206,6 +215,9 @@ export class LedgerRepository {
       month: string;
       regularExpensePaise: number;
       totalExpensePaise: number;
+      cashOutflowPaise: number;
+      debtPaymentPaise: number;
+      assetBuildingPaise: number;
       transactionCount: number;
     }>;
     const budgets = this.database.connection
@@ -223,11 +235,17 @@ export class LedgerRepository {
         const month = `${year}-${String(index + 1).padStart(2, "0")}`;
         const regularExpensePaise = spendingByMonth.get(month)?.regularExpensePaise ?? 0;
         const totalExpensePaise = spendingByMonth.get(month)?.totalExpensePaise ?? 0;
+        const cashOutflowPaise = spendingByMonth.get(month)?.cashOutflowPaise ?? 0;
+        const debtPaymentPaise = spendingByMonth.get(month)?.debtPaymentPaise ?? 0;
+        const assetBuildingPaise = spendingByMonth.get(month)?.assetBuildingPaise ?? 0;
         const regularBudgetPaise = budgetByMonth.get(month) ?? 0;
         return {
           month,
           regularExpensePaise,
           totalExpensePaise,
+          cashOutflowPaise,
+          debtPaymentPaise,
+          assetBuildingPaise,
           regularBudgetPaise,
           budgetUsedPercentage:
             regularBudgetPaise > 0 ? Math.round((regularExpensePaise / regularBudgetPaise) * 100) : 0,
@@ -548,7 +566,10 @@ export class LedgerRepository {
         SELECT
           COALESCE(SUM(CASE WHEN a.account_class = 'income' THEN -p.amount_paise ELSE 0 END), 0) AS actualIncomePaise,
           COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.alert_eligible = 1 THEN p.amount_paise ELSE 0 END), 0) AS regularExpensePaise,
-          COALESCE(SUM(CASE WHEN a.account_class = 'expense' THEN p.amount_paise ELSE 0 END), 0) AS totalExpensePaise,
+          COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket NOT IN ('debt_payment', 'asset_building', 'savings_investment') THEN p.amount_paise ELSE 0 END), 0) AS totalExpensePaise,
+          COALESCE(SUM(CASE WHEN a.account_class = 'expense' THEN p.amount_paise ELSE 0 END), 0) AS cashOutflowPaise,
+          COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket = 'debt_payment' THEN p.amount_paise ELSE 0 END), 0) AS debtPaymentPaise,
+          COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket IN ('asset_building', 'savings_investment') THEN p.amount_paise ELSE 0 END), 0) AS assetBuildingPaise,
           COUNT(DISTINCT t.id) AS transactionCount
         FROM journal_transactions t
         JOIN postings p ON p.transaction_id = t.id
@@ -560,6 +581,9 @@ export class LedgerRepository {
       actualIncomePaise: number;
       regularExpensePaise: number;
       totalExpensePaise: number;
+      cashOutflowPaise: number;
+      debtPaymentPaise: number;
+      assetBuildingPaise: number;
       transactionCount: number;
     };
 
@@ -621,10 +645,13 @@ export class LedgerRepository {
       actualIncomePaise: totals.actualIncomePaise,
       regularExpensePaise: totals.regularExpensePaise,
       totalExpensePaise: totals.totalExpensePaise,
+      cashOutflowPaise: totals.cashOutflowPaise,
+      debtPaymentPaise: totals.debtPaymentPaise,
+      assetBuildingPaise: totals.assetBuildingPaise,
       regularBudgetPaise,
       totalEmiPaise: debtTotals.totalEmiPaise,
       debtPrincipalPaise: debtTotals.debtPrincipalPaise,
-      availableAfterPlanPaise: plannedIncomePaise - totals.totalExpensePaise - debtTotals.totalEmiPaise,
+      availableAfterPlanPaise: plannedIncomePaise - totals.cashOutflowPaise,
       budgetUsedPercentage,
       dangerAlert: localDay < 20 && budgetUsedPercentage >= 60,
       transactionCount: totals.transactionCount,
