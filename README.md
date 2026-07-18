@@ -10,8 +10,12 @@ No hosted application or paid service is required.
 
 ## Project status
 
-The repository is currently in the architecture and project-definition phase.
-Implementation should follow the decisions and delivery gates in `docs/`.
+Phase 0 implementation is underway. The repository contains an installable React PWA,
+a local Fastify API, encrypted SQLite foundation, shared contracts, offline-cache
+skeleton, and balanced-ledger domain tests. Feature data on the dashboard is currently
+an explicit prototype until the complete ledger schema and workbook migration land.
+
+See [development setup](docs/development.md) to install, run, and verify the workspace.
 
 ## Documentation
 
@@ -28,6 +32,7 @@ Implementation should follow the decisions and delivery gates in `docs/`.
 | [Security and operations](docs/security-and-operations.md) | Threat model, keys, backups, and local operation |
 | [Migration plan](docs/migration-plan.md) | Google Sheet mapping and reconciliation |
 | [Delivery plan](docs/delivery-plan.md) | Phases, tests, gates, and proposed repository layout |
+| [Development setup](docs/development.md) | Install, run, verification, and current Phase 0 limitations |
 | [Architecture decisions](docs/adr/README.md) | Accepted architectural decision records |
 
 ## Non-negotiable principles

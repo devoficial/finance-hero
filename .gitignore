@@ -1,0 +1,36 @@
+node_modules/
+.turbo/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local financial data and secrets
+.env
+.env.*
+!.env.example
+data/
+backups/
+quarantine/
+attachments/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+*.p12
+
+# Personal imports and diagnostics
+imports/
+exports/
+diagnostics/
+*.xlsx
+*.xls
+*.csv
+*.pdf
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/

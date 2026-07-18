@@ -1,0 +1,21 @@
+{
+  "name": "@finance-hero/sync",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./src/index.ts"
+}

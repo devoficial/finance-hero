@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Finance Hero</title>
+  <rect width="512" height="512" rx="112" fill="#173f35"/>
+  <path d="M112 124h288v58H112zm0 103h204v58H112zm0 103h288v58H112z" fill="#f4b942"/>
+  <circle cx="370" cy="256" r="54" fill="#f1eee5"/>
+  <path d="M370 222v68m-24-45h38c20 0 20 23 0 23h-29c-20 0-20 23 0 23h40" fill="none" stroke="#173f35" stroke-width="15" stroke-linecap="round"/>
+</svg>

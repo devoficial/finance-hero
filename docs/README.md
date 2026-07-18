@@ -16,6 +16,7 @@ relevant document and add or supersede an ADR.
 8. `security-and-operations.md`
 9. `migration-plan.md`
 10. `delivery-plan.md`
+11. `development.md`
 
 ## Decision vocabulary
 
