@@ -33,6 +33,7 @@ describe("ledger repository", () => {
 
     expect(dashboard.plannedIncomePaise).toBe(30089300);
     expect(dashboard.regularExpensePaise).toBe(4674500);
+    expect(dashboard.totalExpensePaise).toBe(4674500);
     expect(dashboard.regularBudgetPaise).toBe(6004800);
     expect(dashboard.budgetUsedPercentage).toBe(78);
     expect(dashboard.totalEmiPaise).toBe(12745100);
@@ -43,14 +44,25 @@ describe("ledger repository", () => {
     const expenseYear = repository.getExpenseYear("2026");
     expect(expenseYear.months).toHaveLength(12);
     expect(expenseYear.months.map((month) => month.regularExpensePaise)).toEqual([
-      6544500, 8575300, 7016200, 6705700, 7648200, 3662600, 4674500, 0, 0, 0, 0, 0,
+      8141600, 10077300, 8553400, 6943800, 7730300, 3662600, 4674500, 0, 0, 0, 0, 0,
+    ]);
+    expect(expenseYear.months.map((month) => month.totalExpensePaise)).toEqual([
+      10516600, 20718400, 11327800, 18877600, 13580800, 10342000, 4674500, 0, 0, 0, 0, 0,
     ]);
     expect(expenseYear.months.slice(0, 7).every((month) => month.transactionCount > 0)).toBe(true);
 
     const priorYear = repository.getExpenseYear("2025");
     expect(priorYear.months.map((month) => month.regularExpensePaise)).toEqual([
-      0, 0, 0, 0, 0, 0, 0, 0, 5072300, 12132400, 7239500, 9893400,
+      0, 0, 0, 0, 0, 0, 0, 0, 5072300, 14041800, 8415100, 12520700,
     ]);
+    expect(priorYear.months.map((month) => month.totalExpensePaise)).toEqual([
+      0, 0, 0, 0, 0, 0, 0, 0, 5072300, 18969700, 8415100, 21676100,
+    ]);
+
+    const june = repository.getDashboard("2026-06", 30);
+    expect(june.regularExpensePaise).toBe(3662600);
+    expect(june.totalExpensePaise).toBe(10342000);
+    expect(june.expenseCategories.find((item) => item.id === "category-credit-card-bills")?.amountPaise).toBe(6679400);
 
     const liabilities = repository.getLiabilities();
     expect(liabilities.totalPrincipalPaise).toBe(724854600);
@@ -83,6 +95,7 @@ describe("ledger repository", () => {
 
     expect(retry.id).toBe(first.id);
     expect(repository.getDashboard("2026-07", 19).regularExpensePaise).toBe(4717000);
+    expect(repository.getDashboard("2026-07", 19).totalExpensePaise).toBe(4717000);
     const balance = database.connection
       .prepare("SELECT SUM(amount_paise) AS total FROM postings WHERE transaction_id = ?")
       .get(first.id) as { total: number };

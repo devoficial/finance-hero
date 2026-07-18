@@ -3,7 +3,12 @@ import type { FinanceHeroDatabase } from "./encrypted-database";
 
 const SOURCE = "Finance tracker 2025:accepted opening snapshot";
 const SEEDED_AT = "2026-07-18T12:00:00.000Z";
-const EXPENSE_HISTORY_SEED = "2026-07-v1";
+const EXPENSE_HISTORY_SEED = "2026-07-v2";
+const CREDIT_CARD_BILLS_CATEGORY = [
+  "category-credit-card-bills",
+  "Credit card bills (unreconciled)",
+  "historical_nonbudget",
+] as const;
 
 const categories = [
   ["category-rent", "Rent", "regular", 20500],
@@ -67,13 +72,14 @@ const historicalExpenseMonths = [
       ["category-home", 13100],
       ["category-household", 6050],
       ["category-utilities", 2003],
-      ["category-groceries", 5588],
+      ["category-groceries", 24682],
       ["category-transport", 5379],
       ["category-personal", 30968],
       ["category-learning", 10773],
       ["category-medical", 4040],
       ["category-insurance", 1818],
       ["category-misc", 29121],
+      ["category-credit-card-bills", 49279],
     ],
   },
   {
@@ -85,7 +91,7 @@ const historicalExpenseMonths = [
       ["category-rent", 13352],
       ["category-home", 14770],
       ["category-household", 9010],
-      ["category-groceries", 12541],
+      ["category-groceries", 24297],
       ["category-transport", 2727],
       ["category-personal", 2109],
       ["category-learning", 9327],
@@ -103,13 +109,14 @@ const historicalExpenseMonths = [
       ["category-home", 13875],
       ["category-household", 3700],
       ["category-utilities", 1060],
-      ["category-groceries", 8745],
+      ["category-groceries", 35018],
       ["category-transport", 4551],
       ["category-personal", 11100],
       ["category-learning", 5077],
       ["category-medical", 20349],
       ["category-insurance", 1818],
       ["category-misc", 9068],
+      ["category-credit-card-bills", 91554],
     ],
   },
   {
@@ -122,13 +129,14 @@ const historicalExpenseMonths = [
       ["category-home", 9000],
       ["category-household", 5200],
       ["category-utilities", 1060],
-      ["category-groceries", 11733],
+      ["category-groceries", 27704],
       ["category-transport", 3531],
       ["category-personal", 3093],
       ["category-learning", 4195],
       ["category-medical", 5265],
       ["category-insurance", 1818],
       ["category-misc", 4865],
+      ["category-credit-card-bills", 23750],
     ],
   },
   {
@@ -141,13 +149,14 @@ const historicalExpenseMonths = [
       ["category-home", 9000],
       ["category-household", 9500],
       ["category-utilities", 1458],
-      ["category-groceries", 7638],
+      ["category-groceries", 22658],
       ["category-transport", 16642],
       ["category-personal", 6609],
       ["category-learning", 3597],
       ["category-medical", 3663],
       ["category-insurance", 6813],
       ["category-misc", 6573],
+      ["category-credit-card-bills", 106411],
     ],
   },
   {
@@ -160,13 +169,14 @@ const historicalExpenseMonths = [
       ["category-home", 9000],
       ["category-household", 9500],
       ["category-utilities", 2680],
-      ["category-groceries", 5691],
+      ["category-groceries", 21063],
       ["category-transport", 6573],
       ["category-personal", 1404],
       ["category-learning", 3309],
       ["category-medical", 4270],
       ["category-insurance", 1813],
       ["category-misc", 12618],
+      ["category-credit-card-bills", 27744],
     ],
   },
   {
@@ -179,13 +189,14 @@ const historicalExpenseMonths = [
       ["category-home", 10000],
       ["category-household", 11150],
       ["category-utilities", 3488],
-      ["category-groceries", 3696],
+      ["category-groceries", 6077],
       ["category-transport", 2809],
       ["category-personal", 738],
       ["category-learning", 2420],
       ["category-medical", 7166],
       ["category-insurance", 1813],
       ["category-misc", 9119],
+      ["category-credit-card-bills", 119338],
     ],
   },
   {
@@ -198,13 +209,14 @@ const historicalExpenseMonths = [
       ["category-home", 18400],
       ["category-household", 19250],
       ["category-utilities", 1419],
-      ["category-groceries", 215],
+      ["category-groceries", 1036],
       ["category-transport", 2326],
       ["category-personal", 361],
       ["category-learning", 3069],
       ["category-medical", 9029],
       ["category-insurance", 1813],
       ["category-misc", 100],
+      ["category-credit-card-bills", 58505],
     ],
   },
   {
@@ -223,6 +235,7 @@ const historicalExpenseMonths = [
       ["category-medical", 5800],
       ["category-insurance", 2052],
       ["category-misc", 4785],
+      ["category-credit-card-bills", 66794],
     ],
   },
   {
@@ -333,18 +346,29 @@ function seedAcceptedLiabilities(database: FinanceHeroDatabase): void {
 }
 
 function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
-  const categoryNames = new Map(categories.map(([id, name]) => [id, name]));
+  const categoryNames = new Map<string, string>(categories.map(([id, name]) => [id, name]));
+  categoryNames.set(CREDIT_CARD_BILLS_CATEGORY[0], CREDIT_CARD_BILLS_CATEGORY[1]);
   const seed = database.connection.transaction(() => {
     const existing = database.connection
       .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_expense_history_seed'")
       .get() as { value: string } | undefined;
-    if (existing) {
+    if (existing?.value === EXPENSE_HISTORY_SEED) {
       return;
     }
 
     // Replace the original July placeholder, which used category limits as actual spending.
     database.connection.prepare("DELETE FROM postings WHERE transaction_id LIKE 'migration-2026-07-category-%'").run();
     database.connection.prepare("DELETE FROM journal_transactions WHERE id LIKE 'migration-2026-07-category-%'").run();
+    // Mapper v2 replaces only source-owned aggregates; manually entered ledger records are untouched.
+    database.connection.prepare("DELETE FROM postings WHERE transaction_id LIKE 'migration-expense-history-%'").run();
+    database.connection.prepare("DELETE FROM journal_transactions WHERE id LIKE 'migration-expense-history-%'").run();
+    database.connection
+      .prepare(`
+        INSERT OR IGNORE INTO categories
+          (id, name, broad_bucket, budget_eligible, alert_eligible, created_at)
+        VALUES (?, ?, ?, 0, 0, ?)
+      `)
+      .run(...CREDIT_CARD_BILLS_CATEGORY, SEEDED_AT);
 
     const upsertBudgetPeriod = database.connection.prepare(`
       INSERT INTO budget_periods
@@ -426,6 +450,7 @@ function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
       .prepare(`
         INSERT INTO app_metadata (key, value, updated_at)
         VALUES ('accepted_expense_history_seed', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
       `)
       .run(EXPENSE_HISTORY_SEED, SEEDED_AT);
   });

@@ -153,6 +153,13 @@ groceries/eating out, transport, shopping/personal care, learning/subscriptions/
 medical, insurance, and miscellaneous. EMI, project, savings/investment, lending, and emergency
 fund rows map to their accounting treatment rather than regular expense by label alone.
 
+The accepted monthly expense total is the source sheet's `Current expenses Total`: regular
+categories (including the separate historical `Outside food` row) plus `Bills (Credit cards)`.
+Until detailed card statements replace the aggregates, credit-card bills are retained in a
+non-budget `Credit card bills (unreconciled)` category. They appear in tracked spending but are
+excluded from regular-budget alerts. EMI, construction, savings/lending, loan repayment, and
+emergency-fund rows are not included in this total.
+
 Unknown or mixed labels remain `Needs Review`; the migration must not force a misleading category.
 
 ## 7. Idempotency and rollback

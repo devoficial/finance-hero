@@ -42,18 +42,18 @@ export function DashboardView({
   const income = dashboard.plannedIncomePaise;
   const available = Math.max(0, dashboard.availableAfterPlanPaise);
   const emiBurden = percentage(dashboard.totalEmiPaise, income);
-  const expenseShare = percentage(dashboard.regularExpensePaise, income);
+  const expenseShare = percentage(dashboard.totalExpensePaise, income);
   const surplusRate = percentage(available, income);
   const receivableCoverage = percentage(liabilities.receivablePaise, liabilities.otherLiabilityPaise);
   const snowballTarget = liabilities.liabilities.find((liability) => liability.snowballRank === 1);
   const largestLiability = liabilities.liabilities
     .filter((liability) => liability.status === "active")
     .toSorted((left, right) => right.currentPrincipalPaise - left.currentPrincipalPaise)[0];
-  const categoryMaximum = Math.max(1, ...dashboard.categories.map((category) => category.amountPaise));
+  const categoryMaximum = Math.max(1, ...dashboard.expenseCategories.map((category) => category.amountPaise));
   const importedMonths = expenseYear.months.filter((month) => month.transactionCount > 0);
   const elapsedMonths = expenseYear.months.filter((month) => month.month <= dataCutoffMonth);
   const importedElapsedMonths = elapsedMonths.filter((month) => month.transactionCount > 0);
-  const trendMaximum = Math.max(1, ...importedMonths.map((month) => month.regularExpensePaise));
+  const trendMaximum = Math.max(1, ...importedMonths.map((month) => month.totalExpensePaise));
   const liabilityTypes = Array.from(
     liabilities.liabilities
       .filter((liability) => liability.status === "active" && liability.currentPrincipalPaise > 0)
@@ -66,12 +66,12 @@ export function DashboardView({
     .toSorted((left, right) => right.amountPaise - left.amountPaise);
   const allocationSegments = [
     { label: "EMIs", amountPaise: dashboard.totalEmiPaise, share: emiBurden, color: "var(--red)" },
-    { label: "Regular expenses", amountPaise: dashboard.regularExpensePaise, share: expenseShare, color: "#c88646" },
+    { label: "Tracked expenses", amountPaise: dashboard.totalExpensePaise, share: expenseShare, color: "#c88646" },
     { label: "Available", amountPaise: available, share: surplusRate, color: "var(--green-bright)" },
   ];
-  const allocationTotal = Math.max(1, income, dashboard.totalEmiPaise + dashboard.regularExpensePaise + available);
+  const allocationTotal = Math.max(1, income, dashboard.totalEmiPaise + dashboard.totalExpensePaise + available);
   const emiAngle = (dashboard.totalEmiPaise / allocationTotal) * 360;
-  const expenseAngle = (dashboard.regularExpensePaise / allocationTotal) * 360;
+  const expenseAngle = (dashboard.totalExpensePaise / allocationTotal) * 360;
   const allocationStyle = {
     background: `conic-gradient(var(--red) 0 ${emiAngle}deg, #c88646 ${emiAngle}deg ${emiAngle + expenseAngle}deg, var(--green-bright) ${emiAngle + expenseAngle}deg 360deg)`,
   };
@@ -166,7 +166,7 @@ export function DashboardView({
           <div className="panel-heading compact">
             <div>
               <p className="eyebrow">12-MONTH EXPENSE VIEW / {expenseYear.year}</p>
-              <h2>Regular spending trend</h2>
+              <h2>Tracked spending trend</h2>
             </div>
             <button className="text-action" onClick={onOpenExpenses} type="button">
               Open expenses
@@ -176,10 +176,10 @@ export function DashboardView({
             {expenseYear.months.map((month) => {
               const hasData = month.transactionCount > 0;
               const future = month.month > dataCutoffMonth;
-              const height = hasData ? Math.max(8, (month.regularExpensePaise / trendMaximum) * 100) : 3;
+              const height = hasData ? Math.max(8, (month.totalExpensePaise / trendMaximum) * 100) : 3;
               return (
                 <div className={month.month === dashboard.month ? "current" : ""} key={month.month}>
-                  <span>{hasData ? money(month.regularExpensePaise) : future ? "Upcoming" : "Not imported"}</span>
+                  <span>{hasData ? money(month.totalExpensePaise) : future ? "Upcoming" : "Not imported"}</span>
                   <i className={hasData ? "imported" : "empty"} style={{ height: `${height}%` }} />
                   <b>{monthLabel(month.month).slice(0, 3)}</b>
                 </div>
@@ -190,7 +190,7 @@ export function DashboardView({
             <span>
               {importedElapsedMonths.length} of {elapsedMonths.length} elapsed months imported
             </span>
-            <strong>Current: {money(dashboard.regularExpensePaise)}</strong>
+            <strong>Current: {money(dashboard.totalExpensePaise)}</strong>
           </footer>
         </article>
       </section>
@@ -202,10 +202,10 @@ export function DashboardView({
               <p className="eyebrow">SPENDING CONTROL / LIVE CATEGORIES</p>
               <h2>What is driving expenses</h2>
             </div>
-            <span className="risk-pill">{dashboard.categories.length} CATEGORIES</span>
+            <span className="risk-pill">{dashboard.expenseCategories.length} CATEGORIES</span>
           </div>
           <div className="dashboard-category-chart">
-            {dashboard.categories.map((category, index) => (
+            {dashboard.expenseCategories.map((category, index) => (
               <div key={category.id}>
                 <span>
                   <b>{String(index + 1).padStart(2, "0")}</b>
@@ -215,7 +215,7 @@ export function DashboardView({
                   <i style={{ width: `${Math.max(2, (category.amountPaise / categoryMaximum) * 100)}%` }} />
                 </div>
                 <strong>{money(category.amountPaise)}</strong>
-                <small>{percentage(category.amountPaise, dashboard.regularExpensePaise)}%</small>
+                <small>{percentage(category.amountPaise, dashboard.totalExpensePaise)}%</small>
               </div>
             ))}
           </div>

@@ -30,6 +30,7 @@ export interface DashboardRecord {
   plannedIncomePaise: number;
   actualIncomePaise: number;
   regularExpensePaise: number;
+  totalExpensePaise: number;
   regularBudgetPaise: number;
   totalEmiPaise: number;
   debtPrincipalPaise: number;
@@ -38,6 +39,7 @@ export interface DashboardRecord {
   dangerAlert: boolean;
   transactionCount: number;
   categories: Array<{ id: string; name: string; amountPaise: number }>;
+  expenseCategories: Array<{ id: string; name: string; amountPaise: number }>;
   snowballTarget: {
     name: string;
     principalPaise: number;
@@ -54,6 +56,7 @@ export interface ReferenceDataRecord {
 export interface ExpenseMonthSummaryRecord {
   month: string;
   regularExpensePaise: number;
+  totalExpensePaise: number;
   regularBudgetPaise: number;
   budgetUsedPercentage: number;
   transactionCount: number;
@@ -190,6 +193,7 @@ export class LedgerRepository {
       .prepare(`
         SELECT t.effective_month AS month,
                COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.alert_eligible = 1 THEN p.amount_paise ELSE 0 END), 0) AS regularExpensePaise,
+               COALESCE(SUM(CASE WHEN a.account_class = 'expense' THEN p.amount_paise ELSE 0 END), 0) AS totalExpensePaise,
                COUNT(DISTINCT t.id) AS transactionCount
         FROM journal_transactions t
         JOIN postings p ON p.transaction_id = t.id
@@ -198,7 +202,12 @@ export class LedgerRepository {
         WHERE t.effective_month LIKE ? AND t.status = 'posted'
         GROUP BY t.effective_month
       `)
-      .all(`${year}-%`) as Array<{ month: string; regularExpensePaise: number; transactionCount: number }>;
+      .all(`${year}-%`) as Array<{
+      month: string;
+      regularExpensePaise: number;
+      totalExpensePaise: number;
+      transactionCount: number;
+    }>;
     const budgets = this.database.connection
       .prepare(`
         SELECT month, regular_budget_paise AS regularBudgetPaise
@@ -213,10 +222,12 @@ export class LedgerRepository {
       months: Array.from({ length: 12 }, (_, index) => {
         const month = `${year}-${String(index + 1).padStart(2, "0")}`;
         const regularExpensePaise = spendingByMonth.get(month)?.regularExpensePaise ?? 0;
+        const totalExpensePaise = spendingByMonth.get(month)?.totalExpensePaise ?? 0;
         const regularBudgetPaise = budgetByMonth.get(month) ?? 0;
         return {
           month,
           regularExpensePaise,
+          totalExpensePaise,
           regularBudgetPaise,
           budgetUsedPercentage:
             regularBudgetPaise > 0 ? Math.round((regularExpensePaise / regularBudgetPaise) * 100) : 0,
@@ -537,6 +548,7 @@ export class LedgerRepository {
         SELECT
           COALESCE(SUM(CASE WHEN a.account_class = 'income' THEN -p.amount_paise ELSE 0 END), 0) AS actualIncomePaise,
           COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.alert_eligible = 1 THEN p.amount_paise ELSE 0 END), 0) AS regularExpensePaise,
+          COALESCE(SUM(CASE WHEN a.account_class = 'expense' THEN p.amount_paise ELSE 0 END), 0) AS totalExpensePaise,
           COUNT(DISTINCT t.id) AS transactionCount
         FROM journal_transactions t
         JOIN postings p ON p.transaction_id = t.id
@@ -544,7 +556,12 @@ export class LedgerRepository {
         LEFT JOIN categories c ON c.id = p.category_id
         WHERE t.effective_month = ? AND t.status = 'posted'
       `)
-      .get(month) as { actualIncomePaise: number; regularExpensePaise: number; transactionCount: number };
+      .get(month) as {
+      actualIncomePaise: number;
+      regularExpensePaise: number;
+      totalExpensePaise: number;
+      transactionCount: number;
+    };
 
     const debtTotals = this.database.connection
       .prepare(`
@@ -568,6 +585,20 @@ export class LedgerRepository {
       `)
       .all(month) as DashboardRecord["categories"];
 
+    const expenseCategories = this.database.connection
+      .prepare(`
+        SELECT c.id, c.name, SUM(p.amount_paise) AS amountPaise
+        FROM journal_transactions t
+        JOIN postings p ON p.transaction_id = t.id
+        JOIN accounts a ON a.id = p.account_id AND a.account_class = 'expense'
+        JOIN categories c ON c.id = p.category_id
+        WHERE t.effective_month = ? AND t.status = 'posted'
+        GROUP BY c.id, c.name
+        HAVING SUM(p.amount_paise) > 0
+        ORDER BY amountPaise DESC
+      `)
+      .all(month) as DashboardRecord["expenseCategories"];
+
     const snowballTarget = this.database.connection
       .prepare(`
         SELECT lender AS name, current_principal_paise AS principalPaise,
@@ -589,14 +620,16 @@ export class LedgerRepository {
       plannedIncomePaise,
       actualIncomePaise: totals.actualIncomePaise,
       regularExpensePaise: totals.regularExpensePaise,
+      totalExpensePaise: totals.totalExpensePaise,
       regularBudgetPaise,
       totalEmiPaise: debtTotals.totalEmiPaise,
       debtPrincipalPaise: debtTotals.debtPrincipalPaise,
-      availableAfterPlanPaise: plannedIncomePaise - totals.regularExpensePaise - debtTotals.totalEmiPaise,
+      availableAfterPlanPaise: plannedIncomePaise - totals.totalExpensePaise - debtTotals.totalEmiPaise,
       budgetUsedPercentage,
       dangerAlert: localDay < 20 && budgetUsedPercentage >= 60,
       transactionCount: totals.transactionCount,
       categories,
+      expenseCategories,
       snowballTarget: snowballTarget ?? null,
     };
   }

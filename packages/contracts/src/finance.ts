@@ -10,6 +10,7 @@ export const dashboardResponseSchema = z.object({
   plannedIncomePaise: paiseSchema,
   actualIncomePaise: paiseSchema,
   regularExpensePaise: paiseSchema,
+  totalExpensePaise: paiseSchema,
   regularBudgetPaise: paiseSchema,
   totalEmiPaise: paiseSchema,
   debtPrincipalPaise: paiseSchema,
@@ -18,6 +19,13 @@ export const dashboardResponseSchema = z.object({
   dangerAlert: z.boolean(),
   transactionCount: z.number().int().nonnegative(),
   categories: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      amountPaise: paiseSchema.nonnegative(),
+    }),
+  ),
+  expenseCategories: z.array(
     z.object({
       id: z.string(),
       name: z.string(),
@@ -59,6 +67,7 @@ export const referenceDataResponseSchema = z.object({
 export const expenseMonthSummarySchema = z.object({
   month: monthSchema,
   regularExpensePaise: paiseSchema.nonnegative(),
+  totalExpensePaise: paiseSchema.nonnegative(),
   regularBudgetPaise: paiseSchema.nonnegative(),
   budgetUsedPercentage: z.number().int().nonnegative(),
   transactionCount: z.number().int().nonnegative(),

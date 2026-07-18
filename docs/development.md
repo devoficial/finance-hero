@@ -78,8 +78,8 @@ setup and will not use a checked-in environment variable.
 
 ## Current limitations
 
-- The accepted July 2026 opening snapshot is seeded once into the encrypted ledger. Full
-  transaction-by-transaction Google Sheet migration and reconciliation are still pending.
+- Monthly `Current expenses Total` aggregates from September 2025 through July 2026 are reconciled
+  in the encrypted ledger. Full transaction-by-transaction Google Sheet migration is still pending.
 - Dashboard totals, category spending, institutional debts, personal payables, receivables, and the ledger are live
   database queries. Personal balances can be created with `POST /api/v1/personal-balances` and edited or settled
   with `PATCH /api/v1/personal-balances/:id`.
