@@ -1,4 +1,5 @@
 import type {
+  CreateLiabilityRequest,
   CreatePersonalBalanceRequest,
   LiabilitiesResponse,
   Liability,
@@ -8,7 +9,13 @@ import type {
 } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { createPersonalBalance, undoLiabilityClear, updateLiability, updatePersonalBalance } from "../lib/api";
+import {
+  createLiability,
+  createPersonalBalance,
+  undoLiabilityClear,
+  updateLiability,
+  updatePersonalBalance,
+} from "../lib/api";
 
 interface LiabilitiesViewProps {
   data?: LiabilitiesResponse;
@@ -59,6 +66,7 @@ function rupeesToPaise(value: string): number | null {
 export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) {
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [creatingLiability, setCreatingLiability] = useState(false);
   const [form, setForm] = useState<LiabilityForm | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [personalForm, setPersonalForm] = useState<PersonalBalanceForm | null>(null);
@@ -67,6 +75,17 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
     mutationFn: ({ id, input }: { id: string; input: UpdateLiabilityRequest }) => updateLiability(id, input),
     onSuccess: async () => {
       setEditingId(null);
+      setForm(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["liabilities"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+    },
+  });
+  const createLiabilityMutation = useMutation({
+    mutationFn: (input: CreateLiabilityRequest) => createLiability(input),
+    onSuccess: async () => {
+      setCreatingLiability(false);
       setForm(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["liabilities"] }),
@@ -115,20 +134,46 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
       ]);
     },
   });
+  const personalStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "open" | "settled" }) => updatePersonalBalance(id, { status }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["liabilities"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+    },
+  });
 
   if (loading || !data) {
     return <section className="panel loading-panel">Reading the liability register...</section>;
   }
 
   function beginEdit(liability: Liability) {
+    setCreatingLiability(false);
     setEditingId(liability.id);
     setForm(formFromLiability(liability));
     setValidationError(null);
   }
 
   function cancelEdit() {
+    setCreatingLiability(false);
     setEditingId(null);
     setForm(null);
+    setValidationError(null);
+  }
+
+  function beginAddLiability() {
+    setCreatingLiability(true);
+    setEditingId(null);
+    setForm({
+      name: "",
+      productType: "personal_loan",
+      originalAmount: "",
+      currentPrincipal: "",
+      emi: "",
+      annualRate: "",
+      status: "active",
+    });
     setValidationError(null);
   }
 
@@ -142,7 +187,7 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
 
   function submitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editingId || !form) {
+    if ((!editingId && !creatingLiability) || !form) {
       return;
     }
 
@@ -160,18 +205,20 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
       return;
     }
 
-    mutation.mutate({
-      id: editingId,
-      input: {
-        name: form.name,
-        productType: form.productType,
-        originalAmountPaise,
-        currentPrincipalPaise,
-        emiPaise,
-        annualRateBps,
-        status: form.status,
-      },
-    });
+    const input: CreateLiabilityRequest = {
+      name: form.name,
+      productType: form.productType,
+      originalAmountPaise,
+      currentPrincipalPaise,
+      emiPaise,
+      annualRateBps,
+      status: form.status,
+    };
+    if (creatingLiability) {
+      createLiabilityMutation.mutate(input);
+    } else if (editingId) {
+      mutation.mutate({ id: editingId, input });
+    }
   }
 
   function beginAddPersonal(direction: "payable" | "receivable") {
@@ -235,13 +282,34 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
             <div className={balance.status} key={balance.id}>
               <span>
                 <strong>{balance.name}</strong>
-                <small>{balance.note || (balance.status === "open" ? "Open balance" : "Settled")}</small>
+                <small>{balance.note || (balance.status === "open" ? "Open balance" : "Cleared")}</small>
               </span>
               <b>{money(balance.amountPaise)}</b>
-              <span className={`status-pill ${balance.status}`}>{balance.status}</span>
-              <button onClick={() => beginEditPersonal(balance)} type="button">
-                Edit
-              </button>
+              <span className={`status-pill ${balance.status}`}>
+                {balance.status === "settled" ? "cleared" : "open"}
+              </span>
+              <div className="personal-balance-actions">
+                <button
+                  className="personal-clear-button"
+                  disabled={personalStatusMutation.isPending}
+                  onClick={() =>
+                    personalStatusMutation.mutate({
+                      id: balance.id,
+                      status: balance.status === "open" ? "settled" : "open",
+                    })
+                  }
+                  type="button"
+                >
+                  {personalStatusMutation.isPending && personalStatusMutation.variables?.id === balance.id
+                    ? "Saving..."
+                    : balance.status === "open"
+                      ? "Mark cleared"
+                      : "Reopen"}
+                </button>
+                <button onClick={() => beginEditPersonal(balance)} type="button">
+                  Edit
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -372,12 +440,14 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
         )}
       </section>
 
-      {editingId && form && (
+      {(editingId || creatingLiability) && form && (
         <article className="panel liability-editor-panel">
           <div className="panel-heading compact">
             <div>
-              <p className="eyebrow">UPDATE ENCRYPTED LIABILITY RECORD</p>
-              <h2>Edit {form.name}</h2>
+              <p className="eyebrow">
+                {creatingLiability ? "ADD ENCRYPTED LIABILITY RECORD" : "UPDATE ENCRYPTED LIABILITY RECORD"}
+              </p>
+              <h2>{creatingLiability ? "Add loan or credit card" : `Edit ${form.name}`}</h2>
             </div>
             <button className="editor-close-button" onClick={cancelEdit} type="button">
               Cancel
@@ -464,12 +534,23 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
                 <option value="cleared">Cleared</option>
               </select>
             </label>
-            <button className="save-liability-button" disabled={mutation.isPending} type="submit">
-              {mutation.isPending ? "Saving..." : "Save changes"}
+            <button
+              className="save-liability-button"
+              disabled={mutation.isPending || createLiabilityMutation.isPending}
+              type="submit"
+            >
+              {mutation.isPending || createLiabilityMutation.isPending
+                ? "Saving..."
+                : creatingLiability
+                  ? "Add liability"
+                  : "Save changes"}
             </button>
-            {(validationError || mutation.error) && (
+            {(validationError || mutation.error || createLiabilityMutation.error) && (
               <p className="form-error liability-editor-error">
-                {validationError ?? mutation.error?.message ?? "Update failed."}
+                {validationError ??
+                  mutation.error?.message ??
+                  createLiabilityMutation.error?.message ??
+                  "Update failed."}
               </p>
             )}
           </form>
@@ -482,7 +563,12 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
             <p className="eyebrow">LIABILITY SHEET / SNOWBALL ORDER</p>
             <h2>Loans and credit cards</h2>
           </div>
-          <span className="live-pill">{data.liabilities.length} ACCOUNTS</span>
+          <div className="liabilities-heading-actions">
+            <span className="live-pill">{data.liabilities.length} ACCOUNTS</span>
+            <button className="add-liability-button" onClick={beginAddLiability} type="button">
+              + Add loan or card
+            </button>
+          </div>
         </div>
 
         <div className="table-scroll">

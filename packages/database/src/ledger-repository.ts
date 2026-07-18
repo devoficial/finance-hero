@@ -102,6 +102,16 @@ export interface UpdateLiabilityInput {
   status?: "active" | "cleared";
 }
 
+export interface CreateLiabilityInput {
+  name: string;
+  productType: string;
+  originalAmountPaise: number;
+  currentPrincipalPaise: number;
+  emiPaise: number;
+  annualRateBps: number | null;
+  status: "active" | "cleared";
+}
+
 export interface PersonalBalanceRecord {
   id: string;
   name: string;
@@ -336,6 +346,56 @@ export class LedgerRepository {
     });
     write.immediate();
     return next;
+  }
+
+  createLiability(input: CreateLiabilityInput): LiabilityRecord {
+    const id = `debt-${randomUUID()}`;
+    const accountId = `account-${id}`;
+    const now = new Date().toISOString();
+    const principal = input.status === "cleared" ? 0 : input.currentPrincipalPaise;
+    const emi = input.status === "cleared" ? 0 : input.emiPaise;
+
+    const write = this.database.connection.transaction(() => {
+      this.database.connection
+        .prepare(`
+          INSERT INTO accounts
+            (id, name, account_class, account_type, institution, is_active, created_at)
+          VALUES (?, ?, 'liability', ?, ?, 1, ?)
+        `)
+        .run(accountId, input.name.trim(), input.productType.trim(), input.name.trim(), now);
+      this.database.connection
+        .prepare(`
+          INSERT INTO debts
+            (id, account_id, lender, product_type, original_amount_paise, current_principal_paise,
+             emi_paise, annual_rate_bps, status, source_ref, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+        `)
+        .run(
+          id,
+          accountId,
+          input.name.trim(),
+          input.productType.trim(),
+          input.originalAmountPaise,
+          principal,
+          emi,
+          input.annualRateBps,
+          input.status,
+          now,
+        );
+      this.database.connection
+        .prepare(`
+          INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+          VALUES (?, 'liability.created', 'debt', ?, ?, ?)
+        `)
+        .run(randomUUID(), id, JSON.stringify({ ...input, currentPrincipalPaise: principal, emiPaise: emi }), now);
+    });
+    write.immediate();
+
+    const created = this.getLiabilities().liabilities.find((liability) => liability.id === id);
+    if (!created) {
+      throw new Error("Created liability could not be read.");
+    }
+    return created;
   }
 
   updateLiability(id: string, input: UpdateLiabilityInput): LiabilityRecord {

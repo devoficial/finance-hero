@@ -5,6 +5,7 @@ export {
   MacOSKeychainDatabaseKeyProvider,
 } from "./key-provider";
 export {
+  type CreateLiabilityInput,
   type DashboardRecord,
   LedgerRepository,
   type LedgerTransactionRecord,

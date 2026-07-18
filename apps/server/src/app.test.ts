@@ -77,6 +77,24 @@ describe("local API", () => {
     expect(restoredLiability.currentPrincipalPaise).toBe(30000000);
     expect(restoredLiability.emiPaise).toBe(1200000);
 
+    const liabilityCreate = await app.inject({
+      method: "POST",
+      url: "/api/v1/liabilities",
+      payload: {
+        name: "Test education loan",
+        productType: "personal_loan",
+        originalAmountPaise: 10000000,
+        currentPrincipalPaise: 7500000,
+        emiPaise: 250000,
+        annualRateBps: 1025,
+        status: "active",
+      },
+    });
+    expect(liabilityCreate.statusCode).toBe(201);
+    const createdLiability = liabilitySchema.parse(liabilityCreate.json());
+    expect(createdLiability.name).toBe("Test education loan");
+    expect(createdLiability.currentPrincipalPaise).toBe(7500000);
+
     const personalBalance = await app.inject({
       method: "POST",
       url: "/api/v1/personal-balances",

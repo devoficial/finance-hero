@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
+  createLiabilityRequestSchema,
   createManualTransactionRequestSchema,
   createPersonalBalanceRequestSchema,
   dashboardResponseSchema,
@@ -106,6 +107,20 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
 
     return reply.header("cache-control", "no-store").send(liabilitiesResponseSchema.parse(ledger.getLiabilities()));
+  });
+
+  app.post("/api/v1/liabilities", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const input = createLiabilityRequestSchema.parse(request.body);
+      return reply.code(201).send(liabilitySchema.parse(ledger.createLiability(input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Liability could not be created.";
+      return reply.code(400).send({ error: { code: "INVALID_LIABILITY", message } });
+    }
   });
 
   app.patch("/api/v1/liabilities/:id", async (request, reply) => {

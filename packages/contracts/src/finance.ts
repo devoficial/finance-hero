@@ -113,6 +113,16 @@ export const createPersonalBalanceRequestSchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 
+export const createLiabilityRequestSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  productType: z.string().trim().min(1).max(80),
+  originalAmountPaise: paiseSchema.nonnegative(),
+  currentPrincipalPaise: paiseSchema.nonnegative(),
+  emiPaise: paiseSchema.nonnegative(),
+  annualRateBps: z.number().int().nonnegative().nullable(),
+  status: z.enum(["active", "cleared"]),
+});
+
 export const updatePersonalBalanceRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(160).optional(),
@@ -154,6 +164,7 @@ export type ExpenseYearResponse = z.infer<typeof expenseYearResponseSchema>;
 export type Liability = z.infer<typeof liabilitySchema>;
 export type LiabilitiesResponse = z.infer<typeof liabilitiesResponseSchema>;
 export type PersonalBalance = z.infer<typeof personalBalanceSchema>;
+export type CreateLiabilityRequest = z.infer<typeof createLiabilityRequestSchema>;
 export type CreatePersonalBalanceRequest = z.infer<typeof createPersonalBalanceRequestSchema>;
 export type UpdatePersonalBalanceRequest = z.infer<typeof updatePersonalBalanceRequestSchema>;
 export type UpdateLiabilityRequest = z.infer<typeof updateLiabilityRequestSchema>;

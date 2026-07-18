@@ -1385,6 +1385,24 @@ h2 {
 .liabilities-panel {
   min-width: 0;
 }
+.liabilities-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.add-liability-button {
+  border: 1px solid var(--green);
+  background: var(--yellow);
+  color: var(--green);
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+.add-liability-button:hover {
+  background: var(--green);
+  color: white;
+}
 .liabilities-table {
   width: 100%;
   min-width: 980px;
@@ -1647,6 +1665,22 @@ h2 {
   font:
     10px "DM Mono",
     monospace;
+}
+.personal-balance-actions {
+  display: flex;
+  gap: 6px;
+}
+.personal-balance-list .personal-clear-button {
+  border-color: var(--red);
+  color: #a13524;
+}
+.personal-balance-list .personal-clear-button:hover:not(:disabled) {
+  background: var(--red);
+  color: white;
+}
+.personal-balance-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 .personal-balance-editor-panel {
   margin-bottom: 16px;

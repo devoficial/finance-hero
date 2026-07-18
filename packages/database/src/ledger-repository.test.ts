@@ -110,6 +110,32 @@ describe("ledger repository", () => {
     database.close();
   });
 
+  it("creates an audited liability and includes it in portfolio totals", () => {
+    const { database, repository } = createRepository();
+    const created = repository.createLiability({
+      name: "Test education loan",
+      productType: "personal_loan",
+      originalAmountPaise: 10000000,
+      currentPrincipalPaise: 7500000,
+      emiPaise: 250000,
+      annualRateBps: 1025,
+      status: "active",
+    });
+
+    expect(created.name).toBe("Test education loan");
+    expect(created.currentPrincipalPaise).toBe(7500000);
+    expect(created.emiPaise).toBe(250000);
+    const portfolio = repository.getLiabilities();
+    expect(portfolio.liabilities).toHaveLength(12);
+    expect(portfolio.totalPrincipalPaise).toBe(732354600);
+    expect(portfolio.totalEmiPaise).toBe(12995100);
+    const audit = database.connection
+      .prepare("SELECT action FROM audit_events WHERE entity_id = ? ORDER BY created_at DESC LIMIT 1")
+      .get(created.id) as { action: string };
+    expect(audit.action).toBe("liability.created");
+    database.close();
+  });
+
   it("clears a liability and removes its principal and EMI from active totals", () => {
     const { database, repository } = createRepository();
     const cleared = repository.updateLiability("debt-dmi", { status: "cleared" });
