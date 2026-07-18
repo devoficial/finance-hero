@@ -1113,8 +1113,7 @@ h2 {
     8px "DM Mono",
     monospace;
 }
-.expense-trend-chart > div:hover > span,
-.expense-trend-chart > div.current > span {
+.expense-trend-chart > div:hover > span {
   display: block;
 }
 .expense-trend-chart i {

@@ -40,7 +40,7 @@ describe("local API", () => {
 
     const dashboard = await app.inject({ method: "GET", url: "/api/v1/dashboard?month=2026-07" });
     expect(dashboard.statusCode).toBe(200);
-    expect(dashboardResponseSchema.parse(dashboard.json()).regularExpensePaise).toBe(6004800);
+    expect(dashboardResponseSchema.parse(dashboard.json()).regularExpensePaise).toBe(4674500);
 
     const expenseYear = await app.inject({ method: "GET", url: "/api/v1/expenses/year?year=2026" });
     expect(expenseYear.statusCode).toBe(200);

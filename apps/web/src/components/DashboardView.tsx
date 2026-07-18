@@ -1,6 +1,7 @@
 import type { DashboardResponse, ExpenseYearResponse, LiabilitiesResponse } from "@finance-hero/contracts";
 
 interface DashboardViewProps {
+  dataCutoffMonth: string;
   dashboard?: DashboardResponse;
   expenseYear?: ExpenseYearResponse;
   liabilities?: LiabilitiesResponse;
@@ -24,6 +25,7 @@ function productName(productType: string) {
 }
 
 export function DashboardView({
+  dataCutoffMonth,
   dashboard,
   expenseYear,
   liabilities,
@@ -49,6 +51,8 @@ export function DashboardView({
     .toSorted((left, right) => right.currentPrincipalPaise - left.currentPrincipalPaise)[0];
   const categoryMaximum = Math.max(1, ...dashboard.categories.map((category) => category.amountPaise));
   const importedMonths = expenseYear.months.filter((month) => month.transactionCount > 0);
+  const elapsedMonths = expenseYear.months.filter((month) => month.month <= dataCutoffMonth);
+  const importedElapsedMonths = elapsedMonths.filter((month) => month.transactionCount > 0);
   const trendMaximum = Math.max(1, ...importedMonths.map((month) => month.regularExpensePaise));
   const liabilityTypes = Array.from(
     liabilities.liabilities
@@ -171,10 +175,11 @@ export function DashboardView({
           <div className="expense-trend-chart" role="img" aria-label={`${expenseYear.year} monthly expense chart`}>
             {expenseYear.months.map((month) => {
               const hasData = month.transactionCount > 0;
+              const future = month.month > dataCutoffMonth;
               const height = hasData ? Math.max(8, (month.regularExpensePaise / trendMaximum) * 100) : 3;
               return (
                 <div className={month.month === dashboard.month ? "current" : ""} key={month.month}>
-                  <span>{hasData ? money(month.regularExpensePaise) : "Not imported"}</span>
+                  <span>{hasData ? money(month.regularExpensePaise) : future ? "Upcoming" : "Not imported"}</span>
                   <i className={hasData ? "imported" : "empty"} style={{ height: `${height}%` }} />
                   <b>{monthLabel(month.month).slice(0, 3)}</b>
                 </div>
@@ -182,7 +187,9 @@ export function DashboardView({
             })}
           </div>
           <footer className="trend-footer">
-            <span>{importedMonths.length} of 12 months imported</span>
+            <span>
+              {importedElapsedMonths.length} of {elapsedMonths.length} elapsed months imported
+            </span>
             <strong>Current: {money(dashboard.regularExpensePaise)}</strong>
           </footer>
         </article>

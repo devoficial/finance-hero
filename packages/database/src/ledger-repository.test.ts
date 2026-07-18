@@ -32,16 +32,25 @@ describe("ledger repository", () => {
     const dashboard = repository.getDashboard("2026-07", 18);
 
     expect(dashboard.plannedIncomePaise).toBe(30089300);
-    expect(dashboard.regularExpensePaise).toBe(6004800);
+    expect(dashboard.regularExpensePaise).toBe(4674500);
+    expect(dashboard.regularBudgetPaise).toBe(6004800);
+    expect(dashboard.budgetUsedPercentage).toBe(78);
     expect(dashboard.totalEmiPaise).toBe(12745100);
     expect(dashboard.debtPrincipalPaise).toBe(724854600);
-    expect(dashboard.availableAfterPlanPaise).toBe(11339400);
+    expect(dashboard.availableAfterPlanPaise).toBe(12669700);
     expect(dashboard.transactionCount).toBe(11);
 
     const expenseYear = repository.getExpenseYear("2026");
     expect(expenseYear.months).toHaveLength(12);
-    expect(expenseYear.months[6]?.regularExpensePaise).toBe(6004800);
-    expect(expenseYear.months[0]?.regularExpensePaise).toBe(0);
+    expect(expenseYear.months.map((month) => month.regularExpensePaise)).toEqual([
+      6544500, 8575300, 7016200, 6705700, 7648200, 3662600, 4674500, 0, 0, 0, 0, 0,
+    ]);
+    expect(expenseYear.months.slice(0, 7).every((month) => month.transactionCount > 0)).toBe(true);
+
+    const priorYear = repository.getExpenseYear("2025");
+    expect(priorYear.months.map((month) => month.regularExpensePaise)).toEqual([
+      0, 0, 0, 0, 0, 0, 0, 0, 5072300, 12132400, 7239500, 9893400,
+    ]);
 
     const liabilities = repository.getLiabilities();
     expect(liabilities.totalPrincipalPaise).toBe(724854600);
@@ -73,7 +82,7 @@ describe("ledger repository", () => {
     const retry = repository.createManualTransaction(input);
 
     expect(retry.id).toBe(first.id);
-    expect(repository.getDashboard("2026-07", 19).regularExpensePaise).toBe(6047300);
+    expect(repository.getDashboard("2026-07", 19).regularExpensePaise).toBe(4717000);
     const balance = database.connection
       .prepare("SELECT SUM(amount_paise) AS total FROM postings WHERE transaction_id = ?")
       .get(first.id) as { total: number };

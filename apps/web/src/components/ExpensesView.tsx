@@ -1,6 +1,7 @@
 import type { DashboardResponse, ExpenseYearResponse } from "@finance-hero/contracts";
 
 interface ExpensesViewProps {
+  dataCutoffMonth: string;
   year: string;
   selectedMonth: string;
   yearData?: ExpenseYearResponse;
@@ -42,6 +43,7 @@ function CategoryPie({ dashboard, money }: { dashboard: DashboardResponse; money
 }
 
 export function ExpensesView({
+  dataCutoffMonth,
   year,
   selectedMonth,
   yearData,
@@ -100,9 +102,10 @@ export function ExpensesView({
         <div className="expense-month-grid">
           {yearData.months.map((month) => {
             const imported = month.transactionCount > 0 || month.regularBudgetPaise > 0;
+            const future = month.month > dataCutoffMonth;
             return (
               <button
-                className={`month-card ${month.month === selectedMonth ? "selected" : ""} ${imported ? "has-data" : "empty"}`}
+                className={`month-card ${month.month === selectedMonth ? "selected" : ""} ${imported ? "has-data" : future ? "future" : "empty"}`}
                 key={month.month}
                 onClick={() => {
                   onSelectMonth(month.month);
@@ -112,9 +115,11 @@ export function ExpensesView({
               >
                 <div>
                   <span>{monthName(month.month, "short").toUpperCase()}</span>
-                  <small>{imported ? `${month.transactionCount} entries` : "Awaiting import"}</small>
+                  <small>
+                    {imported ? `${month.transactionCount} entries` : future ? "Upcoming" : "Awaiting import"}
+                  </small>
                 </div>
-                <strong>{imported ? money(month.regularExpensePaise) : "Not imported"}</strong>
+                <strong>{imported ? money(month.regularExpensePaise) : future ? "Upcoming" : "Not imported"}</strong>
                 <div className="progress-track">
                   <i style={{ width: `${Math.min(100, month.budgetUsedPercentage)}%` }} />
                 </div>
@@ -122,7 +127,9 @@ export function ExpensesView({
                   <span>
                     {imported && month.regularBudgetPaise > 0
                       ? `Budget ${money(month.regularBudgetPaise)}`
-                      : "No source data"}
+                      : future
+                        ? "No entries expected yet"
+                        : "No source data"}
                   </span>
                   <b>{imported && month.budgetUsedPercentage > 0 ? `${month.budgetUsedPercentage}%` : "OPEN →"}</b>
                 </footer>

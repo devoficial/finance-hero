@@ -3,6 +3,7 @@ import type { FinanceHeroDatabase } from "./encrypted-database";
 
 const SOURCE = "Finance tracker 2025:accepted opening snapshot";
 const SEEDED_AT = "2026-07-18T12:00:00.000Z";
+const EXPENSE_HISTORY_SEED = "2026-07-v1";
 
 const categories = [
   ["category-rent", "Rent", "regular", 20500],
@@ -39,6 +40,210 @@ const personalBalances = [
   ["personal-payable-vishant", "Vishant", "payable", 25000],
   ["personal-receivable-kishan", "Kishan", "receivable", 35000],
   ["personal-receivable-rabi", "Rabi", "receivable", 52000],
+] as const;
+
+const historicalExpenseMonths = [
+  {
+    month: "2025-09",
+    occurredOn: "2025-09-30",
+    sourceSheet: "Daily Expenses Sept",
+    regularBudgetRupees: 0,
+    expenses: [
+      ["category-home", 5392],
+      ["category-groceries", 20199],
+      ["category-transport", 6864],
+      ["category-personal", 4416],
+      ["category-learning", 6537],
+      ["category-misc", 7315],
+    ],
+  },
+  {
+    month: "2025-10",
+    occurredOn: "2025-10-31",
+    sourceSheet: "Daily Expenses Oct",
+    regularBudgetRupees: 60048,
+    expenses: [
+      ["category-rent", 12484],
+      ["category-home", 13100],
+      ["category-household", 6050],
+      ["category-utilities", 2003],
+      ["category-groceries", 5588],
+      ["category-transport", 5379],
+      ["category-personal", 30968],
+      ["category-learning", 10773],
+      ["category-medical", 4040],
+      ["category-insurance", 1818],
+      ["category-misc", 29121],
+    ],
+  },
+  {
+    month: "2025-11",
+    occurredOn: "2025-11-30",
+    sourceSheet: "Daily Expenses Nov",
+    regularBudgetRupees: 60048,
+    expenses: [
+      ["category-rent", 13352],
+      ["category-home", 14770],
+      ["category-household", 9010],
+      ["category-groceries", 12541],
+      ["category-transport", 2727],
+      ["category-personal", 2109],
+      ["category-learning", 9327],
+      ["category-insurance", 1818],
+      ["category-misc", 6741],
+    ],
+  },
+  {
+    month: "2025-12",
+    occurredOn: "2025-12-31",
+    sourceSheet: "Daily Expenses Dec",
+    regularBudgetRupees: 60048,
+    expenses: [
+      ["category-rent", 19591],
+      ["category-home", 13875],
+      ["category-household", 3700],
+      ["category-utilities", 1060],
+      ["category-groceries", 8745],
+      ["category-transport", 4551],
+      ["category-personal", 11100],
+      ["category-learning", 5077],
+      ["category-medical", 20349],
+      ["category-insurance", 1818],
+      ["category-misc", 9068],
+    ],
+  },
+  {
+    month: "2026-01",
+    occurredOn: "2026-01-31",
+    sourceSheet: "Daily Expenses Jan 26",
+    regularBudgetRupees: 60048,
+    expenses: [
+      ["category-rent", 15685],
+      ["category-home", 9000],
+      ["category-household", 5200],
+      ["category-utilities", 1060],
+      ["category-groceries", 11733],
+      ["category-transport", 3531],
+      ["category-personal", 3093],
+      ["category-learning", 4195],
+      ["category-medical", 5265],
+      ["category-insurance", 1818],
+      ["category-misc", 4865],
+    ],
+  },
+  {
+    month: "2026-02",
+    occurredOn: "2026-02-28",
+    sourceSheet: "Daily Expenses Feb 26",
+    regularBudgetRupees: 60048,
+    expenses: [
+      ["category-rent", 14260],
+      ["category-home", 9000],
+      ["category-household", 9500],
+      ["category-utilities", 1458],
+      ["category-groceries", 7638],
+      ["category-transport", 16642],
+      ["category-personal", 6609],
+      ["category-learning", 3597],
+      ["category-medical", 3663],
+      ["category-insurance", 6813],
+      ["category-misc", 6573],
+    ],
+  },
+  {
+    month: "2026-03",
+    occurredOn: "2026-03-31",
+    sourceSheet: "Daily Expenses Mar 26",
+    regularBudgetRupees: 60048,
+    expenses: [
+      ["category-rent", 13304],
+      ["category-home", 9000],
+      ["category-household", 9500],
+      ["category-utilities", 2680],
+      ["category-groceries", 5691],
+      ["category-transport", 6573],
+      ["category-personal", 1404],
+      ["category-learning", 3309],
+      ["category-medical", 4270],
+      ["category-insurance", 1813],
+      ["category-misc", 12618],
+    ],
+  },
+  {
+    month: "2026-04",
+    occurredOn: "2026-04-30",
+    sourceSheet: "Daily Expenses APR 26",
+    regularBudgetRupees: 60048,
+    expenses: [
+      ["category-rent", 14658],
+      ["category-home", 10000],
+      ["category-household", 11150],
+      ["category-utilities", 3488],
+      ["category-groceries", 3696],
+      ["category-transport", 2809],
+      ["category-personal", 738],
+      ["category-learning", 2420],
+      ["category-medical", 7166],
+      ["category-insurance", 1813],
+      ["category-misc", 9119],
+    ],
+  },
+  {
+    month: "2026-05",
+    occurredOn: "2026-05-31",
+    sourceSheet: "Daily Expenses MAY 26",
+    regularBudgetRupees: 60048,
+    expenses: [
+      ["category-rent", 20500],
+      ["category-home", 18400],
+      ["category-household", 19250],
+      ["category-utilities", 1419],
+      ["category-groceries", 215],
+      ["category-transport", 2326],
+      ["category-personal", 361],
+      ["category-learning", 3069],
+      ["category-medical", 9029],
+      ["category-insurance", 1813],
+      ["category-misc", 100],
+    ],
+  },
+  {
+    month: "2026-06",
+    occurredOn: "2026-06-30",
+    sourceSheet: "Daily Expenses JUN 26",
+    regularBudgetRupees: 60048,
+    expenses: [
+      ["category-home", 9500],
+      ["category-household", 1000],
+      ["category-utilities", 1519],
+      ["category-groceries", 5714],
+      ["category-transport", 1163],
+      ["category-personal", 1814],
+      ["category-learning", 3279],
+      ["category-medical", 5800],
+      ["category-insurance", 2052],
+      ["category-misc", 4785],
+    ],
+  },
+  {
+    month: "2026-07",
+    occurredOn: "2026-07-18",
+    sourceSheet: "Daily Expenses JULY 26",
+    regularBudgetRupees: 60048,
+    expenses: [
+      ["category-rent", 16433],
+      ["category-home", 9000],
+      ["category-household", 8500],
+      ["category-utilities", 579],
+      ["category-groceries", 568],
+      ["category-transport", 1567],
+      ["category-personal", 2028],
+      ["category-learning", 1388],
+      ["category-medical", 5227],
+      ["category-insurance", 1073],
+      ["category-misc", 382],
+    ],
+  },
 ] as const;
 
 function seedAcceptedPersonalBalances(database: FinanceHeroDatabase): void {
@@ -123,6 +328,106 @@ function seedAcceptedLiabilities(database: FinanceHeroDatabase): void {
         VALUES ('accepted_liability_seed', '2026-07-v2', ?)
       `)
       .run(SEEDED_AT);
+  });
+  seed.immediate();
+}
+
+function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
+  const categoryNames = new Map(categories.map(([id, name]) => [id, name]));
+  const seed = database.connection.transaction(() => {
+    const existing = database.connection
+      .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_expense_history_seed'")
+      .get() as { value: string } | undefined;
+    if (existing) {
+      return;
+    }
+
+    // Replace the original July placeholder, which used category limits as actual spending.
+    database.connection.prepare("DELETE FROM postings WHERE transaction_id LIKE 'migration-2026-07-category-%'").run();
+    database.connection.prepare("DELETE FROM journal_transactions WHERE id LIKE 'migration-2026-07-category-%'").run();
+
+    const upsertBudgetPeriod = database.connection.prepare(`
+      INSERT INTO budget_periods
+        (month, planned_income_paise, regular_budget_paise, state, source_ref, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(month) DO UPDATE SET
+        regular_budget_paise = excluded.regular_budget_paise,
+        state = excluded.state,
+        source_ref = excluded.source_ref,
+        updated_at = excluded.updated_at
+    `);
+    const insertTransaction = database.connection.prepare(`
+      INSERT OR IGNORE INTO journal_transactions
+        (id, occurred_on, effective_month, payee, memo, status, origin, source_ref, created_at)
+      VALUES (?, ?, ?, ?, ?, 'posted', 'historical_aggregate', ?, ?)
+    `);
+    const insertPostings = database.connection.prepare(`
+      INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
+      VALUES (?, ?, 'account-regular-expense', ?, ?, ?),
+             (?, ?, 'account-migration-equity', NULL, ?, ?)
+    `);
+
+    for (const monthData of historicalExpenseMonths) {
+      const sourceRef = `Finance tracker 2025:${monthData.sourceSheet}`;
+      upsertBudgetPeriod.run(
+        monthData.month,
+        monthData.month === "2026-07" ? 30089300 : 0,
+        monthData.regularBudgetRupees * 100,
+        monthData.month === "2026-07" ? "open" : "closed",
+        sourceRef,
+        SEEDED_AT,
+      );
+
+      for (const [categoryId, rupees] of monthData.expenses) {
+        const transactionId = `migration-expense-history-${monthData.month}-${categoryId}`;
+        const categoryName = categoryNames.get(categoryId) ?? categoryId;
+        insertTransaction.run(
+          transactionId,
+          monthData.occurredOn,
+          monthData.month,
+          categoryName,
+          `Monthly category aggregate imported from ${monthData.sourceSheet}.`,
+          `${sourceRef}:category aggregate`,
+          SEEDED_AT,
+        );
+
+        const postingCount = database.connection
+          .prepare("SELECT count(*) AS count FROM postings WHERE transaction_id = ?")
+          .get(transactionId) as { count: number };
+        if (postingCount.count === 0) {
+          insertPostings.run(
+            randomUUID(),
+            transactionId,
+            categoryId,
+            rupees * 100,
+            SEEDED_AT,
+            randomUUID(),
+            transactionId,
+            rupees * -100,
+            SEEDED_AT,
+          );
+        }
+      }
+    }
+
+    database.connection
+      .prepare(`
+        INSERT OR IGNORE INTO audit_events
+          (id, action, entity_type, entity_id, detail_json, created_at)
+        VALUES (?, 'expense_history.imported', 'migration', ?, ?, ?)
+      `)
+      .run(
+        `audit-expense-history-${EXPENSE_HISTORY_SEED}`,
+        EXPENSE_HISTORY_SEED,
+        JSON.stringify({ from: "2025-09", through: "2026-07", source: "Finance tracker 2025" }),
+        SEEDED_AT,
+      );
+    database.connection
+      .prepare(`
+        INSERT INTO app_metadata (key, value, updated_at)
+        VALUES ('accepted_expense_history_seed', ?, ?)
+      `)
+      .run(EXPENSE_HISTORY_SEED, SEEDED_AT);
   });
   seed.immediate();
 }
@@ -214,4 +519,5 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
   });
 
   seed.immediate();
+  seedAcceptedExpenseHistory(database);
 }

@@ -184,6 +184,7 @@ export function App() {
           </section>
         ) : activeNav === "Home" ? (
           <DashboardView
+            dataCutoffMonth={ACTIVE_MONTH}
             dashboard={dashboard.data}
             expenseYear={expenseYear.data}
             liabilities={liabilities.data}
@@ -195,6 +196,7 @@ export function App() {
           />
         ) : activeNav === "Expenses" ? (
           <ExpensesView
+            dataCutoffMonth={ACTIVE_MONTH}
             loading={expenseYear.isLoading || dashboard.isLoading}
             money={money}
             onOpenStatement={(month) => {
