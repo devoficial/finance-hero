@@ -46,8 +46,13 @@ describe("ledger repository", () => {
     const liabilities = repository.getLiabilities();
     expect(liabilities.totalPrincipalPaise).toBe(724854600);
     expect(liabilities.totalEmiPaise).toBe(12745100);
+    expect(liabilities.otherLiabilityPaise).toBe(20000000);
+    expect(liabilities.receivablePaise).toBe(8700000);
+    expect(liabilities.netObligationPaise).toBe(736154600);
     expect(liabilities.activeCount).toBe(10);
     expect(liabilities.clearedCount).toBe(1);
+    expect(liabilities.otherLiabilities).toHaveLength(4);
+    expect(liabilities.receivables).toHaveLength(2);
     expect(liabilities.liabilities.find((item) => item.name === "Two-wheeler loan")?.status).toBe("cleared");
     database.close();
   });
@@ -93,6 +98,26 @@ describe("ledger repository", () => {
       .prepare("SELECT action FROM audit_events WHERE entity_id = 'debt-dmi' ORDER BY created_at DESC LIMIT 1")
       .get() as { action: string };
     expect(audit.action).toBe("liability.updated");
+    database.close();
+  });
+
+  it("creates and settles an audited personal balance", () => {
+    const { database, repository } = createRepository();
+    const created = repository.createPersonalBalance({
+      name: "New person",
+      direction: "receivable",
+      amountPaise: 125000,
+      note: "Shared booking",
+    });
+
+    expect(repository.getLiabilities().receivablePaise).toBe(8825000);
+    const settled = repository.updatePersonalBalance(created.id, { status: "settled", amountPaise: 120000 });
+    expect(settled.status).toBe("settled");
+    expect(repository.getLiabilities().receivablePaise).toBe(8700000);
+    const audits = database.connection
+      .prepare("SELECT action FROM audit_events WHERE entity_id = ? ORDER BY created_at")
+      .all(created.id) as Array<{ action: string }>;
+    expect(audits.map((item) => item.action)).toEqual(["personal_balance.created", "personal_balance.updated"]);
     database.close();
   });
 });

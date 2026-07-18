@@ -1,6 +1,8 @@
 export {
   type CreateManualTransactionRequest,
+  type CreatePersonalBalanceRequest,
   createManualTransactionRequestSchema,
+  createPersonalBalanceRequestSchema,
   type DashboardResponse,
   dashboardResponseSchema,
   type ExpenseMonthSummary,
@@ -17,10 +19,14 @@ export {
   liabilitySchema,
   localDateSchema,
   monthSchema,
+  type PersonalBalance,
+  personalBalanceSchema,
   type ReferenceDataResponse,
   referenceDataResponseSchema,
   type UpdateLiabilityRequest,
+  type UpdatePersonalBalanceRequest,
   updateLiabilityRequestSchema,
+  updatePersonalBalanceRequestSchema,
   yearSchema,
 } from "./finance";
 export { type HealthResponse, healthResponseSchema } from "./health";

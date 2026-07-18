@@ -1,5 +1,6 @@
 import {
   type CreateManualTransactionRequest,
+  type CreatePersonalBalanceRequest,
   type DashboardResponse,
   dashboardResponseSchema,
   type ExpenseYearResponse,
@@ -14,9 +15,12 @@ import {
   ledgerTransactionSchema,
   liabilitiesResponseSchema,
   liabilitySchema,
+  type PersonalBalance,
+  personalBalanceSchema,
   type ReferenceDataResponse,
   referenceDataResponseSchema,
   type UpdateLiabilityRequest,
+  type UpdatePersonalBalanceRequest,
 } from "@finance-hero/contracts";
 
 async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
@@ -63,6 +67,34 @@ export async function updateLiability(id: string, input: UpdateLiabilityRequest)
     throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
   }
   return liabilitySchema.parse(await response.json());
+}
+
+export async function createPersonalBalance(input: CreatePersonalBalanceRequest): Promise<PersonalBalance> {
+  const response = await fetch("/api/v1/personal-balances", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return personalBalanceSchema.parse(await response.json());
+}
+
+export async function updatePersonalBalance(id: string, input: UpdatePersonalBalanceRequest): Promise<PersonalBalance> {
+  const response = await fetch(`/api/v1/personal-balances/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return personalBalanceSchema.parse(await response.json());
 }
 
 export async function getReferenceData(signal?: AbortSignal): Promise<ReferenceDataResponse> {

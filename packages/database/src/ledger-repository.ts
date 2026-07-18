@@ -81,9 +81,14 @@ export interface LiabilitiesRecord {
   totalOriginalPaise: number;
   totalPrincipalPaise: number;
   totalEmiPaise: number;
+  otherLiabilityPaise: number;
+  receivablePaise: number;
+  netObligationPaise: number;
   activeCount: number;
   clearedCount: number;
   liabilities: LiabilityRecord[];
+  otherLiabilities: PersonalBalanceRecord[];
+  receivables: PersonalBalanceRecord[];
 }
 
 export interface UpdateLiabilityInput {
@@ -94,6 +99,29 @@ export interface UpdateLiabilityInput {
   emiPaise?: number;
   annualRateBps?: number | null;
   status?: "active" | "cleared";
+}
+
+export interface PersonalBalanceRecord {
+  id: string;
+  name: string;
+  direction: "payable" | "receivable";
+  amountPaise: number;
+  status: "open" | "settled";
+  note: string | null;
+}
+
+export interface CreatePersonalBalanceInput {
+  name: string;
+  direction: "payable" | "receivable";
+  amountPaise: number;
+  note?: string;
+}
+
+export interface UpdatePersonalBalanceInput {
+  name?: string;
+  amountPaise?: number;
+  status?: "open" | "settled";
+  note?: string | null;
 }
 
 export class LedgerRepository {
@@ -172,15 +200,104 @@ export class LedgerRepository {
       snowballRank: rankById.get(item.id) ?? null,
     }));
     const active = liabilities.filter((item) => item.status === "active");
+    const personalBalances = this.listPersonalBalances();
+    const otherLiabilities = personalBalances.filter((item) => item.direction === "payable");
+    const receivables = personalBalances.filter((item) => item.direction === "receivable");
+    const otherLiabilityPaise = otherLiabilities
+      .filter((item) => item.status === "open")
+      .reduce((sum, item) => sum + item.amountPaise, 0);
+    const receivablePaise = receivables
+      .filter((item) => item.status === "open")
+      .reduce((sum, item) => sum + item.amountPaise, 0);
+    const totalPrincipalPaise = active.reduce((sum, item) => sum + item.currentPrincipalPaise, 0);
 
     return {
       totalOriginalPaise: liabilities.reduce((sum, item) => sum + item.originalAmountPaise, 0),
-      totalPrincipalPaise: active.reduce((sum, item) => sum + item.currentPrincipalPaise, 0),
+      totalPrincipalPaise,
       totalEmiPaise: active.reduce((sum, item) => sum + item.emiPaise, 0),
+      otherLiabilityPaise,
+      receivablePaise,
+      netObligationPaise: totalPrincipalPaise + otherLiabilityPaise - receivablePaise,
       activeCount: active.length,
       clearedCount: liabilities.length - active.length,
       liabilities,
+      otherLiabilities,
+      receivables,
     };
+  }
+
+  listPersonalBalances(): PersonalBalanceRecord[] {
+    return this.database.connection
+      .prepare(`
+        SELECT id, name, direction, amount_paise AS amountPaise, status, note
+        FROM personal_balances
+        ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, name ASC
+      `)
+      .all() as PersonalBalanceRecord[];
+  }
+
+  createPersonalBalance(input: CreatePersonalBalanceInput): PersonalBalanceRecord {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const record: PersonalBalanceRecord = {
+      id,
+      name: input.name.trim(),
+      direction: input.direction,
+      amountPaise: input.amountPaise,
+      status: "open",
+      note: input.note?.trim() || null,
+    };
+
+    const write = this.database.connection.transaction(() => {
+      this.database.connection
+        .prepare(`
+          INSERT INTO personal_balances
+            (id, name, direction, amount_paise, status, note, source_ref, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+        `)
+        .run(id, record.name, record.direction, record.amountPaise, record.status, record.note, now);
+      this.database.connection
+        .prepare(`
+          INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+          VALUES (?, 'personal_balance.created', 'personal_balance', ?, ?, ?)
+        `)
+        .run(randomUUID(), id, JSON.stringify(record), now);
+    });
+    write.immediate();
+    return record;
+  }
+
+  updatePersonalBalance(id: string, input: UpdatePersonalBalanceInput): PersonalBalanceRecord {
+    const existing = this.listPersonalBalances().find((item) => item.id === id);
+    if (!existing) {
+      throw new Error("Personal balance does not exist.");
+    }
+    const next: PersonalBalanceRecord = {
+      ...existing,
+      name: input.name?.trim() ?? existing.name,
+      amountPaise: input.amountPaise ?? existing.amountPaise,
+      status: input.status ?? existing.status,
+      note: input.note === undefined ? existing.note : input.note?.trim() || null,
+    };
+    const now = new Date().toISOString();
+
+    const write = this.database.connection.transaction(() => {
+      this.database.connection
+        .prepare(`
+          UPDATE personal_balances
+          SET name = ?, amount_paise = ?, status = ?, note = ?, updated_at = ?
+          WHERE id = ?
+        `)
+        .run(next.name, next.amountPaise, next.status, next.note, now, id);
+      this.database.connection
+        .prepare(`
+          INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+          VALUES (?, 'personal_balance.updated', 'personal_balance', ?, ?, ?)
+        `)
+        .run(randomUUID(), id, JSON.stringify({ before: existing, after: next }), now);
+    });
+    write.immediate();
+    return next;
   }
 
   updateLiability(id: string, input: UpdateLiabilityInput): LiabilityRecord {

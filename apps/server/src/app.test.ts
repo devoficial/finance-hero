@@ -8,6 +8,7 @@ import {
   ledgerTransactionSchema,
   liabilitiesResponseSchema,
   liabilitySchema,
+  personalBalanceSchema,
 } from "@finance-hero/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app";
@@ -48,6 +49,8 @@ describe("local API", () => {
     const liabilities = await app.inject({ method: "GET", url: "/api/v1/liabilities" });
     expect(liabilities.statusCode).toBe(200);
     expect(liabilitiesResponseSchema.parse(liabilities.json()).totalPrincipalPaise).toBe(724854600);
+    expect(liabilitiesResponseSchema.parse(liabilities.json()).otherLiabilityPaise).toBe(20000000);
+    expect(liabilitiesResponseSchema.parse(liabilities.json()).receivablePaise).toBe(8700000);
 
     const liabilityUpdate = await app.inject({
       method: "PATCH",
@@ -56,6 +59,21 @@ describe("local API", () => {
     });
     expect(liabilityUpdate.statusCode).toBe(200);
     expect(liabilitySchema.parse(liabilityUpdate.json()).currentPrincipalPaise).toBe(30000000);
+
+    const personalBalance = await app.inject({
+      method: "POST",
+      url: "/api/v1/personal-balances",
+      payload: { name: "Test friend", direction: "payable", amountPaise: 240000 },
+    });
+    expect(personalBalance.statusCode).toBe(201);
+    const createdPersonalBalance = personalBalanceSchema.parse(personalBalance.json());
+    const personalBalanceUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/personal-balances/${createdPersonalBalance.id}`,
+      payload: { status: "settled" },
+    });
+    expect(personalBalanceUpdate.statusCode).toBe(200);
+    expect(personalBalanceSchema.parse(personalBalanceUpdate.json()).status).toBe("settled");
 
     const manual = await app.inject({
       method: "POST",

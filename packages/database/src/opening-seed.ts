@@ -32,6 +32,42 @@ const debts = [
   ["debt-axis-neo", "Axis Neo Credit Card", "credit_card", 0, 0, 0, null, "active"],
 ] as const;
 
+const personalBalances = [
+  ["personal-payable-pradip", "Pradip", "payable", 100000],
+  ["personal-payable-dheeraj", "Dheeraj Vadlani", "payable", 25000],
+  ["personal-payable-soumya", "Soumya", "payable", 50000],
+  ["personal-payable-vishant", "Vishant", "payable", 25000],
+  ["personal-receivable-kishan", "Kishan", "receivable", 35000],
+  ["personal-receivable-rabi", "Rabi", "receivable", 52000],
+] as const;
+
+function seedAcceptedPersonalBalances(database: FinanceHeroDatabase): void {
+  const seed = database.connection.transaction(() => {
+    const existing = database.connection
+      .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_personal_balance_seed'")
+      .get() as { value: string } | undefined;
+    if (existing) {
+      return;
+    }
+
+    const insert = database.connection.prepare(`
+      INSERT OR IGNORE INTO personal_balances
+        (id, name, direction, amount_paise, status, note, source_ref, updated_at)
+      VALUES (?, ?, ?, ?, 'open', NULL, ?, ?)
+    `);
+    for (const [id, name, direction, rupees] of personalBalances) {
+      insert.run(id, name, direction, rupees * 100, `${SOURCE}:Personal balances`, SEEDED_AT);
+    }
+    database.connection
+      .prepare(`
+        INSERT INTO app_metadata (key, value, updated_at)
+        VALUES ('accepted_personal_balance_seed', '2026-07-v1', ?)
+      `)
+      .run(SEEDED_AT);
+  });
+  seed.immediate();
+}
+
 function seedAcceptedLiabilities(database: FinanceHeroDatabase): void {
   const seed = database.connection.transaction(() => {
     const existing = database.connection
@@ -93,6 +129,7 @@ function seedAcceptedLiabilities(database: FinanceHeroDatabase): void {
 
 export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void {
   seedAcceptedLiabilities(database);
+  seedAcceptedPersonalBalances(database);
 
   const seed = database.connection.transaction(() => {
     const existing = database.connection

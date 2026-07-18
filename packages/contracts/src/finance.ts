@@ -82,14 +82,44 @@ export const liabilitySchema = z.object({
   snowballRank: z.number().int().positive().nullable(),
 });
 
+export const personalBalanceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  direction: z.enum(["payable", "receivable"]),
+  amountPaise: paiseSchema.nonnegative(),
+  status: z.enum(["open", "settled"]),
+  note: z.string().nullable(),
+});
+
 export const liabilitiesResponseSchema = z.object({
   totalOriginalPaise: paiseSchema.nonnegative(),
   totalPrincipalPaise: paiseSchema.nonnegative(),
   totalEmiPaise: paiseSchema.nonnegative(),
   activeCount: z.number().int().nonnegative(),
   clearedCount: z.number().int().nonnegative(),
+  otherLiabilityPaise: paiseSchema.nonnegative(),
+  receivablePaise: paiseSchema.nonnegative(),
+  netObligationPaise: paiseSchema,
   liabilities: z.array(liabilitySchema),
+  otherLiabilities: z.array(personalBalanceSchema),
+  receivables: z.array(personalBalanceSchema),
 });
+
+export const createPersonalBalanceRequestSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  direction: z.enum(["payable", "receivable"]),
+  amountPaise: paiseSchema.nonnegative(),
+  note: z.string().trim().max(500).optional(),
+});
+
+export const updatePersonalBalanceRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160).optional(),
+    amountPaise: paiseSchema.nonnegative().optional(),
+    status: z.enum(["open", "settled"]).optional(),
+    note: z.string().trim().max(500).nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, { message: "At least one personal balance field is required." });
 
 export const updateLiabilityRequestSchema = z
   .object({
@@ -122,5 +152,8 @@ export type ExpenseMonthSummary = z.infer<typeof expenseMonthSummarySchema>;
 export type ExpenseYearResponse = z.infer<typeof expenseYearResponseSchema>;
 export type Liability = z.infer<typeof liabilitySchema>;
 export type LiabilitiesResponse = z.infer<typeof liabilitiesResponseSchema>;
+export type PersonalBalance = z.infer<typeof personalBalanceSchema>;
+export type CreatePersonalBalanceRequest = z.infer<typeof createPersonalBalanceRequestSchema>;
+export type UpdatePersonalBalanceRequest = z.infer<typeof updatePersonalBalanceRequestSchema>;
 export type UpdateLiabilityRequest = z.infer<typeof updateLiabilityRequestSchema>;
 export type CreateManualTransactionRequest = z.infer<typeof createManualTransactionRequestSchema>;

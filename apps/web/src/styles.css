@@ -962,7 +962,7 @@ h2 {
     serif;
 }
 .liability-metrics {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
 }
 .liability-metric-card strong {
   max-width: 100%;
@@ -1045,6 +1045,14 @@ h2 {
   background: #c6dfd4;
   color: var(--green);
 }
+.status-pill.open {
+  background: #f0c6ba;
+  color: #9e321f;
+}
+.status-pill.settled {
+  background: #c6dfd4;
+  color: var(--green);
+}
 .rank-pill {
   background: var(--yellow);
   color: var(--green);
@@ -1113,6 +1121,145 @@ h2 {
 .liability-editor-error {
   grid-column: 1 / -1;
 }
+.personal-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.personal-balance-panel {
+  min-width: 0;
+}
+.personal-balance-panel.payable {
+  border-top: 4px solid var(--red);
+}
+.personal-balance-panel.receivable {
+  border-top: 4px solid var(--green-bright);
+}
+.personal-balance-panel .panel-heading small {
+  display: block;
+  max-width: 310px;
+  margin-top: 4px;
+  color: #68766f;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.personal-balance-total {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+.personal-balance-total strong {
+  font:
+    22px "Newsreader",
+    serif;
+}
+.personal-balance-total button,
+.personal-balance-list button {
+  border: 1px solid var(--green);
+  background: transparent;
+  color: var(--green);
+  padding: 6px 9px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+.personal-balance-total button:hover,
+.personal-balance-list button:hover {
+  background: var(--green);
+  color: white;
+}
+.personal-balance-list {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+.personal-balance-list > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.personal-balance-list > div.settled {
+  opacity: 0.58;
+}
+.personal-balance-list > div > span:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.personal-balance-list > div > span:first-child strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.personal-balance-list > div > span:first-child small {
+  color: #718078;
+  font-size: 8px;
+}
+.personal-balance-list b {
+  font:
+    10px "DM Mono",
+    monospace;
+}
+.personal-balance-editor-panel {
+  margin-bottom: 16px;
+  border-left: 5px solid var(--green-bright);
+}
+.personal-balance-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.personal-balance-form label {
+  display: grid;
+  gap: 6px;
+}
+.personal-balance-form label > span {
+  color: #64736c;
+  text-transform: uppercase;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.personal-balance-form input,
+.personal-balance-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: #f8f5ed;
+  color: var(--ink);
+  padding: 8px 9px;
+}
+.home-balance-summary {
+  display: grid;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+}
+.home-balance-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--line);
+}
+.home-balance-summary > div:last-child {
+  border-bottom: 0;
+  background: #ece8dc;
+}
+.home-balance-summary span,
+.home-balance-summary strong {
+  font:
+    9px "DM Mono",
+    monospace;
+}
+.home-balance-summary strong.receivable {
+  color: var(--green-bright);
+}
 .mobile-nav {
   display: none;
 }
@@ -1153,6 +1300,9 @@ h2 {
     border-bottom: 1px solid var(--line);
   }
   .liability-editor-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .personal-balance-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .metric-card:nth-child(2) {
@@ -1284,6 +1434,16 @@ h2 {
   }
   .liability-editor-form {
     grid-template-columns: 1fr;
+  }
+  .personal-balance-grid,
+  .personal-balance-form {
+    grid-template-columns: 1fr;
+  }
+  .personal-balance-list > div {
+    grid-template-columns: minmax(100px, 1fr) auto auto;
+  }
+  .personal-balance-list > div .status-pill {
+    display: none;
   }
   .entry-form {
     grid-template-columns: 1fr;

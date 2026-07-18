@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   createManualTransactionRequestSchema,
+  createPersonalBalanceRequestSchema,
   dashboardResponseSchema,
   expenseYearResponseSchema,
   healthResponseSchema,
@@ -9,8 +10,10 @@ import {
   liabilitiesResponseSchema,
   liabilitySchema,
   monthSchema,
+  personalBalanceSchema,
   referenceDataResponseSchema,
   updateLiabilityRequestSchema,
+  updatePersonalBalanceRequestSchema,
   yearSchema,
 } from "@finance-hero/contracts";
 import {
@@ -118,6 +121,36 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       const message = error instanceof Error ? error.message : "Liability could not be updated.";
       const statusCode = message === "Liability does not exist." ? 404 : 400;
       return reply.code(statusCode).send({ error: { code: "INVALID_LIABILITY", message } });
+    }
+  });
+
+  app.post("/api/v1/personal-balances", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const input = createPersonalBalanceRequestSchema.parse(request.body);
+      return reply.code(201).send(personalBalanceSchema.parse(ledger.createPersonalBalance(input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Personal balance could not be created.";
+      return reply.code(400).send({ error: { code: "INVALID_PERSONAL_BALANCE", message } });
+    }
+  });
+
+  app.patch("/api/v1/personal-balances/:id", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+      const input = updatePersonalBalanceRequestSchema.parse(request.body);
+      return reply.send(personalBalanceSchema.parse(ledger.updatePersonalBalance(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Personal balance could not be updated.";
+      const statusCode = message === "Personal balance does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_PERSONAL_BALANCE", message } });
     }
   });
 

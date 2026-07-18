@@ -1,7 +1,14 @@
-import type { LiabilitiesResponse, Liability, UpdateLiabilityRequest } from "@finance-hero/contracts";
+import type {
+  CreatePersonalBalanceRequest,
+  LiabilitiesResponse,
+  Liability,
+  PersonalBalance,
+  UpdateLiabilityRequest,
+  UpdatePersonalBalanceRequest,
+} from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { updateLiability } from "../lib/api";
+import { createPersonalBalance, updateLiability, updatePersonalBalance } from "../lib/api";
 
 interface LiabilitiesViewProps {
   data?: LiabilitiesResponse;
@@ -17,6 +24,15 @@ interface LiabilityForm {
   emi: string;
   annualRate: string;
   status: "active" | "cleared";
+}
+
+interface PersonalBalanceForm {
+  id: string | null;
+  direction: "payable" | "receivable";
+  name: string;
+  amount: string;
+  note: string;
+  status: "open" | "settled";
 }
 
 function productName(productType: string) {
@@ -45,11 +61,45 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<LiabilityForm | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [personalForm, setPersonalForm] = useState<PersonalBalanceForm | null>(null);
+  const [personalValidationError, setPersonalValidationError] = useState<string | null>(null);
   const mutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateLiabilityRequest }) => updateLiability(id, input),
     onSuccess: async () => {
       setEditingId(null);
       setForm(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["liabilities"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+    },
+  });
+  const personalMutation = useMutation({
+    mutationFn: async (form: PersonalBalanceForm) => {
+      const amountPaise = rupeesToPaise(form.amount);
+      if (amountPaise == null) {
+        throw new Error("Enter a valid non-negative INR amount.");
+      }
+      if (form.id) {
+        const input: UpdatePersonalBalanceRequest = {
+          name: form.name,
+          amountPaise,
+          note: form.note || null,
+          status: form.status,
+        };
+        return updatePersonalBalance(form.id, input);
+      }
+      const input: CreatePersonalBalanceRequest = {
+        name: form.name,
+        direction: form.direction,
+        amountPaise,
+        note: form.note || undefined,
+      };
+      return createPersonalBalance(input);
+    },
+    onSuccess: async () => {
+      setPersonalForm(null);
+      setPersonalValidationError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["liabilities"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
@@ -107,6 +157,81 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
     });
   }
 
+  function beginAddPersonal(direction: "payable" | "receivable") {
+    setPersonalForm({ id: null, direction, name: "", amount: "", note: "", status: "open" });
+    setPersonalValidationError(null);
+  }
+
+  function beginEditPersonal(balance: PersonalBalance) {
+    setPersonalForm({
+      id: balance.id,
+      direction: balance.direction,
+      name: balance.name,
+      amount: String(balance.amountPaise / 100),
+      note: balance.note ?? "",
+      status: balance.status,
+    });
+    setPersonalValidationError(null);
+  }
+
+  function submitPersonalBalance(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!personalForm) {
+      return;
+    }
+    if (!personalForm.name.trim()) {
+      setPersonalValidationError("Enter the person's name.");
+      return;
+    }
+    if (rupeesToPaise(personalForm.amount) == null) {
+      setPersonalValidationError("Enter a valid non-negative INR amount.");
+      return;
+    }
+    setPersonalValidationError(null);
+    personalMutation.mutate(personalForm);
+  }
+
+  function personalPanel(
+    title: string,
+    description: string,
+    direction: "payable" | "receivable",
+    balances: PersonalBalance[],
+    totalPaise: number,
+  ) {
+    return (
+      <article className={`panel personal-balance-panel ${direction}`}>
+        <div className="panel-heading compact">
+          <div>
+            <p className="eyebrow">{direction === "payable" ? "PERSONAL PAYABLES" : "PERSONAL RECEIVABLES"}</p>
+            <h2>{title}</h2>
+            <small>{description}</small>
+          </div>
+          <div className="personal-balance-total">
+            <strong>{money(totalPaise)}</strong>
+            <button onClick={() => beginAddPersonal(direction)} type="button">
+              + Add person
+            </button>
+          </div>
+        </div>
+        <div className="personal-balance-list">
+          {balances.map((balance) => (
+            <div className={balance.status} key={balance.id}>
+              <span>
+                <strong>{balance.name}</strong>
+                <small>{balance.note || (balance.status === "open" ? "Open balance" : "Settled")}</small>
+              </span>
+              <b>{money(balance.amountPaise)}</b>
+              <span className={`status-pill ${balance.status}`}>{balance.status}</span>
+              <button onClick={() => beginEditPersonal(balance)} type="button">
+                Edit
+              </button>
+            </div>
+          ))}
+        </div>
+      </article>
+    );
+  }
+
   return (
     <>
       <section className="liability-metrics" aria-label="Liability summary">
@@ -121,15 +246,113 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
           <small>Committed monthly outflow</small>
         </article>
         <article className="metric-card liability-metric-card">
-          <span>Original obligations</span>
-          <strong>{money(data.totalOriginalPaise)}</strong>
-          <small>Includes cleared facilities</small>
+          <span>Other liabilities</span>
+          <strong>{money(data.otherLiabilityPaise)}</strong>
+          <small>Open personal payables</small>
+        </article>
+        <article className="metric-card liability-metric-card positive">
+          <span>Money to get back</span>
+          <strong>{money(data.receivablePaise)}</strong>
+          <small>Open personal receivables</small>
+        </article>
+        <article className="metric-card liability-metric-card warning">
+          <span>Net obligations</span>
+          <strong>{money(data.netObligationPaise)}</strong>
+          <small>Principal + payables - receivables</small>
         </article>
         <article className="metric-card liability-metric-card positive">
           <span>Cleared accounts</span>
           <strong>{data.clearedCount}</strong>
-          <small>Retained for repayment history</small>
+          <small>{money(data.totalOriginalPaise)} original obligations</small>
         </article>
+      </section>
+
+      {personalForm && (
+        <article className="panel personal-balance-editor-panel">
+          <div className="panel-heading compact">
+            <div>
+              <p className="eyebrow">UPDATE ENCRYPTED PERSONAL BALANCE</p>
+              <h2>
+                {personalForm.id ? "Edit" : "Add"}{" "}
+                {personalForm.direction === "payable" ? "other liability" : "money to get back"}
+              </h2>
+            </div>
+            <button className="editor-close-button" onClick={() => setPersonalForm(null)} type="button">
+              Cancel
+            </button>
+          </div>
+          <form className="personal-balance-form" onSubmit={submitPersonalBalance}>
+            <label>
+              <span>Name</span>
+              <input
+                maxLength={160}
+                required
+                value={personalForm.name}
+                onChange={(event) => setPersonalForm({ ...personalForm, name: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>Amount (INR)</span>
+              <input
+                inputMode="decimal"
+                min="0"
+                required
+                step="0.01"
+                type="number"
+                value={personalForm.amount}
+                onChange={(event) => setPersonalForm({ ...personalForm, amount: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>Note</span>
+              <input
+                maxLength={500}
+                placeholder="Optional"
+                value={personalForm.note}
+                onChange={(event) => setPersonalForm({ ...personalForm, note: event.target.value })}
+              />
+            </label>
+            {personalForm.id && (
+              <label>
+                <span>Status</span>
+                <select
+                  value={personalForm.status}
+                  onChange={(event) =>
+                    setPersonalForm({ ...personalForm, status: event.target.value as "open" | "settled" })
+                  }
+                >
+                  <option value="open">Open</option>
+                  <option value="settled">Settled</option>
+                </select>
+              </label>
+            )}
+            <button className="save-liability-button" disabled={personalMutation.isPending} type="submit">
+              {personalMutation.isPending ? "Saving..." : "Save balance"}
+            </button>
+            {(personalValidationError || personalMutation.error) && (
+              <p className="form-error liability-editor-error">
+                {personalValidationError ?? personalMutation.error?.message ?? "Update failed."}
+              </p>
+            )}
+          </form>
+        </article>
+      )}
+
+      <section className="personal-balance-grid" aria-label="Personal balances">
+        {personalPanel(
+          "Other liabilities",
+          "Money you need to repay outside banks and credit cards.",
+          "payable",
+          data.otherLiabilities,
+          data.otherLiabilityPaise,
+        )}
+        {personalPanel(
+          "Money to get back",
+          "Money other people need to return to you.",
+          "receivable",
+          data.receivables,
+          data.receivablePaise,
+        )}
       </section>
 
       {editingId && form && (

@@ -80,7 +80,9 @@ setup and will not use a checked-in environment variable.
 
 - The accepted July 2026 opening snapshot is seeded once into the encrypted ledger. Full
   transaction-by-transaction Google Sheet migration and reconciliation are still pending.
-- Dashboard totals, category spending, debts, and the ledger are live database queries.
+- Dashboard totals, category spending, institutional debts, personal payables, receivables, and the ledger are live
+  database queries. Personal balances can be created with `POST /api/v1/personal-balances` and edited or settled
+  with `PATCH /api/v1/personal-balances/:id`.
   Manual income and expense transactions are supported; transfers and split entries are next.
 - Google login, device pairing, LAN HTTPS, Gmail, SMS, and statement parsing are not connected yet.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.

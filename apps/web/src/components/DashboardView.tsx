@@ -151,6 +151,20 @@ export function DashboardView({
               <span>Monthly EMI {money(liabilities.totalEmiPaise)}</span>
               <span>{liabilities.clearedCount} cleared</span>
             </div>
+            <div className="home-balance-summary">
+              <div>
+                <span>Other liabilities</span>
+                <strong>{money(liabilities.otherLiabilityPaise)}</strong>
+              </div>
+              <div>
+                <span>Money to get back</span>
+                <strong className="receivable">-{money(liabilities.receivablePaise)}</strong>
+              </div>
+              <div>
+                <span>Net obligations</span>
+                <strong>{money(liabilities.netObligationPaise)}</strong>
+              </div>
+            </div>
             <div className="home-liability-list">
               {visibleLiabilities.map((liability) => (
                 <div key={liability.id}>

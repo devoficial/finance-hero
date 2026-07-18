@@ -45,7 +45,7 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     ) STRICT;
 
     INSERT INTO app_metadata (key, value, updated_at)
-    VALUES ('schema_version', 'phase-2', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    VALUES ('schema_version', 'phase-3', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     ON CONFLICT(key) DO UPDATE SET
       value = excluded.value,
       updated_at = excluded.updated_at;
@@ -136,9 +136,21 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       created_at TEXT NOT NULL
     ) STRICT;
 
+    CREATE TABLE IF NOT EXISTS personal_balances (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK (direction IN ('payable', 'receivable')),
+      amount_paise INTEGER NOT NULL CHECK (amount_paise >= 0),
+      status TEXT NOT NULL CHECK (status IN ('open', 'settled')),
+      note TEXT,
+      source_ref TEXT,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
     CREATE INDEX IF NOT EXISTS postings_transaction_idx ON postings(transaction_id);
     CREATE INDEX IF NOT EXISTS postings_account_idx ON postings(account_id);
     CREATE INDEX IF NOT EXISTS transactions_month_idx ON journal_transactions(effective_month, occurred_on);
+    CREATE INDEX IF NOT EXISTS personal_balances_direction_idx ON personal_balances(direction, status);
   `);
 
   const debtColumns = database.connection.prepare("PRAGMA table_info(debts)").all() as Array<{ name: string }>;
