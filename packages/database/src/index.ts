@@ -27,3 +27,15 @@ export {
   type UpdateProjectCommitmentInput,
   type UpdateProjectExpenseInput,
 } from "./project-repository";
+export {
+  type CreateFinancialGoalInput,
+  type CreateWealthAssetInput,
+  type FinancialGoalRecord,
+  type FinancialGoalStatus,
+  type UpdateFinancialGoalInput,
+  type UpdateWealthAssetInput,
+  type WealthAssetRecord,
+  type WealthAssetType,
+  type WealthRecord,
+  WealthRepository,
+} from "./wealth-repository";

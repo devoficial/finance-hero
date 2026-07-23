@@ -151,6 +151,11 @@ variance remains visible and causes future schedule regeneration.
 - `goal_allocations`: goal, asset account, allocated paise, effective date.
 - `goal_scenarios`: contribution assumptions and completion projection.
 
+The current vertical slice implements asset-level manual valuations in
+`asset_positions`, with subsequent posted ledger movements projected over the valuation.
+Restricted-wallet positions cannot be allocated. Completion dates are deterministic
+read-model calculations from the remaining target and monthly contribution assumption.
+
 For every asset account and effective date, total active goal allocations may not
 exceed the available account balance unless the user explicitly records a planned,
 not-current allocation. Planned allocations are excluded from current savings.

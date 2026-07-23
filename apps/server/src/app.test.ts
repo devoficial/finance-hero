@@ -5,6 +5,7 @@ import {
   budgetMonthResponseSchema,
   dashboardResponseSchema,
   expenseYearResponseSchema,
+  financialGoalSchema,
   healthResponseSchema,
   ledgerTransactionSchema,
   liabilitiesResponseSchema,
@@ -13,6 +14,8 @@ import {
   projectCommitmentSchema,
   projectExpenseSchema,
   projectSummaryResponseSchema,
+  wealthAssetSchema,
+  wealthResponseSchema,
 } from "@finance-hero/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app";
@@ -165,6 +168,50 @@ describe("local API", () => {
     });
     expect(commitment.statusCode).toBe(201);
     expect(projectCommitmentSchema.parse(commitment.json()).vendorName).toBe("Test carpenter");
+
+    const wealth = await app.inject({ method: "GET", url: "/api/v1/wealth" });
+    expect(wealth.statusCode).toBe(200);
+    const parsedWealth = wealthResponseSchema.parse(wealth.json());
+    expect(parsedWealth.savingsPaise).toBe(11880800);
+    expect(parsedWealth.restrictedWalletPaise).toBe(880000);
+    expect(parsedWealth.goals[0]?.progressPercentage).toBe(21);
+
+    const wealthAsset = await app.inject({
+      method: "POST",
+      url: "/api/v1/wealth/assets",
+      payload: {
+        name: "Test investment",
+        assetType: "investment",
+        institution: "Test broker",
+        currentValuePaise: 2500000,
+        monthlyContributionPaise: 500000,
+        restricted: false,
+        asOfDate: "2026-07-23",
+      },
+    });
+    expect(wealthAsset.statusCode).toBe(201);
+    const createdWealthAsset = wealthAssetSchema.parse(wealthAsset.json());
+
+    const financialGoal = await app.inject({
+      method: "POST",
+      url: "/api/v1/wealth/goals",
+      payload: {
+        name: "Test goal",
+        targetPaise: 10000000,
+        targetDate: "2027-12-31",
+        priority: 2,
+        monthlyContributionPaise: 500000,
+      },
+    });
+    expect(financialGoal.statusCode).toBe(201);
+    const createdGoal = financialGoalSchema.parse(financialGoal.json());
+    const goalAllocation = await app.inject({
+      method: "PUT",
+      url: `/api/v1/wealth/goals/${createdGoal.id}/allocations`,
+      payload: { allocations: [{ assetId: createdWealthAsset.id, amountPaise: 2000000 }] },
+    });
+    expect(goalAllocation.statusCode).toBe(200);
+    expect(financialGoalSchema.parse(goalAllocation.json()).allocatedPaise).toBe(2000000);
 
     const manual = await app.inject({
       method: "POST",

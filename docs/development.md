@@ -87,7 +87,10 @@ setup and will not use a checked-in environment variable.
 - Dashboard totals, category spending, institutional debts, personal payables, receivables, and the ledger are live
   database queries. Personal balances can be created with `POST /api/v1/personal-balances` and edited or settled
   with `PATCH /api/v1/personal-balances/:id`.
-  Manual income and expense transactions are supported; transfers and split entries are next.
+- Manual expenses, income, splits, transfers, card purchases, and debt payments are supported with audited
+  reversals and replacements.
+- Savings, investments, restricted wallets, financial goals, allocations, and deterministic completion forecasts
+  are live. Asset valuations remain manual until statement and market-value imports are implemented.
 - Google login, device pairing, LAN HTTPS, Gmail, SMS, and statement parsing are not connected yet.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
 - PWA SVG branding is sufficient for development; release-quality iOS PNG icons are pending.

@@ -45,7 +45,7 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     ) STRICT;
 
     INSERT INTO app_metadata (key, value, updated_at)
-    VALUES ('schema_version', 'phase-3', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    VALUES ('schema_version', 'phase-4', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     ON CONFLICT(key) DO UPDATE SET
       value = excluded.value,
       updated_at = excluded.updated_at;
@@ -183,6 +183,42 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       updated_at TEXT NOT NULL
     ) STRICT;
 
+    CREATE TABLE IF NOT EXISTS asset_positions (
+      id TEXT PRIMARY KEY NOT NULL,
+      account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id),
+      asset_type TEXT NOT NULL CHECK (asset_type IN ('savings', 'investment', 'emergency_fund', 'restricted_wallet')),
+      baseline_value_paise INTEGER NOT NULL CHECK (baseline_value_paise >= 0),
+      monthly_contribution_paise INTEGER NOT NULL DEFAULT 0 CHECK (monthly_contribution_paise >= 0),
+      restricted INTEGER NOT NULL DEFAULT 0 CHECK (restricted IN (0, 1)),
+      as_of_date TEXT NOT NULL CHECK (length(as_of_date) = 10),
+      valued_at TEXT NOT NULL,
+      source_ref TEXT,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS financial_goals (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      target_paise INTEGER NOT NULL CHECK (target_paise > 0),
+      target_date TEXT CHECK (target_date IS NULL OR length(target_date) = 10),
+      priority INTEGER NOT NULL CHECK (priority BETWEEN 1 AND 5),
+      status TEXT NOT NULL CHECK (status IN ('active', 'achieved', 'paused')),
+      monthly_contribution_paise INTEGER NOT NULL DEFAULT 0 CHECK (monthly_contribution_paise >= 0),
+      notes TEXT,
+      source_ref TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS goal_allocations (
+      goal_id TEXT NOT NULL REFERENCES financial_goals(id),
+      asset_position_id TEXT NOT NULL REFERENCES asset_positions(id),
+      amount_paise INTEGER NOT NULL CHECK (amount_paise >= 0),
+      effective_date TEXT NOT NULL CHECK (length(effective_date) = 10),
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (goal_id, asset_position_id)
+    ) STRICT;
+
     CREATE INDEX IF NOT EXISTS postings_transaction_idx ON postings(transaction_id);
     CREATE INDEX IF NOT EXISTS postings_account_idx ON postings(account_id);
     CREATE INDEX IF NOT EXISTS transactions_month_idx ON journal_transactions(effective_month, occurred_on);
@@ -191,6 +227,9 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     CREATE UNIQUE INDEX IF NOT EXISTS project_expenses_transaction_idx
       ON project_expenses(linked_transaction_id) WHERE linked_transaction_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS project_commitments_project_idx ON project_commitments(project_id, status);
+    CREATE INDEX IF NOT EXISTS asset_positions_type_idx ON asset_positions(asset_type);
+    CREATE INDEX IF NOT EXISTS financial_goals_status_priority_idx ON financial_goals(status, priority);
+    CREATE INDEX IF NOT EXISTS goal_allocations_asset_idx ON goal_allocations(asset_position_id);
   `);
 
   const debtColumns = database.connection.prepare("PRAGMA table_info(debts)").all() as Array<{ name: string }>;

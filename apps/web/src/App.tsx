@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { DashboardView } from "./components/DashboardView";
 import { ExpensesView } from "./components/ExpensesView";
+import { GoalsView } from "./components/GoalsView";
 import { LedgerView } from "./components/LedgerView";
 import { LiabilitiesView } from "./components/LiabilitiesView";
 import { ProjectsView } from "./components/ProjectsView";
@@ -15,6 +16,7 @@ import {
   getLedger,
   getLiabilities,
   getReferenceData,
+  getWealth,
 } from "./lib/api";
 
 const navItems = ["Home", "Ledger", "Expenses", "Imports", "Liabilities", "Goals", "Projects"] as const;
@@ -102,6 +104,10 @@ export function App() {
     queryKey: ["projects", "home-construction"],
     queryFn: ({ signal }) => getHomeConstruction(signal),
   });
+  const wealth = useQuery({
+    queryKey: ["wealth"],
+    queryFn: ({ signal }) => getWealth(signal),
+  });
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -161,10 +167,11 @@ export function App() {
     .format(new Date(`${visibleMonth}-01T00:00:00Z`))
     .toUpperCase();
   const hasViewError =
-    (activeNav === "Home" && (dashboard.isError || liabilities.isError)) ||
+    (activeNav === "Home" && (dashboard.isError || liabilities.isError || wealth.isError)) ||
     (activeNav === "Ledger" && (ledger.isError || referenceData.isError)) ||
     (activeNav === "Expenses" && (expenseYear.isError || dashboard.isError || budget.isError)) ||
     (activeNav === "Liabilities" && liabilities.isError) ||
+    (activeNav === "Goals" && wealth.isError) ||
     (activeNav === "Projects" && (homeConstruction.isError || referenceData.isError));
 
   function navigate(nav: NavItem, month = selectedMonth, nextYear = year) {
@@ -293,11 +300,13 @@ export function App() {
             dashboard={dashboard.data}
             expenseYear={expenseYear.data}
             liabilities={liabilities.data}
-            loading={dashboard.isLoading || liabilities.isLoading}
+            loading={dashboard.isLoading || liabilities.isLoading || wealth.isLoading}
             money={money}
             onOpenLedger={openCurrentLedger}
             onOpenExpenses={() => navigate("Expenses")}
             onOpenLiabilities={() => navigate("Liabilities")}
+            onOpenGoals={() => navigate("Goals")}
+            wealth={wealth.data}
           />
         ) : activeNav === "Expenses" ? (
           <ExpensesView
@@ -326,6 +335,8 @@ export function App() {
           />
         ) : activeNav === "Liabilities" ? (
           <LiabilitiesView data={liabilities.data} loading={liabilities.isLoading} money={money} />
+        ) : activeNav === "Goals" ? (
+          <GoalsView data={wealth.data} loading={wealth.isLoading} money={money} />
         ) : activeNav === "Projects" ? (
           <ProjectsView
             data={homeConstruction.data}
@@ -353,7 +364,7 @@ export function App() {
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {(["Home", "Ledger", "Expenses", "Liabilities", "Projects"] as const).map((item) => (
+        {(["Home", "Ledger", "Expenses", "Liabilities", "Goals", "Projects"] as const).map((item) => (
           <button
             className={activeNav === item ? "active" : ""}
             key={item}

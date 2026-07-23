@@ -2,13 +2,16 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   budgetMonthResponseSchema,
+  createFinancialGoalRequestSchema,
   createLiabilityRequestSchema,
   createManualTransactionRequestSchema,
   createPersonalBalanceRequestSchema,
   createProjectCommitmentRequestSchema,
   createProjectExpenseRequestSchema,
+  createWealthAssetRequestSchema,
   dashboardResponseSchema,
   expenseYearResponseSchema,
+  financialGoalSchema,
   healthResponseSchema,
   ledgerResponseSchema,
   ledgerTransactionSchema,
@@ -23,10 +26,15 @@ import {
   replaceTransactionRequestSchema,
   reverseTransactionRequestSchema,
   updateBudgetMonthRequestSchema,
+  updateFinancialGoalRequestSchema,
+  updateGoalAllocationsRequestSchema,
   updateLiabilityRequestSchema,
   updatePersonalBalanceRequestSchema,
   updateProjectCommitmentRequestSchema,
   updateProjectExpenseRequestSchema,
+  updateWealthAssetRequestSchema,
+  wealthAssetSchema,
+  wealthResponseSchema,
   yearSchema,
 } from "@finance-hero/contracts";
 import {
@@ -37,6 +45,7 @@ import {
   openEncryptedDatabase,
   ProjectRepository,
   seedAcceptedOpeningSnapshot,
+  WealthRepository,
 } from "@finance-hero/database";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { ServerConfig } from "./config";
@@ -53,6 +62,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   let budgets: BudgetRepository | undefined;
   let ledger: LedgerRepository | undefined;
   let projects: ProjectRepository | undefined;
+  let wealth: WealthRepository | undefined;
 
   if (options.config.databaseKey) {
     mkdirSync(options.config.dataDirectory, { recursive: true, mode: 0o700 });
@@ -65,6 +75,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     ledger = new LedgerRepository(database);
     budgets = new BudgetRepository(database);
     projects = new ProjectRepository(database, ledger);
+    wealth = new WealthRepository(database);
   }
 
   app.get("/api/v1/health", async (_request, reply) => {
@@ -303,6 +314,90 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       const message = error instanceof Error ? error.message : "Project commitment could not be updated.";
       const statusCode = message === "Project commitment does not exist." ? 404 : 400;
       return reply.code(statusCode).send({ error: { code: "INVALID_PROJECT_COMMITMENT", message } });
+    }
+  });
+
+  app.get("/api/v1/wealth", async (_request, reply) => {
+    if (!wealth) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    return reply.header("cache-control", "no-store").send(wealthResponseSchema.parse(wealth.getWealth()));
+  });
+
+  app.post("/api/v1/wealth/assets", async (request, reply) => {
+    if (!wealth) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const input = createWealthAssetRequestSchema.parse(request.body);
+      return reply.code(201).send(wealthAssetSchema.parse(wealth.createAsset(input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Wealth asset could not be created.";
+      return reply.code(400).send({ error: { code: "INVALID_WEALTH_ASSET", message } });
+    }
+  });
+
+  app.patch("/api/v1/wealth/assets/:id", async (request, reply) => {
+    if (!wealth) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+      const input = updateWealthAssetRequestSchema.parse(request.body);
+      return reply.send(wealthAssetSchema.parse(wealth.updateAsset(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Wealth asset could not be updated.";
+      const statusCode = message === "Wealth asset does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_WEALTH_ASSET", message } });
+    }
+  });
+
+  app.post("/api/v1/wealth/goals", async (request, reply) => {
+    if (!wealth) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const input = createFinancialGoalRequestSchema.parse(request.body);
+      return reply.code(201).send(financialGoalSchema.parse(wealth.createGoal(input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Financial goal could not be created.";
+      return reply.code(400).send({ error: { code: "INVALID_FINANCIAL_GOAL", message } });
+    }
+  });
+
+  app.patch("/api/v1/wealth/goals/:id", async (request, reply) => {
+    if (!wealth) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+      const input = updateFinancialGoalRequestSchema.parse(request.body);
+      return reply.send(financialGoalSchema.parse(wealth.updateGoal(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Financial goal could not be updated.";
+      const statusCode = message === "Financial goal does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_FINANCIAL_GOAL", message } });
+    }
+  });
+
+  app.put("/api/v1/wealth/goals/:id/allocations", async (request, reply) => {
+    if (!wealth) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+      const input = updateGoalAllocationsRequestSchema.parse(request.body);
+      return reply.send(financialGoalSchema.parse(wealth.updateGoalAllocations(id, input.allocations)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Goal allocations could not be updated.";
+      const statusCode = message === "Financial goal does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_GOAL_ALLOCATION", message } });
     }
   });
 

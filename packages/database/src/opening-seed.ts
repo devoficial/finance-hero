@@ -513,6 +513,74 @@ function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
   seed.immediate();
 }
 
+function seedAcceptedWealthSnapshot(database: FinanceHeroDatabase): void {
+  const seed = database.connection.transaction(() => {
+    const existing = database.connection
+      .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_wealth_seed'")
+      .get() as { value: string } | undefined;
+    if (existing) {
+      return;
+    }
+
+    database.connection
+      .prepare(`
+        INSERT OR IGNORE INTO asset_positions
+          (id, account_id, asset_type, baseline_value_paise, monthly_contribution_paise,
+           restricted, as_of_date, valued_at, source_ref, updated_at)
+        VALUES
+          ('asset-savings', 'account-savings', 'savings', 11880800, 0, 0,
+           '2026-07-18', ?, ?, ?),
+          ('asset-pluxee', 'account-pluxee', 'restricted_wallet', 880000, 0, 1,
+           '2026-07-18', ?, 'Owner-confirmed Pluxee food coupon balance', ?)
+      `)
+      .run(SEEDED_AT, `${SOURCE}:Savings`, SEEDED_AT, SEEDED_AT, SEEDED_AT);
+
+    database.connection
+      .prepare(`
+        INSERT OR IGNORE INTO financial_goals
+          (id, name, target_paise, target_date, priority, status, monthly_contribution_paise,
+           notes, source_ref, created_at, updated_at)
+        VALUES
+          ('goal-emergency-fund', 'Emergency fund', 56583000, NULL, 1, 'active', 0,
+           'Imported from the accepted EF need in the finance tracker.',
+           ?, ?, ?)
+      `)
+      .run(`${SOURCE}:EF need`, SEEDED_AT, SEEDED_AT);
+
+    database.connection
+      .prepare(`
+        INSERT OR IGNORE INTO goal_allocations
+          (goal_id, asset_position_id, amount_paise, effective_date, updated_at)
+        VALUES ('goal-emergency-fund', 'asset-savings', 11880800, '2026-07-18', ?)
+      `)
+      .run(SEEDED_AT);
+
+    database.connection
+      .prepare(`
+        INSERT INTO audit_events
+          (id, action, entity_type, entity_id, detail_json, created_at)
+        VALUES (?, 'wealth_snapshot.imported', 'migration', 'accepted-wealth',
+                ?, ?)
+      `)
+      .run(
+        randomUUID(),
+        JSON.stringify({
+          savingsPaise: 11880800,
+          pluxeePaise: 880000,
+          emergencyFundTargetPaise: 56583000,
+        }),
+        SEEDED_AT,
+      );
+    database.connection
+      .prepare(`
+        INSERT INTO app_metadata (key, value, updated_at)
+        VALUES ('accepted_wealth_seed', '2026-07-v1', ?)
+      `)
+      .run(SEEDED_AT);
+  });
+  seed.immediate();
+}
+
 export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void {
   seedAcceptedLiabilities(database);
   seedAcceptedPersonalBalances(database);
@@ -606,4 +674,5 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
 
   seed.immediate();
   seedAcceptedExpenseHistory(database);
+  seedAcceptedWealthSnapshot(database);
 }

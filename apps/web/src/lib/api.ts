@@ -1,15 +1,19 @@
 import {
   type BudgetMonthResponse,
   budgetMonthResponseSchema,
+  type CreateFinancialGoalRequest,
   type CreateLiabilityRequest,
   type CreateManualTransactionRequest,
   type CreatePersonalBalanceRequest,
   type CreateProjectCommitmentRequest,
   type CreateProjectExpenseRequest,
+  type CreateWealthAssetRequest,
   type DashboardResponse,
   dashboardResponseSchema,
   type ExpenseYearResponse,
   expenseYearResponseSchema,
+  type FinancialGoal,
+  financialGoalSchema,
   type HealthResponse,
   healthResponseSchema,
   type LedgerResponse,
@@ -32,10 +36,17 @@ import {
   type ReverseTransactionRequest,
   referenceDataResponseSchema,
   type UpdateBudgetMonthRequest,
+  type UpdateFinancialGoalRequest,
+  type UpdateGoalAllocationsRequest,
   type UpdateLiabilityRequest,
   type UpdatePersonalBalanceRequest,
   type UpdateProjectCommitmentRequest,
   type UpdateProjectExpenseRequest,
+  type UpdateWealthAssetRequest,
+  type WealthAsset,
+  type WealthResponse,
+  wealthAssetSchema,
+  wealthResponseSchema,
 } from "@finance-hero/contracts";
 
 async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
@@ -212,6 +223,75 @@ export async function updateProjectCommitment(
     throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
   }
   return projectCommitmentSchema.parse(await response.json());
+}
+
+export async function getWealth(signal?: AbortSignal): Promise<WealthResponse> {
+  return wealthResponseSchema.parse(await getJson("/api/v1/wealth", signal));
+}
+
+export async function createWealthAsset(input: CreateWealthAssetRequest): Promise<WealthAsset> {
+  const response = await fetch("/api/v1/wealth/assets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return wealthAssetSchema.parse(await response.json());
+}
+
+export async function updateWealthAsset(id: string, input: UpdateWealthAssetRequest): Promise<WealthAsset> {
+  const response = await fetch(`/api/v1/wealth/assets/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return wealthAssetSchema.parse(await response.json());
+}
+
+export async function createFinancialGoal(input: CreateFinancialGoalRequest): Promise<FinancialGoal> {
+  const response = await fetch("/api/v1/wealth/goals", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return financialGoalSchema.parse(await response.json());
+}
+
+export async function updateFinancialGoal(id: string, input: UpdateFinancialGoalRequest): Promise<FinancialGoal> {
+  const response = await fetch(`/api/v1/wealth/goals/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return financialGoalSchema.parse(await response.json());
+}
+
+export async function updateGoalAllocations(id: string, input: UpdateGoalAllocationsRequest): Promise<FinancialGoal> {
+  const response = await fetch(`/api/v1/wealth/goals/${encodeURIComponent(id)}/allocations`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return financialGoalSchema.parse(await response.json());
 }
 
 export async function createManualTransaction(input: CreateManualTransactionRequest): Promise<LedgerTransaction> {

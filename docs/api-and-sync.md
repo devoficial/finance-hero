@@ -94,6 +94,17 @@ The implemented budget endpoint uses the same versioned prefix:
 | `GET` | `/budgets/:month` | Income plan, category allocations, actual spend, and remaining amounts |
 | `PUT` | `/budgets/:month` | Audit and apply an income/category allocation revision |
 
+The implemented Savings and Goals vertical slice exposes:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/wealth` | Asset valuations, allocations, goals, forecasts, and net worth |
+| `POST` | `/wealth/assets` | Add a savings, investment, emergency-fund, or restricted-wallet position |
+| `PATCH` | `/wealth/assets/:id` | Update an asset valuation or monthly contribution |
+| `POST` | `/wealth/goals` | Add a financial goal |
+| `PATCH` | `/wealth/goals/:id` | Update target, status, priority, or contribution assumptions |
+| `PUT` | `/wealth/goals/:id/allocations` | Earmark existing unrestricted assets without moving ledger money |
+
 ### Operations
 
 | Method | Path | Purpose |

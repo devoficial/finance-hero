@@ -21,7 +21,9 @@ duplicating storage. The Home Construction project now preserves all 144 migrate
 tracks vendor estimates and pending commitments, highlights unreconciled rows, and posts new
 manual project expenses into the unified ledger. Full statement importing and automated source
 synchronization remain later phases. Monthly income plans and category allocations are editable,
-audited, and immediately drive dashboard budget percentages and danger thresholds.
+audited, and immediately drive dashboard budget percentages and danger thresholds. The Savings
+and Goals module tracks editable asset valuations, the restricted Pluxee wallet, goal allocations,
+completion forecasts, and net worth without counting earmarked savings twice.
 
 See [development setup](docs/development.md) to install, run, and verify the workspace.
 For the shortest owner-focused instructions, use [Run Finance Hero locally](LOCAL_SETUP.md).

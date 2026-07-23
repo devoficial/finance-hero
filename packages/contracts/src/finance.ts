@@ -253,6 +253,107 @@ export const updateProjectCommitmentRequestSchema = z
   })
   .refine((value) => Object.keys(value).length > 0, { message: "At least one commitment field is required." });
 
+export const wealthAssetTypeSchema = z.enum(["savings", "investment", "emergency_fund", "restricted_wallet"]);
+
+export const wealthAssetSchema = z.object({
+  id: z.string(),
+  accountId: z.string(),
+  name: z.string(),
+  assetType: wealthAssetTypeSchema,
+  institution: z.string().nullable(),
+  currentValuePaise: paiseSchema.nonnegative(),
+  monthlyContributionPaise: paiseSchema.nonnegative(),
+  allocatedPaise: paiseSchema.nonnegative(),
+  availablePaise: paiseSchema.nonnegative(),
+  restricted: z.boolean(),
+  asOfDate: localDateSchema,
+});
+
+export const financialGoalSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  targetPaise: paiseSchema.positive(),
+  targetDate: localDateSchema.nullable(),
+  priority: z.number().int().min(1).max(5),
+  status: z.enum(["active", "achieved", "paused"]),
+  monthlyContributionPaise: paiseSchema.nonnegative(),
+  notes: z.string().nullable(),
+  allocatedPaise: paiseSchema.nonnegative(),
+  remainingPaise: paiseSchema.nonnegative(),
+  progressPercentage: z.number().int().min(0).max(100),
+  forecastDate: localDateSchema.nullable(),
+  onTrack: z.boolean().nullable(),
+  allocations: z.array(
+    z.object({
+      assetId: z.string(),
+      assetName: z.string(),
+      amountPaise: paiseSchema.nonnegative(),
+    }),
+  ),
+});
+
+export const wealthResponseSchema = z.object({
+  totalAssetPaise: paiseSchema.nonnegative(),
+  savingsPaise: paiseSchema.nonnegative(),
+  investmentPaise: paiseSchema.nonnegative(),
+  restrictedWalletPaise: paiseSchema.nonnegative(),
+  allocatablePaise: paiseSchema.nonnegative(),
+  allocatedPaise: paiseSchema.nonnegative(),
+  debtPaise: paiseSchema.nonnegative(),
+  receivablePaise: paiseSchema.nonnegative(),
+  netWorthPaise: paiseSchema,
+  monthlyContributionPaise: paiseSchema.nonnegative(),
+  assets: z.array(wealthAssetSchema),
+  goals: z.array(financialGoalSchema),
+});
+
+const wealthAssetFieldsSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  assetType: wealthAssetTypeSchema,
+  institution: z.string().trim().max(160).nullable().optional(),
+  currentValuePaise: paiseSchema.nonnegative(),
+  monthlyContributionPaise: paiseSchema.nonnegative(),
+  restricted: z.boolean(),
+  asOfDate: localDateSchema,
+});
+
+export const createWealthAssetRequestSchema = wealthAssetFieldsSchema.superRefine((value, context) => {
+  if (value.assetType === "restricted_wallet" && !value.restricted) {
+    context.addIssue({ code: "custom", message: "Restricted wallets must remain restricted." });
+  }
+});
+export const updateWealthAssetRequestSchema = wealthAssetFieldsSchema
+  .partial()
+  .superRefine((value, context) => {
+    if (value.assetType === "restricted_wallet" && !value.restricted) {
+      context.addIssue({ code: "custom", message: "Restricted wallets must remain restricted." });
+    }
+  })
+  .refine((value) => Object.keys(value).length > 0, { message: "At least one asset field is required." });
+
+export const createFinancialGoalRequestSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  targetPaise: paiseSchema.positive(),
+  targetDate: localDateSchema.nullable().optional(),
+  priority: z.number().int().min(1).max(5),
+  status: z.enum(["active", "achieved", "paused"]).default("active"),
+  monthlyContributionPaise: paiseSchema.nonnegative(),
+  notes: z.string().trim().max(500).nullable().optional(),
+});
+
+export const updateFinancialGoalRequestSchema = createFinancialGoalRequestSchema
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, { message: "At least one goal field is required." });
+
+export const updateGoalAllocationsRequestSchema = z.object({
+  allocations: z.array(
+    z.object({
+      assetId: z.string().min(1),
+      amountPaise: paiseSchema.nonnegative(),
+    }),
+  ),
+});
+
 export const createPersonalBalanceRequestSchema = z.object({
   name: z.string().trim().min(1).max(160),
   direction: z.enum(["payable", "receivable"]),
@@ -364,3 +465,11 @@ export type CreateProjectExpenseRequest = z.infer<typeof createProjectExpenseReq
 export type UpdateProjectExpenseRequest = z.infer<typeof updateProjectExpenseRequestSchema>;
 export type CreateProjectCommitmentRequest = z.infer<typeof createProjectCommitmentRequestSchema>;
 export type UpdateProjectCommitmentRequest = z.infer<typeof updateProjectCommitmentRequestSchema>;
+export type WealthAsset = z.infer<typeof wealthAssetSchema>;
+export type FinancialGoal = z.infer<typeof financialGoalSchema>;
+export type WealthResponse = z.infer<typeof wealthResponseSchema>;
+export type CreateWealthAssetRequest = z.infer<typeof createWealthAssetRequestSchema>;
+export type UpdateWealthAssetRequest = z.infer<typeof updateWealthAssetRequestSchema>;
+export type CreateFinancialGoalRequest = z.infer<typeof createFinancialGoalRequestSchema>;
+export type UpdateFinancialGoalRequest = z.infer<typeof updateFinancialGoalRequestSchema>;
+export type UpdateGoalAllocationsRequest = z.infer<typeof updateGoalAllocationsRequestSchema>;

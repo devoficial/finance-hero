@@ -1,14 +1,21 @@
-import type { DashboardResponse, ExpenseYearResponse, LiabilitiesResponse } from "@finance-hero/contracts";
+import type {
+  DashboardResponse,
+  ExpenseYearResponse,
+  LiabilitiesResponse,
+  WealthResponse,
+} from "@finance-hero/contracts";
 
 interface DashboardViewProps {
   dataCutoffMonth: string;
   dashboard?: DashboardResponse;
   expenseYear?: ExpenseYearResponse;
   liabilities?: LiabilitiesResponse;
+  wealth?: WealthResponse;
   loading: boolean;
   money: (paise: number) => string;
   onOpenLedger: () => void;
   onOpenExpenses: () => void;
+  onOpenGoals: () => void;
   onOpenLiabilities: () => void;
 }
 
@@ -29,13 +36,15 @@ export function DashboardView({
   dashboard,
   expenseYear,
   liabilities,
+  wealth,
   loading,
   money,
   onOpenLedger,
   onOpenExpenses,
+  onOpenGoals,
   onOpenLiabilities,
 }: DashboardViewProps) {
-  if (loading || !dashboard || !liabilities || !expenseYear) {
+  if (loading || !dashboard || !liabilities || !expenseYear || !wealth) {
     return <section className="panel loading-panel">Calculating your financial position...</section>;
   }
 
@@ -48,6 +57,9 @@ export function DashboardView({
   const surplusRate = percentage(available, income);
   const receivableCoverage = percentage(liabilities.receivablePaise, liabilities.otherLiabilityPaise);
   const snowballTarget = liabilities.liabilities.find((liability) => liability.snowballRank === 1);
+  const goalTargetPaise = wealth.goals.reduce((sum, goal) => sum + goal.targetPaise, 0);
+  const goalAllocatedPaise = wealth.goals.reduce((sum, goal) => sum + goal.allocatedPaise, 0);
+  const goalFundingPercentage = percentage(goalAllocatedPaise, goalTargetPaise);
   const largestLiability = liabilities.liabilities
     .filter((liability) => liability.status === "active")
     .toSorted((left, right) => right.currentPrincipalPaise - left.currentPrincipalPaise)[0];
@@ -135,6 +147,27 @@ export function DashboardView({
             <small>bank debt plus personal balances</small>
           </div>
         </article>
+      </section>
+
+      <section className="dashboard-wealth-strip" aria-label="Savings and goal position">
+        <div>
+          <span>TRACKED ASSETS</span>
+          <strong>{money(wealth.totalAssetPaise)}</strong>
+          <small>{money(wealth.restrictedWalletPaise)} is restricted wallet value</small>
+        </div>
+        <div>
+          <span>GOAL CAPITAL</span>
+          <strong>{money(goalAllocatedPaise)}</strong>
+          <small>{goalFundingPercentage}% of combined goal targets</small>
+        </div>
+        <div className={wealth.netWorthPaise < 0 ? "negative" : ""}>
+          <span>TRACKED NET WORTH</span>
+          <strong>{money(wealth.netWorthPaise)}</strong>
+          <small>Assets and receivables less all obligations</small>
+        </div>
+        <button onClick={onOpenGoals} type="button">
+          Open savings &amp; goals
+        </button>
       </section>
 
       <section className="dashboard-chart-grid">
