@@ -161,12 +161,31 @@ groceries/eating out, transport, shopping/personal care, learning/subscriptions/
 medical, insurance, and miscellaneous. EMI, project, savings/investment, lending, and emergency
 fund rows map to their accounting treatment rather than regular expense by label alone.
 
-The accepted monthly expense total is the source sheet's `Current expenses Total`: regular
-categories (including the separate historical `Outside food` row) plus `Bills (Credit cards)`.
-Until detailed card statements replace the aggregates, credit-card bills are retained in a
-non-budget `Credit card bills (unreconciled)` category. They appear in tracked spending but are
-excluded from regular-budget alerts. EMI, construction, savings/lending, loan repayment, and
-emergency-fund rows are not included in this total.
+The accepted monthly card total is the source sheet's `Overall Total Expenses`, displayed in the
+app as `cash outflow`. It reconciles `Current expenses Total` with all populated `EMIS`, home
+construction, extra savings/lending/payback, loan repayment/charge, and emergency-fund rows.
+September 2025 predates the overall-total layout, so its available Rs 50,723 total is retained.
+
+Until detailed statements replace the aggregates, credit-card bills are retained in a non-budget
+`Credit card bills (unreconciled)` debt-payment category. Mixed loan repayment/charge rows remain
+explicitly unallocated debt payments rather than being presented as consumption expense. These
+classifications preserve the source cash total while keeping regular-budget alerts accurate.
+
+Reconciled source cash outflows are:
+
+| Month | Overall cash outflow |
+| --- | ---: |
+| 2025-09 | Rs 50,723 |
+| 2025-10 | Rs 3,21,189 |
+| 2025-11 | Rs 3,74,705 |
+| 2025-12 | Rs 3,95,637 |
+| 2026-01 | Rs 4,94,576 |
+| 2026-02 | Rs 4,20,688 |
+| 2026-03 | Rs 2,78,463 |
+| 2026-04 | Rs 4,89,588 |
+| 2026-05 | Rs 4,09,091 |
+| 2026-06 | Rs 2,39,534 |
+| 2026-07 | Rs 2,04,592 |
 
 Unknown or mixed labels remain `Needs Review`; the migration must not force a misleading category.
 

@@ -3,7 +3,7 @@ import type { FinanceHeroDatabase } from "./encrypted-database";
 
 const SOURCE = "Finance tracker 2025:accepted opening snapshot";
 const SEEDED_AT = "2026-07-18T12:00:00.000Z";
-const EXPENSE_HISTORY_SEED = "2026-07-v3";
+const EXPENSE_HISTORY_SEED = "2026-07-v4";
 const CREDIT_CARD_BILLS_CATEGORY = [
   "category-credit-card-bills",
   "Credit card bills (unreconciled)",
@@ -13,6 +13,9 @@ const CASH_FLOW_CATEGORIES = [
   ["category-emi-payments", "EMIs / debt payments", "debt_payment"],
   ["category-home-construction", "Home construction", "asset_building"],
   ["category-loan-charges", "Loan and bank charges", "nonbudget_expense"],
+  ["category-extra-savings", "Extra savings / lending / payback", "savings_investment"],
+  ["category-loan-repayments", "Loan repayments / bank charges (unallocated)", "debt_payment"],
+  ["category-emergency-fund", "Emergency fund", "savings_investment"],
 ] as const;
 
 const categories = [
@@ -85,6 +88,9 @@ const historicalExpenseMonths = [
       ["category-insurance", 1818],
       ["category-misc", 29121],
       ["category-credit-card-bills", 49279],
+      ["category-emi-payments", 99628],
+      ["category-home-construction", 25689],
+      ["category-loan-repayments", 6175],
     ],
   },
   {
@@ -102,6 +108,10 @@ const historicalExpenseMonths = [
       ["category-learning", 9327],
       ["category-insurance", 1818],
       ["category-misc", 6741],
+      ["category-emi-payments", 101454],
+      ["category-home-construction", 50000],
+      ["category-loan-repayments", 130029],
+      ["category-emergency-fund", 9071],
     ],
   },
   {
@@ -122,6 +132,9 @@ const historicalExpenseMonths = [
       ["category-insurance", 1818],
       ["category-misc", 9068],
       ["category-credit-card-bills", 91554],
+      ["category-emi-payments", 99846],
+      ["category-home-construction", 59000],
+      ["category-loan-repayments", 20030],
     ],
   },
   {
@@ -142,6 +155,9 @@ const historicalExpenseMonths = [
       ["category-insurance", 1818],
       ["category-misc", 4865],
       ["category-credit-card-bills", 23750],
+      ["category-emi-payments", 112410],
+      ["category-home-construction", 227000],
+      ["category-extra-savings", 50000],
     ],
   },
   {
@@ -162,6 +178,8 @@ const historicalExpenseMonths = [
       ["category-insurance", 6813],
       ["category-misc", 6573],
       ["category-credit-card-bills", 106411],
+      ["category-emi-payments", 113504],
+      ["category-extra-savings", 100000],
     ],
   },
   {
@@ -182,6 +200,8 @@ const historicalExpenseMonths = [
       ["category-insurance", 1813],
       ["category-misc", 12618],
       ["category-credit-card-bills", 27744],
+      ["category-emi-payments", 111185],
+      ["category-home-construction", 54000],
     ],
   },
   {
@@ -202,6 +222,10 @@ const historicalExpenseMonths = [
       ["category-insurance", 1813],
       ["category-misc", 9119],
       ["category-credit-card-bills", 119338],
+      ["category-emi-payments", 113504],
+      ["category-home-construction", 177588],
+      ["category-extra-savings", 5000],
+      ["category-loan-repayments", 4720],
     ],
   },
   {
@@ -222,6 +246,10 @@ const historicalExpenseMonths = [
       ["category-insurance", 1813],
       ["category-misc", 100],
       ["category-credit-card-bills", 58505],
+      ["category-emi-payments", 112731],
+      ["category-home-construction", 24920],
+      ["category-extra-savings", 18682],
+      ["category-loan-repayments", 116950],
     ],
   },
   {
@@ -241,6 +269,8 @@ const historicalExpenseMonths = [
       ["category-insurance", 2052],
       ["category-misc", 4785],
       ["category-credit-card-bills", 66794],
+      ["category-emi-payments", 113504],
+      ["category-home-construction", 22610],
     ],
   },
   {

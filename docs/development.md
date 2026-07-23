@@ -78,8 +78,9 @@ setup and will not use a checked-in environment variable.
 
 ## Current limitations
 
-- Monthly `Current expenses Total` aggregates from September 2025 through July 2026 are reconciled
-  in the encrypted ledger. Full transaction-by-transaction Google Sheet migration is still pending.
+- Monthly `Overall Total Expenses` cash outflows from September 2025 through July 2026 are
+  reconciled in the encrypted ledger, including debt payments, construction, savings, repayment,
+  and emergency-fund rows. Full transaction-by-transaction Google Sheet migration is still pending.
 - Dashboard totals, category spending, institutional debts, personal payables, receivables, and the ledger are live
   database queries. Personal balances can be created with `POST /api/v1/personal-balances` and edited or settled
   with `PATCH /api/v1/personal-balances/:id`.

@@ -53,7 +53,13 @@ describe("ledger repository", () => {
       7959800, 9396000, 8372100, 6762500, 7549000, 3457400, 4590800, 0, 0, 0, 0, 0,
     ]);
     expect(expenseYear.months.map((month) => month.cashOutflowPaise)).toEqual([
-      10516600, 20718400, 11327800, 18877600, 13580800, 10342000, 20459200, 0, 0, 0, 0, 0,
+      49457600, 42068800, 27846300, 48958800, 40909100, 23953400, 20459200, 0, 0, 0, 0, 0,
+    ]);
+    expect(expenseYear.months.map((month) => month.debtPaymentPaise)).toEqual([
+      13616000, 21991500, 13892900, 23756200, 28818600, 18029800, 11273100, 0, 0, 0, 0, 0,
+    ]);
+    expect(expenseYear.months.map((month) => month.assetBuildingPaise)).toEqual([
+      27881800, 10681300, 5581300, 18440100, 4541500, 2466200, 4595300, 0, 0, 0, 0, 0,
     ]);
     expect(expenseYear.months.slice(0, 7).every((month) => month.transactionCount > 0)).toBe(true);
 
@@ -65,14 +71,21 @@ describe("ledger repository", () => {
       0, 0, 0, 0, 0, 0, 0, 0, 5072300, 13860000, 8233300, 12338900,
     ]);
     expect(priorYear.months.map((month) => month.cashOutflowPaise)).toEqual([
-      0, 0, 0, 0, 0, 0, 0, 0, 5072300, 18969700, 8415100, 21676100,
+      0, 0, 0, 0, 0, 0, 0, 0, 5072300, 32118900, 37470500, 39563700,
+    ]);
+    expect(priorYear.months.map((month) => month.debtPaymentPaise)).toEqual([
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 15508200, 23148300, 21143000,
+    ]);
+    expect(priorYear.months.map((month) => month.assetBuildingPaise)).toEqual([
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 2750700, 6088900, 6081800,
     ]);
 
     const june = repository.getDashboard("2026-06", 30);
     expect(june.regularExpensePaise).toBe(3457400);
     expect(june.totalExpensePaise).toBe(3457400);
-    expect(june.cashOutflowPaise).toBe(10342000);
-    expect(june.debtPaymentPaise).toBe(6679400);
+    expect(june.cashOutflowPaise).toBe(23953400);
+    expect(june.debtPaymentPaise).toBe(18029800);
+    expect(june.assetBuildingPaise).toBe(2466200);
     expect(june.expenseCategories.find((item) => item.id === "category-credit-card-bills")?.amountPaise).toBe(6679400);
 
     const liabilities = repository.getLiabilities();

@@ -48,7 +48,7 @@ describe("local API", () => {
     expect(expenseYear.statusCode).toBe(200);
     const parsedExpenseYear = expenseYearResponseSchema.parse(expenseYear.json());
     expect(parsedExpenseYear.months).toHaveLength(12);
-    expect(parsedExpenseYear.months[5]?.cashOutflowPaise).toBe(10342000);
+    expect(parsedExpenseYear.months[5]?.cashOutflowPaise).toBe(23953400);
 
     const liabilities = await app.inject({ method: "GET", url: "/api/v1/liabilities" });
     expect(liabilities.statusCode).toBe(200);
