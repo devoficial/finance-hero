@@ -22,4 +22,17 @@ describe("dashboard routes", () => {
     expect(routeHash("Expenses", "2025-12", "2025")).toBe("#/expenses?month=2025-12&year=2025");
     expect(parseRouteHash("#/projects?month=2026-07&year=2026").nav).toBe("Projects");
   });
+
+  it("keeps Home on the latest populated month while preserving future planning periods", () => {
+    expect(parseRouteHash("#/home?month=2026-08&year=2026")).toEqual({
+      nav: "Home",
+      month: "2026-07",
+      year: "2026",
+    });
+    expect(parseRouteHash("#/expenses?month=2026-08&year=2026")).toEqual({
+      nav: "Expenses",
+      month: "2026-08",
+      year: "2026",
+    });
+  });
 });

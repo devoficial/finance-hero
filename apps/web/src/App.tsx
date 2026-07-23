@@ -40,6 +40,14 @@ const navSlugs: Record<NavItem, string> = {
   Projects: "projects",
 };
 
+function normalizeRoutePeriod(nav: NavItem, month: string, year: string) {
+  if (nav === "Home" && month > ACTIVE_MONTH) {
+    return { month: ACTIVE_MONTH, year: ACTIVE_MONTH.slice(0, 4) };
+  }
+
+  return { month, year };
+}
+
 export function parseRouteHash(hash: string): { nav: NavItem; month: string; year: string } {
   const [path = "home", search = ""] = hash.replace(/^#\/?/, "").split("?");
   const nav = navItems.find((item) => navSlugs[item] === path) ?? "Home";
@@ -48,7 +56,7 @@ export function parseRouteHash(hash: string): { nav: NavItem; month: string; yea
   const month = routeMonth && /^\d{4}-\d{2}$/.test(routeMonth) ? routeMonth : ACTIVE_MONTH;
   const routeYear = params.get("year");
   const year = routeYear && /^\d{4}$/.test(routeYear) ? routeYear : month.slice(0, 4);
-  return { nav, month, year };
+  return { nav, ...normalizeRoutePeriod(nav, month, year) };
 }
 
 function readRoute() {
@@ -101,12 +109,17 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!window.location.hash) {
-      window.history.replaceState(null, "", routeHash(initialRoute.nav, initialRoute.month, initialRoute.year));
+    const initialHash = routeHash(initialRoute.nav, initialRoute.month, initialRoute.year);
+    if (window.location.hash !== initialHash) {
+      window.history.replaceState(null, "", initialHash);
     }
 
     const syncFromLocation = () => {
       const route = readRoute();
+      const canonicalHash = routeHash(route.nav, route.month, route.year);
+      if (window.location.hash !== canonicalHash) {
+        window.history.replaceState(null, "", canonicalHash);
+      }
       setActiveNav(route.nav);
       setSelectedMonth(route.month);
       setYear(route.year);
@@ -155,13 +168,14 @@ export function App() {
     (activeNav === "Projects" && (homeConstruction.isError || referenceData.isError));
 
   function navigate(nav: NavItem, month = selectedMonth, nextYear = year) {
-    const hash = routeHash(nav, month, nextYear);
+    const period = normalizeRoutePeriod(nav, month, nextYear);
+    const hash = routeHash(nav, period.month, period.year);
     if (window.location.hash !== hash) {
       window.history.pushState(null, "", hash);
     }
     setActiveNav(nav);
-    setSelectedMonth(month);
-    setYear(nextYear);
+    setSelectedMonth(period.month);
+    setYear(period.year);
   }
 
   function openCurrentLedger() {
@@ -225,7 +239,8 @@ export function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">
-              {activeNav.toUpperCase()} / LIVE LOCAL DATA / {visiblePeriod}
+              {activeNav.toUpperCase()} / {activeNav === "Home" ? "LATEST DATA CUTOFF" : "LIVE LOCAL DATA"} /{" "}
+              {visiblePeriod}
             </p>
             <h1>{activeNav === "Home" ? `${greeting}, Debasis.` : activeNav}</h1>
           </div>
