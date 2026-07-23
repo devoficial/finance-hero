@@ -13,10 +13,12 @@ No hosted application or paid service is required.
 Phase 2 tracker implementation is underway. The repository contains an installable React
 PWA, a local Fastify API, an encrypted SQLite ledger, shared contracts, an offline-cache
 skeleton, and balanced-ledger domain tests. The dashboard and ledger now read the accepted
-opening snapshot from encrypted storage, and manual transactions are persisted through the
-same balanced journal. Dedicated dashboard, 12-month expenses, ledger, and liability views
-project that data without duplicating storage. Full workbook migration and automated importing
-remain later phases.
+opening snapshot from encrypted storage. Manual expenses, income, category splits, own-account
+transfers, credit-card purchases, and debt-principal payments use the same balanced journal.
+Posted corrections reverse and replace the original entry instead of mutating history. Dedicated
+dashboard, 12-month expenses, searchable ledger, and liability views project that data without
+duplicating storage. Full statement importing and automated source synchronization remain later
+phases.
 
 See [development setup](docs/development.md) to install, run, and verify the workspace.
 For the shortest owner-focused instructions, use [Run Finance Hero locally](LOCAL_SETUP.md).

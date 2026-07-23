@@ -238,9 +238,7 @@ export function App() {
                   ? "In Safari, tap Share and choose Add to Home Screen."
                   : "Use your browser menu and choose Install Finance Hero or Add to Dock."}
               </strong>
-              <small>
-                Installation requires a secure local address. On this Mac, 127.0.0.1 is treated as secure.
-              </small>
+              <small>Installation requires a secure local address. On this Mac, 127.0.0.1 is treated as secure.</small>
             </div>
             <button onClick={() => setShowInstallHelp(false)} type="button">
               Close

@@ -771,13 +771,120 @@ h2 {
   color: #a13524;
   font-size: 11px;
 }
+.correction-note {
+  margin: -6px 0 16px;
+  border-left: 4px solid var(--yellow);
+  background: #eee7d6;
+  padding: 10px 12px;
+  color: #596a62;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.split-toggle {
+  align-self: end;
+  min-height: 42px;
+  border: 1px dashed var(--green);
+  background: transparent;
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 700;
+}
+.split-editor {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: #ece8dc;
+  padding: 10px;
+}
+.split-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #64736c;
+  font:
+    9px "DM Mono",
+    monospace;
+}
+.split-editor-head button,
+.split-cancel,
+.split-row button {
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+.split-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(90px, 0.6fr) auto;
+  gap: 6px;
+}
+.split-row input,
+.split-row select {
+  min-height: 38px;
+}
+.split-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+.split-cancel {
+  justify-self: start;
+  padding: 4px 0;
+}
+.form-actions {
+  display: flex;
+  gap: 8px;
+}
+.form-actions .post-button {
+  flex: 1;
+}
+.cancel-button {
+  min-height: 46px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
 .table-scroll {
   max-width: 100%;
   overflow-x: auto;
 }
+.ledger-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) repeat(4, minmax(105px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.ledger-filters label {
+  display: grid;
+  gap: 4px;
+}
+.ledger-filters label > span {
+  color: #64736c;
+  font:
+    8px "DM Mono",
+    monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ledger-filters input,
+.ledger-filters select {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: #f8f5ed;
+  color: var(--ink);
+  padding: 7px 8px;
+  font-size: 9px;
+}
 .ledger-panel table {
   width: 100%;
-  min-width: 760px;
+  min-width: 1080px;
   border-collapse: collapse;
   font-size: 10px;
 }
@@ -808,7 +915,7 @@ h2 {
   margin-top: 2px;
   color: #75817c;
 }
-.ledger-panel td:last-child {
+.ledger-panel td:nth-last-child(2) {
   text-align: right;
   font:
     10px "DM Mono",
@@ -820,6 +927,73 @@ h2 {
 .ledger-panel td.income {
   color: #267151;
 }
+.ledger-panel td.transfer {
+  color: #4b665b;
+}
+.ledger-panel td.debt_payment {
+  color: #a13524;
+}
+.kind-pill {
+  display: inline-block;
+  margin-bottom: 3px;
+  padding: 3px 5px;
+  background: #e2ded2;
+  color: #596a62;
+  font:
+    8px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.kind-pill.income {
+  background: #c6dfd4;
+  color: var(--green);
+}
+.kind-pill.debt_payment {
+  background: #f1ccc4;
+  color: #9f3424;
+}
+.ledger-panel td:nth-child(3) small,
+.ledger-panel td:nth-child(4) small {
+  display: block;
+  color: #75817c;
+}
+.ledger-actions {
+  display: flex;
+  gap: 5px;
+}
+.ledger-actions button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--green);
+  cursor: pointer;
+  padding: 5px 6px;
+  font-size: 8px;
+  font-weight: 700;
+}
+.ledger-actions .danger-action {
+  border-color: #d99a8e;
+  color: #a13524;
+}
+.reversed-row td {
+  color: #7b827f;
+  text-decoration: line-through;
+  opacity: 0.72;
+}
+.reversed-row td:last-child,
+.reversed-row .reversed-label {
+  text-decoration: none;
+}
+.reversed-label {
+  color: #a13524;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.empty-ledger {
+  padding: 42px 12px;
+  color: #75817c;
+  text-align: center;
+}
 .origin-pill {
   padding: 4px 6px;
   background: #deddd5;
@@ -830,6 +1004,13 @@ h2 {
   text-transform: uppercase;
 }
 .origin-pill.manual {
+  background: #c6dfd4;
+  color: var(--green);
+}
+.origin-pill.manual_expense,
+.origin-pill.manual_income,
+.origin-pill.manual_transfer,
+.origin-pill.manual_debt_payment {
   background: #c6dfd4;
   color: var(--green);
 }
@@ -1846,6 +2027,22 @@ h2 {
   display: none;
 }
 
+@media (max-width: 1400px) {
+  .ledger-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .entry-panel {
+    position: static;
+  }
+  .ledger-panel table {
+    min-width: 900px;
+  }
+  .ledger-panel th:nth-child(5),
+  .ledger-panel td:nth-child(5) {
+    display: none;
+  }
+}
+
 @media (max-width: 1050px) {
   .app-shell {
     grid-template-columns: 190px minmax(0, 1fr);
@@ -1862,6 +2059,23 @@ h2 {
   }
   .entry-panel {
     position: static;
+  }
+  .ledger-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ledger-filters .search-filter {
+    grid-column: 1 / -1;
+  }
+  .ledger-panel th:first-child,
+  .ledger-panel td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: #f8f5ed;
+  }
+  .ledger-panel th:first-child {
+    z-index: 3;
+    background: #deddd5;
   }
   .right-stack {
     grid-template-columns: 1fr 1fr;
@@ -2114,6 +2328,16 @@ h2 {
   }
   .entry-form .span-two {
     grid-column: 1;
+  }
+  .split-row {
+    grid-template-columns: minmax(0, 1fr) 100px;
+  }
+  .split-row button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .form-actions {
+    display: grid;
   }
   .mobile-nav {
     position: fixed;

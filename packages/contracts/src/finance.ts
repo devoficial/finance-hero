@@ -50,11 +50,25 @@ export const ledgerTransactionSchema = z.object({
   occurredOn: localDateSchema,
   payee: z.string(),
   memo: z.string().nullable(),
-  kind: z.enum(["expense", "income"]),
+  kind: z.enum(["expense", "income", "transfer", "debt_payment"]),
+  status: z.enum(["posted", "reversed"]),
   amountPaise: paiseSchema.positive(),
+  accountId: z.string(),
   accountName: z.string(),
+  destinationAccountId: z.string().nullable(),
+  destinationAccountName: z.string().nullable(),
+  categoryId: z.string().nullable(),
   categoryName: z.string().nullable(),
+  splits: z.array(
+    z.object({
+      categoryId: z.string(),
+      categoryName: z.string(),
+      amountPaise: paiseSchema.positive(),
+    }),
+  ),
   origin: z.string(),
+  correctedFromId: z.string().nullable(),
+  canReverse: z.boolean(),
 });
 
 export const ledgerResponseSchema = z.object({
@@ -63,7 +77,14 @@ export const ledgerResponseSchema = z.object({
 });
 
 export const referenceDataResponseSchema = z.object({
-  accounts: z.array(z.object({ id: z.string(), name: z.string() })),
+  accounts: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      accountClass: z.enum(["asset", "liability"]),
+      accountType: z.string(),
+    }),
+  ),
   categories: z.array(z.object({ id: z.string(), name: z.string() })),
 });
 
@@ -159,14 +180,50 @@ export const updateLiabilityRequestSchema = z
   })
   .refine((value) => Object.keys(value).length > 0, { message: "At least one liability field is required." });
 
-export const createManualTransactionRequestSchema = z.object({
-  occurredOn: localDateSchema,
-  payee: z.string().trim().min(1).max(160),
-  memo: z.string().trim().max(500).optional(),
-  kind: z.enum(["expense", "income"]),
+export const transactionSplitInputSchema = z.object({
+  categoryId: z.string().min(1),
   amountPaise: paiseSchema.positive(),
-  assetAccountId: z.string().min(1),
-  categoryId: z.string().min(1).optional(),
+});
+
+export const createManualTransactionRequestSchema = z
+  .object({
+    occurredOn: localDateSchema,
+    payee: z.string().trim().min(1).max(160),
+    memo: z.string().trim().max(500).optional(),
+    kind: z.enum(["expense", "income", "transfer", "debt_payment"]),
+    amountPaise: paiseSchema.positive(),
+    accountId: z.string().min(1),
+    destinationAccountId: z.string().min(1).optional(),
+    categoryId: z.string().min(1).optional(),
+    splits: z.array(transactionSplitInputSchema).min(2).max(20).optional(),
+    idempotencyKey: z.string().min(8).max(200),
+  })
+  .superRefine((value, context) => {
+    if (value.kind === "expense" && !value.categoryId && !value.splits) {
+      context.addIssue({ code: "custom", message: "Expense transactions require a category or split lines." });
+    }
+    if (value.splits) {
+      if (value.kind !== "expense") {
+        context.addIssue({ code: "custom", message: "Only expenses can be split across categories." });
+      }
+      const splitTotal = value.splits.reduce((sum, split) => sum + split.amountPaise, 0);
+      if (splitTotal !== value.amountPaise) {
+        context.addIssue({ code: "custom", message: "Split lines must equal the transaction amount." });
+      }
+    }
+    if (value.kind === "transfer" || value.kind === "debt_payment") {
+      if (!value.destinationAccountId) {
+        context.addIssue({ code: "custom", message: "This transaction requires a destination account." });
+      } else if (value.destinationAccountId === value.accountId) {
+        context.addIssue({ code: "custom", message: "Source and destination accounts must be different." });
+      }
+    }
+  });
+
+export const replaceTransactionRequestSchema = createManualTransactionRequestSchema;
+
+export const reverseTransactionRequestSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
   idempotencyKey: z.string().min(8).max(200),
 });
 
@@ -184,3 +241,5 @@ export type CreatePersonalBalanceRequest = z.infer<typeof createPersonalBalanceR
 export type UpdatePersonalBalanceRequest = z.infer<typeof updatePersonalBalanceRequestSchema>;
 export type UpdateLiabilityRequest = z.infer<typeof updateLiabilityRequestSchema>;
 export type CreateManualTransactionRequest = z.infer<typeof createManualTransactionRequestSchema>;
+export type ReplaceTransactionRequest = z.infer<typeof replaceTransactionRequestSchema>;
+export type ReverseTransactionRequest = z.infer<typeof reverseTransactionRequestSchema>;

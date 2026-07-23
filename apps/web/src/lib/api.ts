@@ -19,6 +19,7 @@ import {
   type PersonalBalance,
   personalBalanceSchema,
   type ReferenceDataResponse,
+  type ReverseTransactionRequest,
   referenceDataResponseSchema,
   type UpdateLiabilityRequest,
   type UpdatePersonalBalanceRequest,
@@ -136,5 +137,36 @@ export async function createManualTransaction(input: CreateManualTransactionRequ
     throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
   }
 
+  return ledgerTransactionSchema.parse(await response.json());
+}
+
+export async function reverseTransaction(id: string, input: ReverseTransactionRequest): Promise<LedgerTransaction> {
+  const response = await fetch(`/api/v1/transactions/${encodeURIComponent(id)}/reverse`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return ledgerTransactionSchema.parse(await response.json());
+}
+
+export async function replaceTransaction(
+  id: string,
+  input: CreateManualTransactionRequest,
+): Promise<LedgerTransaction> {
+  const response = await fetch(`/api/v1/transactions/${encodeURIComponent(id)}/replace`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
   return ledgerTransactionSchema.parse(await response.json());
 }

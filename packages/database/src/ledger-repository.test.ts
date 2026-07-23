@@ -109,7 +109,7 @@ describe("ledger repository", () => {
       payee: "Test Cafe",
       kind: "expense" as const,
       amountPaise: 42500,
-      assetAccountId: "account-primary-bank",
+      accountId: "account-primary-bank",
       categoryId: "category-groceries",
       idempotencyKey: "test-device:1",
     };
@@ -125,6 +125,139 @@ describe("ledger repository", () => {
       .prepare("SELECT SUM(amount_paise) AS total FROM postings WHERE transaction_id = ?")
       .get(first.id) as { total: number };
     expect(balance.total).toBe(0);
+    database.close();
+  });
+
+  it("posts one split expense without duplicating the ledger row", () => {
+    const { database, repository } = createRepository();
+    const transaction = repository.createManualTransaction({
+      occurredOn: "2026-07-20",
+      payee: "Split supermarket bill",
+      kind: "expense",
+      amountPaise: 100000,
+      accountId: "account-primary-bank",
+      splits: [
+        { categoryId: "category-groceries", amountPaise: 70000 },
+        { categoryId: "category-household", amountPaise: 30000 },
+      ],
+      idempotencyKey: "test-device:split-1",
+    });
+
+    expect(transaction.splits).toEqual([
+      { categoryId: "category-groceries", categoryName: "Groceries and food", amountPaise: 70000 },
+      { categoryId: "category-household", categoryName: "Cook, maid and gas", amountPaise: 30000 },
+    ]);
+    expect(repository.listTransactions("2026-07").filter((item) => item.id === transaction.id)).toHaveLength(1);
+    expect(repository.getDashboard("2026-07", 20).regularExpensePaise).toBe(4667200);
+    const balance = database.connection
+      .prepare("SELECT SUM(amount_paise) AS total FROM postings WHERE transaction_id = ?")
+      .get(transaction.id) as { total: number };
+    expect(balance.total).toBe(0);
+    database.close();
+  });
+
+  it("keeps own-account transfers out of expenses", () => {
+    const { database, repository } = createRepository();
+    const before = repository.getDashboard("2026-07", 20);
+    const transfer = repository.createManualTransaction({
+      occurredOn: "2026-07-20",
+      payee: "Move to savings",
+      kind: "transfer",
+      amountPaise: 500000,
+      accountId: "account-primary-bank",
+      destinationAccountId: "account-savings",
+      idempotencyKey: "test-device:transfer-1",
+    });
+
+    expect(transfer.kind).toBe("transfer");
+    expect(transfer.destinationAccountName).toBe("Savings");
+    expect(repository.getDashboard("2026-07", 20).cashOutflowPaise).toBe(before.cashOutflowPaise);
+    database.close();
+  });
+
+  it("updates debt principal and restores it when a debt payment is reversed", () => {
+    const { database, repository } = createRepository();
+    const payment = repository.createManualTransaction({
+      occurredOn: "2026-07-20",
+      payee: "DMI principal payment",
+      kind: "debt_payment",
+      amountPaise: 100000,
+      accountId: "account-primary-bank",
+      destinationAccountId: "account-debt-dmi",
+      idempotencyKey: "test-device:debt-payment-1",
+    });
+
+    expect(payment.kind).toBe("debt_payment");
+    expect(repository.getLiabilities().liabilities.find((item) => item.id === "debt-dmi")?.currentPrincipalPaise).toBe(
+      23714000,
+    );
+    expect(repository.getDashboard("2026-07", 20).debtPaymentPaise).toBe(11373100);
+    const reversed = repository.reverseTransaction(payment.id, {
+      reason: "Test reversal",
+      idempotencyKey: "test-device:debt-payment-reverse-1",
+    });
+    expect(reversed.status).toBe("reversed");
+    expect(repository.getLiabilities().liabilities.find((item) => item.id === "debt-dmi")?.currentPrincipalPaise).toBe(
+      23814000,
+    );
+    expect(repository.getDashboard("2026-07", 20).debtPaymentPaise).toBe(11273100);
+    database.close();
+  });
+
+  it("adds card purchases to the card principal and removes them on reversal", () => {
+    const { database, repository } = createRepository();
+    const purchase = repository.createManualTransaction({
+      occurredOn: "2026-07-20",
+      payee: "Card grocery purchase",
+      kind: "expense",
+      amountPaise: 250000,
+      accountId: "account-debt-icici-card",
+      categoryId: "category-groceries",
+      idempotencyKey: "test-device:card-purchase-1",
+    });
+
+    expect(
+      repository.getLiabilities().liabilities.find((item) => item.id === "debt-icici-card")?.currentPrincipalPaise,
+    ).toBe(3676500);
+    repository.reverseTransaction(purchase.id, {
+      reason: "Card purchase duplicated",
+      idempotencyKey: "test-device:card-purchase-reverse-1",
+    });
+    expect(
+      repository.getLiabilities().liabilities.find((item) => item.id === "debt-icici-card")?.currentPrincipalPaise,
+    ).toBe(3426500);
+    database.close();
+  });
+
+  it("corrects a posted expense by reversing and replacing it", () => {
+    const { database, repository } = createRepository();
+    const original = repository.createManualTransaction({
+      occurredOn: "2026-07-20",
+      payee: "Wrong cafe",
+      kind: "expense",
+      amountPaise: 100000,
+      accountId: "account-primary-bank",
+      categoryId: "category-groceries",
+      idempotencyKey: "test-device:correction-original",
+    });
+    const replacement = repository.replaceTransaction(original.id, {
+      occurredOn: "2026-07-20",
+      payee: "Correct cafe",
+      kind: "expense",
+      amountPaise: 75000,
+      accountId: "account-primary-bank",
+      categoryId: "category-learning",
+      idempotencyKey: "test-device:correction-replacement",
+    });
+
+    expect(repository.listTransactions("2026-07").find((item) => item.id === original.id)?.status).toBe("reversed");
+    expect(replacement.correctedFromId).toBe(original.id);
+    expect(replacement.categoryName).toBe("Learning and subscriptions");
+    expect(repository.getDashboard("2026-07", 20).regularExpensePaise).toBe(4642200);
+    const audits = database.connection
+      .prepare("SELECT action FROM audit_events WHERE entity_id = ? ORDER BY created_at, rowid")
+      .all(original.id) as Array<{ action: string }>;
+    expect(audits.map((item) => item.action)).toContain("transaction.replaced");
     database.close();
   });
 

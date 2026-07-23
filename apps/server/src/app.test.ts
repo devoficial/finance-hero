@@ -122,7 +122,7 @@ describe("local API", () => {
         payee: "Test Pharmacy",
         kind: "expense",
         amountPaise: 79900,
-        assetAccountId: "account-primary-bank",
+        accountId: "account-primary-bank",
         categoryId: "category-medical",
         idempotencyKey: "api-test-device:1",
       },

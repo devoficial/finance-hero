@@ -35,6 +35,9 @@ FINANCE_HERO_DATABASE_KEY="your-development-key-of-at-least-32-characters" pnpm 
 - Liabilities: `http://127.0.0.1:4317/api/v1/liabilities`
 - Liability update: `PATCH /api/v1/liabilities/:id`
 - Reference data: `http://127.0.0.1:4317/api/v1/reference-data`
+- Manual transaction: `POST /api/v1/transactions/manual`
+- Audited reversal: `POST /api/v1/transactions/:id/reverse`
+- Audited correction: `POST /api/v1/transactions/:id/replace`
 
 Development binds only to loopback. LAN HTTPS, Bonjour discovery, and iPhone certificate
 installation remain a Phase 0 spike and must not be simulated by exposing the HTTP server.

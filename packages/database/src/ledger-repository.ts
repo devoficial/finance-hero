@@ -1,15 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createJournalTransaction, Money } from "@finance-hero/domain";
+import { createJournalTransaction, Money, type PostingInput } from "@finance-hero/domain";
 import type { FinanceHeroDatabase } from "./encrypted-database";
 
 export interface ManualTransactionInput {
   occurredOn: string;
   payee: string;
   memo?: string;
-  kind: "expense" | "income";
+  kind: "expense" | "income" | "transfer" | "debt_payment";
   amountPaise: number;
-  assetAccountId: string;
+  accountId: string;
+  destinationAccountId?: string;
   categoryId?: string;
+  splits?: Array<{ categoryId: string; amountPaise: number }>;
   idempotencyKey: string;
 }
 
@@ -18,11 +20,19 @@ export interface LedgerTransactionRecord {
   occurredOn: string;
   payee: string;
   memo: string | null;
-  kind: "expense" | "income";
+  kind: "expense" | "income" | "transfer" | "debt_payment";
+  status: "posted" | "reversed";
   amountPaise: number;
+  accountId: string;
   accountName: string;
+  destinationAccountId: string | null;
+  destinationAccountName: string | null;
+  categoryId: string | null;
   categoryName: string | null;
+  splits: Array<{ categoryId: string; categoryName: string; amountPaise: number }>;
   origin: string;
+  correctedFromId: string | null;
+  canReverse: boolean;
 }
 
 export interface DashboardRecord {
@@ -52,8 +62,18 @@ export interface DashboardRecord {
 }
 
 export interface ReferenceDataRecord {
-  accounts: Array<{ id: string; name: string }>;
+  accounts: Array<{
+    id: string;
+    name: string;
+    accountClass: "asset" | "liability";
+    accountType: string;
+  }>;
   categories: Array<{ id: string; name: string }>;
+}
+
+export interface ReverseTransactionInput {
+  reason: string;
+  idempotencyKey: string;
 }
 
 export interface ExpenseMonthSummaryRecord {
@@ -186,7 +206,12 @@ export class LedgerRepository {
   getReferenceData(): ReferenceDataRecord {
     return {
       accounts: this.database.connection
-        .prepare("SELECT id, name FROM accounts WHERE account_class = 'asset' AND is_active = 1 ORDER BY name")
+        .prepare(`
+          SELECT id, name, account_class AS accountClass, account_type AS accountType
+          FROM accounts
+          WHERE account_class IN ('asset', 'liability') AND is_active = 1
+          ORDER BY CASE account_class WHEN 'asset' THEN 0 ELSE 1 END, name
+        `)
         .all() as ReferenceDataRecord["accounts"],
       categories: this.database.connection
         .prepare("SELECT id, name FROM categories WHERE budget_eligible = 1 ORDER BY name")
@@ -200,8 +225,18 @@ export class LedgerRepository {
         SELECT t.effective_month AS month,
                COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.alert_eligible = 1 THEN p.amount_paise ELSE 0 END), 0) AS regularExpensePaise,
                COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket NOT IN ('debt_payment', 'asset_building', 'savings_investment') THEN p.amount_paise ELSE 0 END), 0) AS totalExpensePaise,
-               COALESCE(SUM(CASE WHEN a.account_class = 'expense' THEN p.amount_paise ELSE 0 END), 0) AS cashOutflowPaise,
-               COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket = 'debt_payment' THEN p.amount_paise ELSE 0 END), 0) AS debtPaymentPaise,
+               COALESCE(SUM(CASE
+                 WHEN a.account_class = 'expense' THEN p.amount_paise
+                 WHEN t.origin = 'manual_debt_payment' AND a.account_class = 'asset' AND p.amount_paise < 0
+                   THEN -p.amount_paise
+                 ELSE 0
+               END), 0) AS cashOutflowPaise,
+               COALESCE(SUM(CASE
+                 WHEN a.account_class = 'expense' AND c.broad_bucket = 'debt_payment' THEN p.amount_paise
+                 WHEN t.origin = 'manual_debt_payment' AND a.account_class = 'asset' AND p.amount_paise < 0
+                   THEN -p.amount_paise
+                 ELSE 0
+               END), 0) AS debtPaymentPaise,
                COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket IN ('asset_building', 'savings_investment') THEN p.amount_paise ELSE 0 END), 0) AS assetBuildingPaise,
                COUNT(DISTINCT t.id) AS transactionCount
         FROM journal_transactions t
@@ -567,8 +602,18 @@ export class LedgerRepository {
           COALESCE(SUM(CASE WHEN a.account_class = 'income' THEN -p.amount_paise ELSE 0 END), 0) AS actualIncomePaise,
           COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.alert_eligible = 1 THEN p.amount_paise ELSE 0 END), 0) AS regularExpensePaise,
           COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket NOT IN ('debt_payment', 'asset_building', 'savings_investment') THEN p.amount_paise ELSE 0 END), 0) AS totalExpensePaise,
-          COALESCE(SUM(CASE WHEN a.account_class = 'expense' THEN p.amount_paise ELSE 0 END), 0) AS cashOutflowPaise,
-          COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket = 'debt_payment' THEN p.amount_paise ELSE 0 END), 0) AS debtPaymentPaise,
+          COALESCE(SUM(CASE
+            WHEN a.account_class = 'expense' THEN p.amount_paise
+            WHEN t.origin = 'manual_debt_payment' AND a.account_class = 'asset' AND p.amount_paise < 0
+              THEN -p.amount_paise
+            ELSE 0
+          END), 0) AS cashOutflowPaise,
+          COALESCE(SUM(CASE
+            WHEN a.account_class = 'expense' AND c.broad_bucket = 'debt_payment' THEN p.amount_paise
+            WHEN t.origin = 'manual_debt_payment' AND a.account_class = 'asset' AND p.amount_paise < 0
+              THEN -p.amount_paise
+            ELSE 0
+          END), 0) AS debtPaymentPaise,
           COALESCE(SUM(CASE WHEN a.account_class = 'expense' AND c.broad_bucket IN ('asset_building', 'savings_investment') THEN p.amount_paise ELSE 0 END), 0) AS assetBuildingPaise,
           COUNT(DISTINCT t.id) AS transactionCount
         FROM journal_transactions t
@@ -662,30 +707,120 @@ export class LedgerRepository {
   }
 
   listTransactions(month: string): LedgerTransactionRecord[] {
-    return this.database.connection
+    const rows = this.database.connection
       .prepare(`
-        SELECT t.id, t.occurred_on AS occurredOn, t.payee, t.memo, t.origin,
-               CASE WHEN a.account_class = 'income' THEN 'income' ELSE 'expense' END AS kind,
-               ABS(p.amount_paise) AS amountPaise,
-               COALESCE(asset.name, 'Migration opening balance') AS accountName,
-               c.name AS categoryName
+        SELECT t.id, t.occurred_on AS occurredOn, t.payee, t.memo, t.status, t.origin,
+               t.source_ref AS sourceRef
         FROM journal_transactions t
-        JOIN postings p ON p.transaction_id = t.id
-        JOIN accounts a ON a.id = p.account_id AND a.account_class IN ('income', 'expense')
-        LEFT JOIN categories c ON c.id = p.category_id
-        LEFT JOIN postings asset_posting ON asset_posting.transaction_id = t.id AND asset_posting.id <> p.id
-        LEFT JOIN accounts asset ON asset.id = asset_posting.account_id AND asset.account_class = 'asset'
-        WHERE t.effective_month = ? AND t.status = 'posted'
+        WHERE t.effective_month = ? AND t.origin <> 'reversal'
         ORDER BY t.occurred_on DESC, t.created_at DESC
       `)
-      .all(month) as LedgerTransactionRecord[];
+      .all(month) as TransactionRow[];
+    return rows.map((row) => this.hydrateTransaction(row));
   }
 
-  createManualTransaction(input: ManualTransactionInput): LedgerTransactionRecord {
-    const requestHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
+  private getTransaction(id: string): LedgerTransactionRecord {
+    const row = this.database.connection
+      .prepare(`
+        SELECT id, occurred_on AS occurredOn, payee, memo, status, origin, source_ref AS sourceRef
+        FROM journal_transactions
+        WHERE id = ? AND origin <> 'reversal'
+      `)
+      .get(id) as TransactionRow | undefined;
+    if (!row) {
+      throw new Error("Transaction does not exist.");
+    }
+    return this.hydrateTransaction(row);
+  }
+
+  private hydrateTransaction(row: TransactionRow): LedgerTransactionRecord {
+    const postings = this.database.connection
+      .prepare(`
+        SELECT p.account_id AS accountId, a.name AS accountName, a.account_class AS accountClass,
+               p.category_id AS categoryId, c.name AS categoryName, p.amount_paise AS amountPaise
+        FROM postings p
+        JOIN accounts a ON a.id = p.account_id
+        LEFT JOIN categories c ON c.id = p.category_id
+        WHERE p.transaction_id = ?
+        ORDER BY p.created_at, p.rowid
+      `)
+      .all(row.id) as PostingRow[];
+
+    const expensePostings = postings.filter((posting) => posting.accountClass === "expense" && posting.amountPaise > 0);
+    const incomePostings = postings.filter((posting) => posting.accountClass === "income" && posting.amountPaise < 0);
+    const isTransfer = row.origin === "manual_transfer";
+    const isDebtPayment = row.origin === "manual_debt_payment";
+    const kind: LedgerTransactionRecord["kind"] = isTransfer
+      ? "transfer"
+      : isDebtPayment
+        ? "debt_payment"
+        : incomePostings.length > 0
+          ? "income"
+          : "expense";
+    const sourcePosting =
+      kind === "expense"
+        ? postings.find(
+            (posting) =>
+              posting.accountClass !== "expense" && posting.accountClass !== "income" && posting.amountPaise < 0,
+          )
+        : kind === "income"
+          ? postings.find(
+              (posting) =>
+                posting.accountClass !== "expense" && posting.accountClass !== "income" && posting.amountPaise > 0,
+            )
+          : postings.find((posting) => posting.amountPaise < 0);
+    const destinationPosting =
+      kind === "transfer" || kind === "debt_payment" ? postings.find((posting) => posting.amountPaise > 0) : undefined;
+    if (!sourcePosting) {
+      throw new Error(`Transaction ${row.id} does not have a usable account posting.`);
+    }
+
+    const splits = expensePostings
+      .filter(
+        (
+          posting,
+        ): posting is PostingRow & {
+          categoryId: string;
+          categoryName: string;
+        } => Boolean(posting.categoryId && posting.categoryName),
+      )
+      .map((posting) => ({
+        categoryId: posting.categoryId,
+        categoryName: posting.categoryName,
+        amountPaise: posting.amountPaise,
+      }));
+    const amountPaise =
+      kind === "expense"
+        ? expensePostings.reduce((sum, posting) => sum + posting.amountPaise, 0)
+        : kind === "income"
+          ? incomePostings.reduce((sum, posting) => sum + Math.abs(posting.amountPaise), 0)
+          : Math.abs(sourcePosting.amountPaise);
+
+    return {
+      id: row.id,
+      occurredOn: row.occurredOn,
+      payee: row.payee,
+      memo: row.memo,
+      kind,
+      status: row.status,
+      amountPaise,
+      accountId: sourcePosting.accountId,
+      accountName: sourcePosting.accountName,
+      destinationAccountId: destinationPosting?.accountId ?? null,
+      destinationAccountName: destinationPosting?.accountName ?? null,
+      categoryId: splits.length === 1 ? (splits[0]?.categoryId ?? null) : null,
+      categoryName: splits.length === 1 ? (splits[0]?.categoryName ?? null) : null,
+      splits,
+      origin: row.origin,
+      correctedFromId: row.sourceRef && row.origin.startsWith("manual_") ? row.sourceRef : null,
+      canReverse: row.status === "posted",
+    };
+  }
+
+  private getIdempotentResponse(key: string, requestHash: string): LedgerTransactionRecord | null {
     const existing = this.database.connection
       .prepare("SELECT request_hash AS requestHash, response_json AS responseJson FROM idempotency_keys WHERE key = ?")
-      .get(input.idempotencyKey) as { requestHash: string; responseJson: string } | undefined;
+      .get(key) as { requestHash: string; responseJson: string } | undefined;
 
     if (existing) {
       if (existing.requestHash !== requestHash) {
@@ -693,93 +828,350 @@ export class LedgerRepository {
       }
       return JSON.parse(existing.responseJson) as LedgerTransactionRecord;
     }
+    return null;
+  }
 
-    const asset = this.database.connection
-      .prepare("SELECT id, name FROM accounts WHERE id = ? AND account_class = 'asset' AND is_active = 1")
-      .get(input.assetAccountId) as { id: string; name: string } | undefined;
-    if (!asset) {
-      throw new Error("Selected asset account does not exist.");
+  private validateManualInput(input: ManualTransactionInput): {
+    account: AccountRow;
+    destination?: AccountRow;
+    splits: Array<{ categoryId: string; categoryName: string; amountPaise: number }>;
+  } {
+    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise <= 0) {
+      throw new Error("Transaction amount must be a positive whole number of paise.");
+    }
+    const account = this.database.connection
+      .prepare(`
+        SELECT id, name, account_class AS accountClass
+        FROM accounts
+        WHERE id = ? AND account_class IN ('asset', 'liability') AND is_active = 1
+      `)
+      .get(input.accountId) as AccountRow | undefined;
+    if (!account) {
+      throw new Error("Selected account does not exist.");
     }
 
-    const category = input.categoryId
-      ? (this.database.connection.prepare("SELECT id, name FROM categories WHERE id = ?").get(input.categoryId) as
-          | { id: string; name: string }
-          | undefined)
+    const destination = input.destinationAccountId
+      ? (this.database.connection
+          .prepare(`
+            SELECT id, name, account_class AS accountClass
+            FROM accounts
+            WHERE id = ? AND account_class IN ('asset', 'liability') AND is_active = 1
+          `)
+          .get(input.destinationAccountId) as AccountRow | undefined)
       : undefined;
-    if (input.kind === "expense" && !category) {
-      throw new Error("Expense transactions require a category.");
+    if (input.destinationAccountId && !destination) {
+      throw new Error("Selected destination account does not exist.");
+    }
+    if (destination?.id === account.id) {
+      throw new Error("Source and destination accounts must be different.");
+    }
+    if (input.kind === "income" && account.accountClass !== "asset") {
+      throw new Error("Income must be received into an asset account.");
+    }
+    if (input.kind === "transfer" && (account.accountClass !== "asset" || destination?.accountClass !== "asset")) {
+      throw new Error("Transfers require two asset accounts.");
+    }
+    if (
+      input.kind === "debt_payment" &&
+      (account.accountClass !== "asset" || destination?.accountClass !== "liability")
+    ) {
+      throw new Error("Debt payments require an asset source and liability destination.");
     }
 
+    const rawSplits =
+      input.splits ?? (input.categoryId ? [{ categoryId: input.categoryId, amountPaise: input.amountPaise }] : []);
+    if (input.kind === "expense" && rawSplits.length === 0) {
+      throw new Error("Expense transactions require a category or split lines.");
+    }
+    if (input.kind !== "expense" && rawSplits.length > 0) {
+      throw new Error("Only expense transactions can use categories.");
+    }
+    if (
+      rawSplits.reduce((sum, split) => sum + split.amountPaise, 0) !==
+      (input.kind === "expense" ? input.amountPaise : 0)
+    ) {
+      throw new Error("Split lines must equal the transaction amount.");
+    }
+    const categories = new Map(
+      rawSplits.map((split) => {
+        const category = this.database.connection
+          .prepare("SELECT id, name FROM categories WHERE id = ?")
+          .get(split.categoryId) as { id: string; name: string } | undefined;
+        if (!category) {
+          throw new Error("Selected category does not exist.");
+        }
+        if (!Number.isSafeInteger(split.amountPaise) || split.amountPaise <= 0) {
+          throw new Error("Split amounts must be positive whole numbers of paise.");
+        }
+        return [category.id, category.name] as const;
+      }),
+    );
+    const splits = rawSplits.map((split) => ({
+      ...split,
+      categoryName: categories.get(split.categoryId) as string,
+    }));
+
+    return { account, destination, splits };
+  }
+
+  private insertManualTransaction(input: ManualTransactionInput, correctedFromId?: string): LedgerTransactionRecord {
+    const { account, destination, splits } = this.validateManualInput(input);
     const id = randomUUID();
     const now = new Date().toISOString();
-    const counterpartyAccountId = input.kind === "expense" ? "account-regular-expense" : "account-salary-income";
-    const counterpartyAmount = input.kind === "expense" ? input.amountPaise : -input.amountPaise;
-    const assetAmount = -counterpartyAmount;
+    const origin =
+      input.kind === "transfer"
+        ? "manual_transfer"
+        : input.kind === "debt_payment"
+          ? "manual_debt_payment"
+          : input.kind === "income"
+            ? "manual_income"
+            : "manual_expense";
+    const journalPostings: PostingInput[] =
+      input.kind === "expense"
+        ? [
+            ...splits.map((split) => ({
+              accountId: "account-regular-expense",
+              accountClass: "expense" as const,
+              amount: Money.fromPaise(BigInt(split.amountPaise)),
+              categoryId: split.categoryId,
+            })),
+            {
+              accountId: account.id,
+              accountClass: account.accountClass,
+              amount: Money.fromPaise(BigInt(-input.amountPaise)),
+            },
+          ]
+        : input.kind === "income"
+          ? [
+              {
+                accountId: "account-salary-income",
+                accountClass: "income" as const,
+                amount: Money.fromPaise(BigInt(-input.amountPaise)),
+              },
+              {
+                accountId: account.id,
+                accountClass: account.accountClass,
+                amount: Money.fromPaise(BigInt(input.amountPaise)),
+              },
+            ]
+          : [
+              {
+                accountId: account.id,
+                accountClass: account.accountClass,
+                amount: Money.fromPaise(BigInt(-input.amountPaise)),
+              },
+              {
+                accountId: destination?.id as string,
+                accountClass: destination?.accountClass as "asset" | "liability",
+                amount: Money.fromPaise(BigInt(input.amountPaise)),
+              },
+            ];
 
     createJournalTransaction({
       id,
       occurredOn: input.occurredOn,
       payee: input.payee,
       memo: input.memo,
-      postings: [
-        {
-          accountId: counterpartyAccountId,
-          accountClass: input.kind === "expense" ? "expense" : "income",
-          amount: Money.fromPaise(BigInt(counterpartyAmount)),
-          categoryId: category?.id,
-        },
-        {
-          accountId: asset.id,
-          accountClass: "asset",
-          amount: Money.fromPaise(BigInt(assetAmount)),
-        },
-      ],
+      postings: journalPostings,
     });
 
-    const result: LedgerTransactionRecord = {
-      id,
-      occurredOn: input.occurredOn,
-      payee: input.payee.trim(),
-      memo: input.memo?.trim() || null,
-      kind: input.kind,
-      amountPaise: input.amountPaise,
-      accountName: asset.name,
-      categoryName: category?.name ?? null,
-      origin: "manual",
-    };
+    this.database.connection
+      .prepare(`
+        INSERT INTO journal_transactions
+          (id, occurred_on, effective_month, payee, memo, status, origin, source_ref, created_at)
+        VALUES (?, ?, ?, ?, ?, 'posted', ?, ?, ?)
+      `)
+      .run(
+        id,
+        input.occurredOn,
+        input.occurredOn.slice(0, 7),
+        input.payee.trim(),
+        input.memo?.trim() || null,
+        origin,
+        correctedFromId ?? null,
+        now,
+      );
+    const insertPosting = this.database.connection.prepare(`
+      INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    for (const posting of journalPostings) {
+      insertPosting.run(
+        randomUUID(),
+        id,
+        posting.accountId,
+        posting.categoryId ?? null,
+        Number(posting.amount.paise),
+        now,
+      );
+    }
+    const liabilityMovementAccount =
+      input.kind === "debt_payment" && destination
+        ? destination
+        : input.kind === "expense" && account.accountClass === "liability"
+          ? account
+          : undefined;
+    if (liabilityMovementAccount) {
+      const debt = this.database.connection
+        .prepare(`
+          SELECT id, current_principal_paise AS currentPrincipalPaise
+          FROM debts WHERE account_id = ?
+        `)
+        .get(liabilityMovementAccount.id) as { id: string; currentPrincipalPaise: number } | undefined;
+      if (debt) {
+        const nextPrincipal =
+          input.kind === "debt_payment"
+            ? Math.max(0, debt.currentPrincipalPaise - input.amountPaise)
+            : debt.currentPrincipalPaise + input.amountPaise;
+        this.database.connection
+          .prepare("UPDATE debts SET current_principal_paise = ?, updated_at = ? WHERE id = ?")
+          .run(nextPrincipal, now, debt.id);
+        this.database.connection
+          .prepare(`
+            INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+            VALUES (?, ?, 'debt', ?, ?, ?)
+          `)
+          .run(
+            randomUUID(),
+            input.kind === "debt_payment" ? "debt.payment_posted" : "debt.card_purchase_posted",
+            debt.id,
+            JSON.stringify({
+              transactionId: id,
+              beforePrincipalPaise: debt.currentPrincipalPaise,
+              afterPrincipalPaise: nextPrincipal,
+            }),
+            now,
+          );
+      }
+    }
+    this.database.connection
+      .prepare(`
+        INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+        VALUES (?, 'transaction.created', 'journal_transaction', ?, ?, ?)
+      `)
+      .run(
+        randomUUID(),
+        id,
+        JSON.stringify({ origin, amountPaise: input.amountPaise, correctedFromId: correctedFromId ?? null }),
+        now,
+      );
+    return this.getTransaction(id);
+  }
 
+  createManualTransaction(input: ManualTransactionInput): LedgerTransactionRecord {
+    const requestHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
+    const existing = this.getIdempotentResponse(input.idempotencyKey, requestHash);
+    if (existing) {
+      return existing;
+    }
+
+    let result: LedgerTransactionRecord | undefined;
     const write = this.database.connection.transaction(() => {
+      result = this.insertManualTransaction(input);
+      this.database.connection
+        .prepare(`
+          INSERT INTO idempotency_keys (key, request_hash, response_json, created_at)
+          VALUES (?, ?, ?, ?)
+        `)
+        .run(input.idempotencyKey, requestHash, JSON.stringify(result), new Date().toISOString());
+    });
+    write.immediate();
+    if (!result) {
+      throw new Error("Transaction could not be created.");
+    }
+    return result;
+  }
+
+  reverseTransaction(id: string, input: ReverseTransactionInput): LedgerTransactionRecord {
+    const requestHash = createHash("sha256")
+      .update(JSON.stringify({ id, ...input }))
+      .digest("hex");
+    const existingResponse = this.getIdempotentResponse(input.idempotencyKey, requestHash);
+    if (existingResponse) {
+      return existingResponse;
+    }
+
+    let result: LedgerTransactionRecord | undefined;
+    const write = this.database.connection.transaction(() => {
+      const existing = this.getTransaction(id);
+      if (!existing.canReverse) {
+        throw new Error("Only a posted transaction can be reversed.");
+      }
+      const now = new Date().toISOString();
+      const reversalId = randomUUID();
+      const postings = this.database.connection
+        .prepare(
+          "SELECT account_id AS accountId, category_id AS categoryId, amount_paise AS amountPaise FROM postings WHERE transaction_id = ?",
+        )
+        .all(id) as Array<{ accountId: string; categoryId: string | null; amountPaise: number }>;
+      const total = postings.reduce((sum, posting) => sum + posting.amountPaise, 0);
+      if (total !== 0) {
+        throw new Error("The original transaction is not balanced and cannot be reversed.");
+      }
       this.database.connection
         .prepare(`
           INSERT INTO journal_transactions
             (id, occurred_on, effective_month, payee, memo, status, origin, source_ref, created_at)
-          VALUES (?, ?, ?, ?, ?, 'posted', 'manual', NULL, ?)
-        `)
-        .run(id, input.occurredOn, input.occurredOn.slice(0, 7), result.payee, result.memo, now);
-      this.database.connection
-        .prepare(`
-          INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
-          VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, NULL, ?, ?)
+          VALUES (?, ?, ?, ?, ?, 'reversed', 'reversal', ?, ?)
         `)
         .run(
-          randomUUID(),
+          reversalId,
+          existing.occurredOn,
+          existing.occurredOn.slice(0, 7),
+          `Reversal: ${existing.payee}`,
+          input.reason.trim(),
           id,
-          counterpartyAccountId,
-          category?.id ?? null,
-          counterpartyAmount,
-          now,
-          randomUUID(),
-          id,
-          asset.id,
-          assetAmount,
           now,
         );
+      const insertPosting = this.database.connection.prepare(`
+        INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      for (const posting of postings) {
+        insertPosting.run(randomUUID(), reversalId, posting.accountId, posting.categoryId, -posting.amountPaise, now);
+      }
+      this.database.connection.prepare("UPDATE journal_transactions SET status = 'reversed' WHERE id = ?").run(id);
+
+      if (existing.kind === "debt_payment" && existing.destinationAccountId) {
+        const debt = this.database.connection
+          .prepare("SELECT id, current_principal_paise AS currentPrincipalPaise FROM debts WHERE account_id = ?")
+          .get(existing.destinationAccountId) as { id: string; currentPrincipalPaise: number } | undefined;
+        if (debt) {
+          const nextPrincipal = debt.currentPrincipalPaise + existing.amountPaise;
+          this.database.connection
+            .prepare("UPDATE debts SET current_principal_paise = ?, updated_at = ? WHERE id = ?")
+            .run(nextPrincipal, now, debt.id);
+          this.database.connection
+            .prepare(`
+              INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+              VALUES (?, 'debt.payment_reversed', 'debt', ?, ?, ?)
+            `)
+            .run(randomUUID(), debt.id, JSON.stringify({ transactionId: id, nextPrincipal }), now);
+        }
+      } else if (existing.kind === "expense") {
+        const debt = this.database.connection
+          .prepare("SELECT id, current_principal_paise AS currentPrincipalPaise FROM debts WHERE account_id = ?")
+          .get(existing.accountId) as { id: string; currentPrincipalPaise: number } | undefined;
+        if (debt) {
+          const nextPrincipal = Math.max(0, debt.currentPrincipalPaise - existing.amountPaise);
+          this.database.connection
+            .prepare("UPDATE debts SET current_principal_paise = ?, updated_at = ? WHERE id = ?")
+            .run(nextPrincipal, now, debt.id);
+          this.database.connection
+            .prepare(`
+              INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+              VALUES (?, 'debt.card_purchase_reversed', 'debt', ?, ?, ?)
+            `)
+            .run(randomUUID(), debt.id, JSON.stringify({ transactionId: id, nextPrincipal }), now);
+        }
+      }
       this.database.connection
         .prepare(`
           INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
-          VALUES (?, 'transaction.created', 'journal_transaction', ?, ?, ?)
+          VALUES (?, 'transaction.reversed', 'journal_transaction', ?, ?, ?)
         `)
-        .run(randomUUID(), id, JSON.stringify({ origin: "manual", amountPaise: input.amountPaise }), now);
+        .run(randomUUID(), id, JSON.stringify({ reversalId, reason: input.reason.trim() }), now);
+      result = this.getTransaction(id);
       this.database.connection
         .prepare(`
           INSERT INTO idempotency_keys (key, request_hash, response_json, created_at)
@@ -788,7 +1180,71 @@ export class LedgerRepository {
         .run(input.idempotencyKey, requestHash, JSON.stringify(result), now);
     });
     write.immediate();
-
+    if (!result) {
+      throw new Error("Transaction could not be reversed.");
+    }
     return result;
   }
+
+  replaceTransaction(id: string, input: ManualTransactionInput): LedgerTransactionRecord {
+    const requestHash = createHash("sha256")
+      .update(JSON.stringify({ id, ...input }))
+      .digest("hex");
+    const existingResponse = this.getIdempotentResponse(input.idempotencyKey, requestHash);
+    if (existingResponse) {
+      return existingResponse;
+    }
+
+    let replacement: LedgerTransactionRecord | undefined;
+    const write = this.database.connection.transaction(() => {
+      this.reverseTransaction(id, {
+        reason: "Corrected with a replacement transaction.",
+        idempotencyKey: `${input.idempotencyKey}:reverse`,
+      });
+      replacement = this.insertManualTransaction(input, id);
+      const now = new Date().toISOString();
+      this.database.connection
+        .prepare(`
+          INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+          VALUES (?, 'transaction.replaced', 'journal_transaction', ?, ?, ?)
+        `)
+        .run(randomUUID(), id, JSON.stringify({ replacementId: replacement.id }), now);
+      this.database.connection
+        .prepare(`
+          INSERT INTO idempotency_keys (key, request_hash, response_json, created_at)
+          VALUES (?, ?, ?, ?)
+        `)
+        .run(input.idempotencyKey, requestHash, JSON.stringify(replacement), now);
+    });
+    write.immediate();
+    if (!replacement) {
+      throw new Error("Transaction could not be replaced.");
+    }
+    return replacement;
+  }
+}
+
+interface TransactionRow {
+  id: string;
+  occurredOn: string;
+  payee: string;
+  memo: string | null;
+  status: "posted" | "reversed";
+  origin: string;
+  sourceRef: string | null;
+}
+
+interface PostingRow {
+  accountId: string;
+  accountName: string;
+  accountClass: "asset" | "liability" | "income" | "expense" | "equity";
+  categoryId: string | null;
+  categoryName: string | null;
+  amountPaise: number;
+}
+
+interface AccountRow {
+  id: string;
+  name: string;
+  accountClass: "asset" | "liability";
 }

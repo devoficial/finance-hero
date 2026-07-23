@@ -8,11 +8,14 @@ import {
   expenseYearResponseSchema,
   healthResponseSchema,
   ledgerResponseSchema,
+  ledgerTransactionSchema,
   liabilitiesResponseSchema,
   liabilitySchema,
   monthSchema,
   personalBalanceSchema,
   referenceDataResponseSchema,
+  replaceTransactionRequestSchema,
+  reverseTransactionRequestSchema,
   updateLiabilityRequestSchema,
   updatePersonalBalanceRequestSchema,
   yearSchema,
@@ -199,10 +202,42 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
     try {
       const input = createManualTransactionRequestSchema.parse(request.body);
-      return reply.code(201).send(ledger.createManualTransaction(input));
+      return reply.code(201).send(ledgerTransactionSchema.parse(ledger.createManualTransaction(input)));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Transaction could not be created.";
       return reply.code(400).send({ error: { code: "INVALID_TRANSACTION", message } });
+    }
+  });
+
+  app.post("/api/v1/transactions/:id/reverse", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+      const input = reverseTransactionRequestSchema.parse(request.body);
+      return reply.send(ledgerTransactionSchema.parse(ledger.reverseTransaction(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Transaction could not be reversed.";
+      const statusCode = message === "Transaction does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_TRANSACTION_REVERSAL", message } });
+    }
+  });
+
+  app.post("/api/v1/transactions/:id/replace", async (request, reply) => {
+    if (!ledger) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+      const input = replaceTransactionRequestSchema.parse(request.body);
+      return reply.send(ledgerTransactionSchema.parse(ledger.replaceTransaction(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Transaction could not be corrected.";
+      const statusCode = message === "Transaction does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_TRANSACTION_REPLACEMENT", message } });
     }
   });
 

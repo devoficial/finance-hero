@@ -517,6 +517,16 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
   seedAcceptedPersonalBalances(database);
 
   const seed = database.connection.transaction(() => {
+    const insertAccount = database.connection.prepare(`
+      INSERT OR IGNORE INTO accounts
+        (id, name, account_class, account_type, institution, is_active, created_at)
+      VALUES (?, ?, ?, ?, ?, 1, ?)
+    `);
+    // Operational accounts remain additive so existing local databases receive new account types safely.
+    insertAccount.run("account-primary-bank", "Primary salary account", "asset", "bank", null, SEEDED_AT);
+    insertAccount.run("account-savings", "Savings", "asset", "savings", null, SEEDED_AT);
+    insertAccount.run("account-pluxee", "Pluxee food wallet", "asset", "restricted_wallet", "Pluxee", SEEDED_AT);
+
     const existing = database.connection
       .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_opening_seed'")
       .get() as { value: string } | undefined;
@@ -525,12 +535,6 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
       return;
     }
 
-    const insertAccount = database.connection.prepare(`
-      INSERT OR IGNORE INTO accounts
-        (id, name, account_class, account_type, institution, is_active, created_at)
-      VALUES (?, ?, ?, ?, ?, 1, ?)
-    `);
-    insertAccount.run("account-primary-bank", "Primary salary account", "asset", "bank", null, SEEDED_AT);
     insertAccount.run("account-migration-equity", "Migration opening balance", "equity", "migration", null, SEEDED_AT);
     insertAccount.run("account-regular-expense", "Regular expenses", "expense", "expense", null, SEEDED_AT);
     insertAccount.run("account-salary-income", "Salary income", "income", "income", null, SEEDED_AT);
