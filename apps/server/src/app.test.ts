@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  budgetMonthResponseSchema,
   dashboardResponseSchema,
   expenseYearResponseSchema,
   healthResponseSchema,
@@ -52,6 +53,23 @@ describe("local API", () => {
     const parsedExpenseYear = expenseYearResponseSchema.parse(expenseYear.json());
     expect(parsedExpenseYear.months).toHaveLength(12);
     expect(parsedExpenseYear.months[5]?.cashOutflowPaise).toBe(23953400);
+
+    const budget = await app.inject({ method: "GET", url: "/api/v1/budgets/2026-07" });
+    expect(budget.statusCode).toBe(200);
+    expect(budgetMonthResponseSchema.parse(budget.json()).regularBudgetPaise).toBe(6004800);
+    const budgetUpdate = await app.inject({
+      method: "PUT",
+      url: "/api/v1/budgets/2026-08",
+      payload: {
+        plannedIncomePaise: 31000000,
+        lines: [{ categoryId: "category-rent", plannedPaise: 2100000 }],
+      },
+    });
+    expect(budgetUpdate.statusCode).toBe(200);
+    expect(budgetMonthResponseSchema.parse(budgetUpdate.json())).toMatchObject({
+      plannedIncomePaise: 31000000,
+      regularBudgetPaise: 2100000,
+    });
 
     const liabilities = await app.inject({ method: "GET", url: "/api/v1/liabilities" });
     expect(liabilities.statusCode).toBe(200);

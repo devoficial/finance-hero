@@ -2027,6 +2027,240 @@ h2 {
   display: none;
 }
 
+.budget-editor {
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.budget-edit-button {
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: white;
+  padding: 9px 13px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+.budget-plan-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 -20px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #eae6da;
+}
+.budget-plan-strip > div {
+  display: grid;
+  gap: 7px;
+  padding: 16px 20px;
+  border-right: 1px solid var(--line);
+}
+.budget-plan-strip > div:last-child {
+  border-right: 0;
+  background: #d8e5dc;
+}
+.budget-plan-strip > div.negative {
+  background: #f1d7cf;
+}
+.budget-plan-strip span,
+.budget-plan-strip small {
+  color: #607169;
+  text-transform: uppercase;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.budget-plan-strip strong {
+  overflow-wrap: anywhere;
+  font:
+    clamp(20px, 2.2vw, 30px) "Newsreader",
+    serif;
+}
+.budget-line-list {
+  display: grid;
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.budget-line-list > div {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.15fr) minmax(120px, 0.8fr) repeat(3, minmax(105px, 0.55fr));
+  gap: 16px;
+  align-items: center;
+  padding: 11px 3px;
+  border-bottom: 1px solid var(--line);
+}
+.budget-line-list > div > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+.budget-line-list > div > div:first-child strong {
+  font-size: 11px;
+}
+.budget-line-list > div > div:first-child span,
+.budget-line-list > div > span {
+  color: #68756f;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.budget-line-list > div > span {
+  display: grid;
+  gap: 3px;
+  text-transform: uppercase;
+}
+.budget-line-list > div > span b {
+  color: var(--ink);
+  font-size: 10px;
+}
+.budget-progress {
+  height: 7px;
+  background: #d8d8d1;
+}
+.budget-progress i {
+  display: block;
+  height: 100%;
+  background: var(--green-bright);
+}
+.budget-line-list > div.over {
+  background: linear-gradient(90deg, transparent, rgba(214, 75, 53, 0.07));
+}
+.budget-line-list > div.over .budget-progress i {
+  background: var(--red);
+}
+.budget-line-list > div.over > span:last-child b {
+  color: var(--red);
+}
+.budget-form {
+  padding-top: 17px;
+}
+.budget-income-field {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(260px, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: 12px;
+}
+.budget-form label {
+  display: grid;
+  gap: 6px;
+  color: #607169;
+  text-transform: uppercase;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.budget-form input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: #faf7ee;
+  color: var(--ink);
+  padding: 8px 9px;
+  font:
+    11px "Manrope",
+    sans-serif;
+}
+.budget-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 13px;
+  background: #dce9e1;
+}
+.budget-balance.negative {
+  background: #f1d7cf;
+}
+.budget-balance span {
+  color: #607169;
+  font-size: 9px;
+}
+.budget-balance strong {
+  white-space: nowrap;
+  font:
+    21px "Newsreader",
+    serif;
+}
+.budget-line-editor {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.budget-line-editor label {
+  grid-template-columns: minmax(0, 1fr) 115px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  background: #efebe1;
+}
+.budget-line-editor label > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.budget-line-editor b {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font:
+    10px "Manrope",
+    sans-serif;
+  text-transform: none;
+}
+.budget-line-editor small {
+  color: #718078;
+  font:
+    7px "DM Mono",
+    monospace;
+}
+.budget-line-editor input {
+  height: 34px;
+}
+.budget-form-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.budget-form-footer > span {
+  color: #607169;
+  font:
+    9px "DM Mono",
+    monospace;
+}
+.budget-form-footer > span strong {
+  margin-left: 7px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.budget-form-footer > div {
+  display: flex;
+  gap: 6px;
+}
+.budget-form-footer button {
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: white;
+  padding: 9px 13px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+.budget-form-footer button + button {
+  background: transparent;
+  color: var(--green);
+}
+.budget-form > .form-error {
+  margin: 10px 0 0;
+  color: #a13524;
+  font-size: 10px;
+}
+
 .project-workspace {
   display: grid;
   gap: 16px;
@@ -2506,6 +2740,13 @@ h2 {
   .personal-balance-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .budget-line-list > div {
+    grid-template-columns: minmax(170px, 1fr) minmax(100px, 0.7fr) repeat(3, minmax(90px, 0.5fr));
+    gap: 10px;
+  }
+  .budget-line-editor {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .project-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2723,6 +2964,39 @@ h2 {
   .personal-balance-grid,
   .personal-balance-form {
     grid-template-columns: 1fr;
+  }
+  .budget-plan-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+  .budget-plan-strip > div:nth-child(2) {
+    border-right: 0;
+  }
+  .budget-plan-strip > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+  .budget-plan-strip strong {
+    font-size: 20px;
+  }
+  .budget-line-list > div {
+    grid-template-columns: minmax(150px, 1fr) auto auto;
+    gap: 8px;
+  }
+  .budget-line-list .budget-progress {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .budget-line-list > div > span:nth-of-type(2) {
+    display: none;
+  }
+  .budget-income-field,
+  .budget-line-editor {
+    grid-template-columns: 1fr;
+  }
+  .budget-line-editor label {
+    grid-template-columns: minmax(0, 1fr) 105px;
+  }
+  .budget-form-footer {
+    display: grid;
   }
   .project-brief {
     display: grid;

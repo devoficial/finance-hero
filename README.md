@@ -20,7 +20,8 @@ dashboard, 12-month expenses, searchable ledger, and liability views project tha
 duplicating storage. The Home Construction project now preserves all 144 migrated source rows,
 tracks vendor estimates and pending commitments, highlights unreconciled rows, and posts new
 manual project expenses into the unified ledger. Full statement importing and automated source
-synchronization remain later phases.
+synchronization remain later phases. Monthly income plans and category allocations are editable,
+audited, and immediately drive dashboard budget percentages and danger thresholds.
 
 See [development setup](docs/development.md) to install, run, and verify the workspace.
 For the shortest owner-focused instructions, use [Run Finance Hero locally](LOCAL_SETUP.md).

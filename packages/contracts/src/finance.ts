@@ -105,6 +105,42 @@ export const expenseYearResponseSchema = z.object({
   months: z.array(expenseMonthSummarySchema).length(12),
 });
 
+export const budgetLineSchema = z.object({
+  categoryId: z.string(),
+  categoryName: z.string(),
+  broadBucket: z.string(),
+  alertEligible: z.boolean(),
+  plannedPaise: paiseSchema.nonnegative(),
+  spentPaise: paiseSchema,
+  remainingPaise: paiseSchema,
+});
+
+export const budgetMonthResponseSchema = z.object({
+  month: monthSchema,
+  state: z.enum(["open", "closed"]),
+  plannedIncomePaise: paiseSchema.nonnegative(),
+  regularBudgetPaise: paiseSchema.nonnegative(),
+  unallocatedIncomePaise: paiseSchema,
+  lines: z.array(budgetLineSchema),
+});
+
+export const updateBudgetMonthRequestSchema = z
+  .object({
+    plannedIncomePaise: paiseSchema.nonnegative().optional(),
+    lines: z
+      .array(
+        z.object({
+          categoryId: z.string().min(1),
+          plannedPaise: paiseSchema.nonnegative(),
+        }),
+      )
+      .min(1)
+      .optional(),
+  })
+  .refine((value) => value.plannedIncomePaise !== undefined || value.lines !== undefined, {
+    message: "At least one budget field is required.",
+  });
+
 export const liabilitySchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -308,6 +344,9 @@ export type LedgerResponse = z.infer<typeof ledgerResponseSchema>;
 export type ReferenceDataResponse = z.infer<typeof referenceDataResponseSchema>;
 export type ExpenseMonthSummary = z.infer<typeof expenseMonthSummarySchema>;
 export type ExpenseYearResponse = z.infer<typeof expenseYearResponseSchema>;
+export type BudgetLine = z.infer<typeof budgetLineSchema>;
+export type BudgetMonthResponse = z.infer<typeof budgetMonthResponseSchema>;
+export type UpdateBudgetMonthRequest = z.infer<typeof updateBudgetMonthRequestSchema>;
 export type Liability = z.infer<typeof liabilitySchema>;
 export type LiabilitiesResponse = z.infer<typeof liabilitiesResponseSchema>;
 export type PersonalBalance = z.infer<typeof personalBalanceSchema>;

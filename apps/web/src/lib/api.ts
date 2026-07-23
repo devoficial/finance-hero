@@ -1,4 +1,6 @@
 import {
+  type BudgetMonthResponse,
+  budgetMonthResponseSchema,
   type CreateLiabilityRequest,
   type CreateManualTransactionRequest,
   type CreatePersonalBalanceRequest,
@@ -29,6 +31,7 @@ import {
   type ReferenceDataResponse,
   type ReverseTransactionRequest,
   referenceDataResponseSchema,
+  type UpdateBudgetMonthRequest,
   type UpdateLiabilityRequest,
   type UpdatePersonalBalanceRequest,
   type UpdateProjectCommitmentRequest,
@@ -133,6 +136,23 @@ export async function updatePersonalBalance(id: string, input: UpdatePersonalBal
 
 export async function getReferenceData(signal?: AbortSignal): Promise<ReferenceDataResponse> {
   return referenceDataResponseSchema.parse(await getJson("/api/v1/reference-data", signal));
+}
+
+export async function getBudget(month: string, signal?: AbortSignal): Promise<BudgetMonthResponse> {
+  return budgetMonthResponseSchema.parse(await getJson(`/api/v1/budgets/${encodeURIComponent(month)}`, signal));
+}
+
+export async function updateBudget(month: string, input: UpdateBudgetMonthRequest): Promise<BudgetMonthResponse> {
+  const response = await fetch(`/api/v1/budgets/${encodeURIComponent(month)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return budgetMonthResponseSchema.parse(await response.json());
 }
 
 export async function getHomeConstruction(signal?: AbortSignal): Promise<ProjectSummaryResponse> {

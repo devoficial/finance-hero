@@ -1,3 +1,9 @@
+export {
+  type BudgetLineRecord,
+  type BudgetMonthRecord,
+  BudgetRepository,
+  type UpdateBudgetMonthInput,
+} from "./budget-repository";
 export { type FinanceHeroDatabase, initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
 export {
   type DatabaseKeyProvider,

@@ -7,6 +7,7 @@ import { LedgerView } from "./components/LedgerView";
 import { LiabilitiesView } from "./components/LiabilitiesView";
 import { ProjectsView } from "./components/ProjectsView";
 import {
+  getBudget,
   getDashboard,
   getExpenseYear,
   getHealth,
@@ -71,6 +72,10 @@ export function App() {
   const dashboard = useQuery({
     queryKey: ["dashboard", selectedMonth],
     queryFn: ({ signal }) => getDashboard(selectedMonth, signal),
+  });
+  const budget = useQuery({
+    queryKey: ["budget", selectedMonth],
+    queryFn: ({ signal }) => getBudget(selectedMonth, signal),
   });
   const ledger = useQuery({
     queryKey: ["ledger", selectedMonth],
@@ -145,7 +150,7 @@ export function App() {
   const hasViewError =
     (activeNav === "Home" && (dashboard.isError || liabilities.isError)) ||
     (activeNav === "Ledger" && (ledger.isError || referenceData.isError)) ||
-    (activeNav === "Expenses" && (expenseYear.isError || dashboard.isError)) ||
+    (activeNav === "Expenses" && (expenseYear.isError || dashboard.isError || budget.isError)) ||
     (activeNav === "Liabilities" && liabilities.isError) ||
     (activeNav === "Projects" && (homeConstruction.isError || referenceData.isError));
 
@@ -281,6 +286,8 @@ export function App() {
           />
         ) : activeNav === "Expenses" ? (
           <ExpensesView
+            budget={budget.data}
+            budgetLoading={budget.isLoading}
             dataCutoffMonth={ACTIVE_MONTH}
             loading={expenseYear.isLoading || dashboard.isLoading}
             money={money}

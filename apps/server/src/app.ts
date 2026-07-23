@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
+  budgetMonthResponseSchema,
   createLiabilityRequestSchema,
   createManualTransactionRequestSchema,
   createPersonalBalanceRequestSchema,
@@ -21,6 +22,7 @@ import {
   referenceDataResponseSchema,
   replaceTransactionRequestSchema,
   reverseTransactionRequestSchema,
+  updateBudgetMonthRequestSchema,
   updateLiabilityRequestSchema,
   updatePersonalBalanceRequestSchema,
   updateProjectCommitmentRequestSchema,
@@ -28,6 +30,7 @@ import {
   yearSchema,
 } from "@finance-hero/contracts";
 import {
+  BudgetRepository,
   type FinanceHeroDatabase,
   initializeFoundationSchema,
   LedgerRepository,
@@ -47,6 +50,7 @@ export interface BuildAppOptions {
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: options.logger ?? false });
   let database: FinanceHeroDatabase | undefined;
+  let budgets: BudgetRepository | undefined;
   let ledger: LedgerRepository | undefined;
   let projects: ProjectRepository | undefined;
 
@@ -59,6 +63,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     initializeFoundationSchema(database);
     seedAcceptedOpeningSnapshot(database);
     ledger = new LedgerRepository(database);
+    budgets = new BudgetRepository(database);
     projects = new ProjectRepository(database, ledger);
   }
 
@@ -203,6 +208,32 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
 
     return reply.header("cache-control", "no-store").send(referenceDataResponseSchema.parse(ledger.getReferenceData()));
+  });
+
+  app.get("/api/v1/budgets/:month", async (request, reply) => {
+    if (!budgets) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    const { month: rawMonth } = request.params as { month: string };
+    const month = monthSchema.parse(rawMonth);
+    return reply.header("cache-control", "no-store").send(budgetMonthResponseSchema.parse(budgets.getMonth(month)));
+  });
+
+  app.put("/api/v1/budgets/:month", async (request, reply) => {
+    if (!budgets) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { month: rawMonth } = request.params as { month: string };
+      const month = monthSchema.parse(rawMonth);
+      const input = updateBudgetMonthRequestSchema.parse(request.body);
+      return reply.send(budgetMonthResponseSchema.parse(budgets.updateMonth(month, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Budget could not be updated.";
+      return reply.code(400).send({ error: { code: "INVALID_BUDGET", message } });
+    }
   });
 
   app.get("/api/v1/projects/home-construction", async (_request, reply) => {

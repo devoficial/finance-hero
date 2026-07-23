@@ -1,4 +1,5 @@
-import type { DashboardResponse, ExpenseYearResponse } from "@finance-hero/contracts";
+import type { BudgetMonthResponse, DashboardResponse, ExpenseYearResponse } from "@finance-hero/contracts";
+import { BudgetEditor } from "./BudgetEditor";
 
 interface ExpensesViewProps {
   dataCutoffMonth: string;
@@ -6,6 +7,8 @@ interface ExpensesViewProps {
   selectedMonth: string;
   yearData?: ExpenseYearResponse;
   selectedDashboard?: DashboardResponse;
+  budget?: BudgetMonthResponse;
+  budgetLoading: boolean;
   loading: boolean;
   money: (paise: number) => string;
   onYearChange: (year: string) => void;
@@ -48,6 +51,8 @@ export function ExpensesView({
   selectedMonth,
   yearData,
   selectedDashboard,
+  budget,
+  budgetLoading,
   loading,
   money,
   onYearChange,
@@ -109,7 +114,6 @@ export function ExpensesView({
                 key={month.month}
                 onClick={() => {
                   onSelectMonth(month.month);
-                  onOpenStatement(month.month);
                 }}
                 type="button"
               >
@@ -138,6 +142,8 @@ export function ExpensesView({
           })}
         </div>
       </article>
+
+      <BudgetEditor budget={budget} emiPaise={selectedDashboard.totalEmiPaise} loading={budgetLoading} money={money} />
 
       <article className="panel selected-expense-panel">
         <div className="panel-heading">

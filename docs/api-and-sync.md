@@ -87,6 +87,13 @@ The current Home Construction vertical slice exposes these concrete local endpoi
 | `POST` | `/projects/home-construction/commitments` | Add a vendor estimate and pending balance |
 | `PATCH` | `/projects/home-construction/commitments/:id` | Update or settle a vendor commitment |
 
+The implemented budget endpoint uses the same versioned prefix:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/budgets/:month` | Income plan, category allocations, actual spend, and remaining amounts |
+| `PUT` | `/budgets/:month` | Audit and apply an income/category allocation revision |
+
 ### Operations
 
 | Method | Path | Purpose |
