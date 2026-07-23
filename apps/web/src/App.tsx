@@ -11,6 +11,15 @@ const navItems = ["Home", "Ledger", "Expenses", "Imports", "Liabilities", "Goals
 type NavItem = (typeof navItems)[number];
 const ACTIVE_MONTH = "2026-07";
 
+interface PwaInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
+interface StandaloneNavigator extends Navigator {
+  standalone?: boolean;
+}
+
 const navSlugs: Record<NavItem, string> = {
   Home: "home",
   Ledger: "ledger",
@@ -46,6 +55,9 @@ export function App() {
   const [activeNav, setActiveNav] = useState<NavItem>(initialRoute.nav);
   const [year, setYear] = useState(initialRoute.year);
   const [selectedMonth, setSelectedMonth] = useState(initialRoute.month);
+  const [installPrompt, setInstallPrompt] = useState<PwaInstallPromptEvent | null>(null);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
   const health = useQuery({ queryKey: ["health"], queryFn: ({ signal }) => getHealth(signal) });
   const dashboard = useQuery({
     queryKey: ["dashboard", selectedMonth],
@@ -89,6 +101,29 @@ export function App() {
     };
   }, [initialRoute]);
 
+  useEffect(() => {
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches || (navigator as StandaloneNavigator).standalone === true;
+    setIsInstalled(standalone);
+
+    const captureInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as PwaInstallPromptEvent);
+    };
+    const markInstalled = () => {
+      setInstallPrompt(null);
+      setShowInstallHelp(false);
+      setIsInstalled(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", captureInstallPrompt);
+    window.addEventListener("appinstalled", markInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", captureInstallPrompt);
+      window.removeEventListener("appinstalled", markInstalled);
+    };
+  }, []);
+
   const money = (paise: number) => (privacy ? "Rs --,---" : formatInr(paise / 100));
   const visibleMonth = selectedMonth;
   const visiblePeriod = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" })
@@ -116,6 +151,20 @@ export function App() {
 
   function changeExpenseYear(nextYear: string) {
     navigate("Expenses", `${nextYear}-${selectedMonth.slice(5, 7)}`, nextYear);
+  }
+
+  async function installApp() {
+    if (!installPrompt) {
+      setShowInstallHelp(true);
+      return;
+    }
+
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    if (choice.outcome === "accepted") {
+      setInstallPrompt(null);
+      setShowInstallHelp(false);
+    }
   }
 
   return (
@@ -162,6 +211,11 @@ export function App() {
             <h1>{activeNav === "Home" ? `${greeting}, Debasis.` : activeNav}</h1>
           </div>
           <div className="top-actions">
+            {!isInstalled && (
+              <button className="install-button" onClick={installApp} type="button">
+                Install app
+              </button>
+            )}
             <button className="add-button" onClick={openCurrentLedger} type="button">
               + Add transaction
             </button>
@@ -174,6 +228,25 @@ export function App() {
             </button>
           </div>
         </header>
+
+        {showInstallHelp && (
+          <section className="install-guide" aria-label="Install Finance Hero">
+            <div>
+              <span>INSTALL FINANCE HERO</span>
+              <strong>
+                {/iPhone|iPad|iPod/i.test(navigator.userAgent)
+                  ? "In Safari, tap Share and choose Add to Home Screen."
+                  : "Use your browser menu and choose Install Finance Hero or Add to Dock."}
+              </strong>
+              <small>
+                Installation requires a secure local address. On this Mac, 127.0.0.1 is treated as secure.
+              </small>
+            </div>
+            <button onClick={() => setShowInstallHelp(false)} type="button">
+              Close
+            </button>
+          </section>
+        )}
 
         {hasViewError ? (
           <section className="alert-strip" aria-label="Local database error">

@@ -19,6 +19,7 @@ project that data without duplicating storage. Full workbook migration and autom
 remain later phases.
 
 See [development setup](docs/development.md) to install, run, and verify the workspace.
+For the shortest owner-focused instructions, use [Run Finance Hero locally](LOCAL_SETUP.md).
 
 ## Documentation
 
@@ -36,6 +37,7 @@ See [development setup](docs/development.md) to install, run, and verify the wor
 | [Migration plan](docs/migration-plan.md) | Google Sheet mapping and reconciliation |
 | [Delivery plan](docs/delivery-plan.md) | Phases, tests, gates, and proposed repository layout |
 | [Development setup](docs/development.md) | Install, run, verification, and current limitations |
+| [Local startup guide](LOCAL_SETUP.md) | Start, stop, install, and troubleshoot the local PWA |
 | [Architecture decisions](docs/adr/README.md) | Accepted architectural decision records |
 
 ## Non-negotiable principles

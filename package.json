@@ -5,6 +5,7 @@
   "scripts": {
     "test": "turbo test",
     "dev": "turbo dev",
+    "start:local": "node --env-file-if-exists=.env node_modules/turbo/bin/turbo dev",
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "lint": "biome check .",
