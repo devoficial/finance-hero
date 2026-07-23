@@ -1,14 +1,16 @@
 import type {
   CreateFinancialGoalRequest,
   CreateWealthAssetRequest,
+  DashboardResponse,
   FinancialGoal,
+  LiabilitiesResponse,
   UpdateFinancialGoalRequest,
   UpdateWealthAssetRequest,
   WealthAsset,
   WealthResponse,
 } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   createFinancialGoal,
   createWealthAsset,
@@ -19,6 +21,8 @@ import {
 
 interface GoalsViewProps {
   data?: WealthResponse;
+  dashboard?: DashboardResponse;
+  liabilities?: LiabilitiesResponse;
   loading: boolean;
   money: (paise: number) => string;
 }
@@ -111,13 +115,29 @@ function goalFormFrom(goal: FinancialGoal): GoalForm {
   };
 }
 
-export function GoalsView({ data, loading, money }: GoalsViewProps) {
+function percentage(value: number, total: number) {
+  return total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
+}
+
+export function GoalsView({ data, dashboard, liabilities, loading, money }: GoalsViewProps) {
   const queryClient = useQueryClient();
+  const editorRef = useRef<HTMLElement | null>(null);
   const [assetForm, setAssetForm] = useState<AssetForm | null>(null);
   const [goalForm, setGoalForm] = useState<GoalForm | null>(null);
   const [allocationGoal, setAllocationGoal] = useState<FinancialGoal | null>(null);
   const [allocationValues, setAllocationValues] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const editorOpen = assetForm !== null || goalForm !== null || allocationGoal !== null;
+
+  useEffect(() => {
+    if (!editorOpen) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [editorOpen]);
 
   const refreshWealth = async () => {
     await Promise.all([
@@ -166,7 +186,7 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
     };
   }, [data]);
 
-  if (loading || !data) {
+  if (loading || !data || !dashboard || !liabilities) {
     return <section className="panel loading-panel">Valuing savings and calculating goal forecasts...</section>;
   }
 
@@ -174,6 +194,27 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
   const activeGoals = data.goals.filter((goal) => goal.status === "active");
   const emergencyMonthlyNeedPaise =
     data.goals.find((goal) => goal.targetMode === "emergency_cover")?.monthlyNeedPaise ?? 0;
+  const emergencyGoal = data.goals.find((goal) => goal.targetMode === "emergency_cover");
+  const emergencyAllocatedPaise = emergencyGoal?.allocatedPaise ?? 0;
+  const starterFundTargetPaise = emergencyMonthlyNeedPaise;
+  const starterFundGapPaise = Math.max(0, starterFundTargetPaise - emergencyAllocatedPaise);
+  const fullEmergencyGapPaise = Math.max(0, (emergencyGoal?.targetPaise ?? 0) - emergencyAllocatedPaise);
+  const currentPlanHeadroomPaise = Math.max(0, dashboard.availableAfterPlanPaise);
+  const snowballTarget = liabilities.liabilities.find(
+    (liability) => liability.status === "active" && liability.snowballRank === 1,
+  );
+  const starterAllocationPaise = Math.min(currentPlanHeadroomPaise, starterFundGapPaise);
+  const snowballAllocationPaise = Math.min(
+    Math.max(0, currentPlanHeadroomPaise - starterAllocationPaise),
+    snowballTarget?.currentPrincipalPaise ?? 0,
+  );
+  const remainingHeadroomPaise = Math.max(
+    0,
+    currentPlanHeadroomPaise - starterAllocationPaise - snowballAllocationPaise,
+  );
+  const highestRateDebt = liabilities.liabilities
+    .filter((liability) => liability.status === "active" && liability.annualRateBps != null)
+    .toSorted((left, right) => (right.annualRateBps ?? 0) - (left.annualRateBps ?? 0))[0];
   const fundedPercentage =
     data.goals.reduce((sum, goal) => sum + goal.targetPaise, 0) > 0
       ? Math.round(
@@ -376,8 +417,92 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
         </article>
       </section>
 
+      <section className="goal-command-grid" aria-label="Financial goal strategy">
+        <article className="panel goal-priority-panel">
+          <div className="panel-heading compact">
+            <div>
+              <p className="eyebrow">RECOMMENDED ORDER / SAFETY BEFORE GROWTH</p>
+              <h2>Your next three financial moves</h2>
+            </div>
+            <span className="goal-plan-pill">SNOWBALL PLAN</span>
+          </div>
+          <div className="goal-priority-steps">
+            <div className={starterFundGapPaise === 0 ? "complete" : "current"}>
+              <span>01</span>
+              <div>
+                <b>Finish one month of safety</b>
+                <small>
+                  {starterFundGapPaise > 0
+                    ? `${money(starterFundGapPaise)} more to cover one month of EMIs and expenses.`
+                    : "One full month of EMIs and expenses is protected."}
+                </small>
+              </div>
+              <strong>{percentage(emergencyAllocatedPaise, starterFundTargetPaise)}%</strong>
+            </div>
+            <div className={starterFundGapPaise === 0 ? "current" : ""}>
+              <span>02</span>
+              <div>
+                <b>Attack the snowball account</b>
+                <small>
+                  {snowballTarget
+                    ? `${snowballTarget.name} · ${money(snowballTarget.currentPrincipalPaise)} outstanding.`
+                    : "No active snowball account remains."}
+                </small>
+              </div>
+              <strong>{snowballTarget ? `#${snowballTarget.snowballRank}` : "DONE"}</strong>
+            </div>
+            <div>
+              <span>03</span>
+              <div>
+                <b>Build three months, then invest</b>
+                <small>
+                  Close the {money(fullEmergencyGapPaise)} emergency gap before adding aggressive investment goals.
+                </small>
+              </div>
+              <strong>{emergencyGoal?.progressPercentage ?? 0}%</strong>
+            </div>
+          </div>
+        </article>
+
+        <article className="panel goal-action-panel">
+          <div className="panel-heading compact">
+            <div>
+              <p className="eyebrow">CURRENT MONTH / DEPLOYABLE HEADROOM</p>
+              <h2>{money(currentPlanHeadroomPaise)}</h2>
+            </div>
+            <span className={dashboard.dangerAlert ? "goal-risk-pill danger" : "goal-risk-pill"}>LIVE PLAN</span>
+          </div>
+          <p className="goal-action-intro">
+            A practical sequence based on current plan headroom. Confirm the cash is genuinely free before moving it.
+          </p>
+          <div className="goal-action-stack">
+            <div>
+              <span>Starter emergency gap</span>
+              <strong>{money(starterAllocationPaise)}</strong>
+            </div>
+            <div>
+              <span>{snowballTarget ? `Extra to ${snowballTarget.name}` : "Snowball allocation"}</span>
+              <strong>{money(snowballAllocationPaise)}</strong>
+            </div>
+            <div>
+              <span>Still unassigned</span>
+              <strong>{money(remainingHeadroomPaise)}</strong>
+            </div>
+          </div>
+          <div className="goal-debt-warning">
+            <span>DEBT DRAG</span>
+            <b>
+              {highestRateDebt
+                ? `${highestRateDebt.name} costs ${((highestRateDebt.annualRateBps ?? 0) / 100).toFixed(2)}%`
+                : "No rated active debt"}
+            </b>
+            <small>High-interest repayment is a guaranteed return; keep it ahead of new risk investments.</small>
+          </div>
+        </article>
+      </section>
+
       {(assetForm || goalForm || allocationGoal) && (
-        <section className="panel wealth-editor">
+        <section className="panel wealth-editor" ref={editorRef}>
           <div className="panel-heading compact">
             <div>
               <p className="eyebrow">ENCRYPTED LOCAL UPDATE</p>

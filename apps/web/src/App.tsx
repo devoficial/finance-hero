@@ -336,7 +336,13 @@ export function App() {
         ) : activeNav === "Liabilities" ? (
           <LiabilitiesView data={liabilities.data} loading={liabilities.isLoading} money={money} />
         ) : activeNav === "Goals" ? (
-          <GoalsView data={wealth.data} loading={wealth.isLoading} money={money} />
+          <GoalsView
+            dashboard={dashboard.data}
+            data={wealth.data}
+            liabilities={liabilities.data}
+            loading={wealth.isLoading || dashboard.isLoading || liabilities.isLoading}
+            money={money}
+          />
         ) : activeNav === "Projects" ? (
           <ProjectsView
             data={homeConstruction.data}

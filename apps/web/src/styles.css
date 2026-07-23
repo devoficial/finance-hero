@@ -2800,8 +2800,138 @@ h2 {
 .wealth-kpis .positive strong {
   color: var(--green-bright);
 }
+.goal-command-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.75fr);
+  gap: 18px;
+}
+.goal-priority-panel,
+.goal-action-panel {
+  min-width: 0;
+}
+.goal-plan-pill,
+.goal-risk-pill {
+  align-self: start;
+  background: #d8e7df;
+  color: var(--green);
+  padding: 7px 9px;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.goal-risk-pill.danger {
+  background: #f1c8be;
+  color: #9d3424;
+}
+.goal-priority-steps {
+  display: grid;
+  padding: 0 22px 22px;
+}
+.goal-priority-steps > div {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 13px;
+  align-items: center;
+  min-height: 76px;
+  border-top: 1px solid var(--line);
+}
+.goal-priority-steps > div > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  color: #66756e;
+  font:
+    9px "DM Mono",
+    monospace;
+}
+.goal-priority-steps > div.current > span {
+  border-color: var(--yellow);
+  background: var(--yellow);
+  color: var(--green);
+}
+.goal-priority-steps > div.complete > span {
+  border-color: var(--green-bright);
+  background: var(--green-bright);
+  color: white;
+}
+.goal-priority-steps > div > div {
+  display: grid;
+  gap: 4px;
+}
+.goal-priority-steps b {
+  font-size: 12px;
+}
+.goal-priority-steps small {
+  color: #69766f;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.goal-priority-steps strong {
+  color: var(--green);
+  font:
+    500 13px "DM Mono",
+    monospace;
+}
+.goal-action-intro {
+  margin: -4px 22px 14px;
+  color: #65736d;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.goal-action-stack {
+  display: grid;
+  margin: 0 22px;
+  border: 1px solid var(--line);
+}
+.goal-action-stack > div {
+  min-height: 49px;
+  padding: 0 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.goal-action-stack > div:last-child {
+  border-bottom: 0;
+  background: #edf0e9;
+}
+.goal-action-stack span {
+  color: #5e6e67;
+  font-size: 9px;
+}
+.goal-action-stack strong {
+  font:
+    500 11px "DM Mono",
+    monospace;
+}
+.goal-debt-warning {
+  margin: 14px 22px 22px;
+  padding: 13px 14px;
+  display: grid;
+  gap: 4px;
+  border-left: 4px solid var(--red);
+  background: #eee3dc;
+}
+.goal-debt-warning span {
+  color: #a83a28;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.goal-debt-warning b {
+  font-size: 11px;
+}
+.goal-debt-warning small {
+  color: #6e706b;
+  font-size: 9px;
+  line-height: 1.4;
+}
 .wealth-editor {
   border-top: 5px solid var(--yellow);
+  scroll-margin-top: 20px;
 }
 .wealth-form {
   display: grid;
@@ -3348,6 +3478,9 @@ h2 {
   .wealth-main-grid {
     grid-template-columns: 1fr;
   }
+  .goal-command-grid {
+    grid-template-columns: 1fr;
+  }
   .goal-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3692,6 +3825,13 @@ h2 {
   }
   .wealth-kpis strong {
     font-size: 21px;
+  }
+  .goal-priority-steps > div {
+    grid-template-columns: 34px minmax(0, 1fr);
+    padding: 10px 0;
+  }
+  .goal-priority-steps strong {
+    grid-column: 2;
   }
   .wealth-form,
   .goal-form {
