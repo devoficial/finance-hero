@@ -88,6 +88,41 @@ export const referenceDataResponseSchema = z.object({
   categories: z.array(z.object({ id: z.string(), name: z.string() })),
 });
 
+export const financialAccountSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  accountClass: z.enum(["asset", "liability"]),
+  accountType: z.string(),
+  institution: z.string().nullable(),
+  isActive: z.boolean(),
+  balancePaise: paiseSchema,
+  transactionCount: z.number().int().nonnegative(),
+  managedBy: z.enum(["ledger", "wealth", "liability"]),
+  restricted: z.boolean(),
+});
+
+export const financialAccountsResponseSchema = z.object({
+  accounts: z.array(financialAccountSchema),
+  totalAssetBalancePaise: paiseSchema,
+  totalLiabilityBalancePaise: paiseSchema.nonnegative(),
+});
+
+export const createFinancialAccountRequestSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  accountType: z.enum(["bank", "cash", "savings", "investment", "wallet", "other"]),
+  institution: z.string().trim().max(160).nullable().optional(),
+  openingBalancePaise: paiseSchema.nonnegative(),
+  restricted: z.boolean().default(false),
+});
+
+export const updateFinancialAccountRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160).optional(),
+    institution: z.string().trim().max(160).nullable().optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, { message: "At least one account field is required." });
+
 export const expenseMonthSummarySchema = z.object({
   month: monthSchema,
   regularExpensePaise: paiseSchema.nonnegative(),
@@ -448,6 +483,10 @@ export type DashboardResponse = z.infer<typeof dashboardResponseSchema>;
 export type LedgerTransaction = z.infer<typeof ledgerTransactionSchema>;
 export type LedgerResponse = z.infer<typeof ledgerResponseSchema>;
 export type ReferenceDataResponse = z.infer<typeof referenceDataResponseSchema>;
+export type FinancialAccount = z.infer<typeof financialAccountSchema>;
+export type FinancialAccountsResponse = z.infer<typeof financialAccountsResponseSchema>;
+export type CreateFinancialAccountRequest = z.infer<typeof createFinancialAccountRequestSchema>;
+export type UpdateFinancialAccountRequest = z.infer<typeof updateFinancialAccountRequestSchema>;
 export type ExpenseMonthSummary = z.infer<typeof expenseMonthSummarySchema>;
 export type ExpenseYearResponse = z.infer<typeof expenseYearResponseSchema>;
 export type BudgetLine = z.infer<typeof budgetLineSchema>;

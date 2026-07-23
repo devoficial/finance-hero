@@ -1,13 +1,16 @@
 import { formatInr } from "@finance-hero/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { AccountsView } from "./components/AccountsView";
 import { DashboardView } from "./components/DashboardView";
 import { ExpensesView } from "./components/ExpensesView";
+import { ForecastsView } from "./components/ForecastsView";
 import { GoalsView } from "./components/GoalsView";
 import { LedgerView } from "./components/LedgerView";
 import { LiabilitiesView } from "./components/LiabilitiesView";
 import { ProjectsView } from "./components/ProjectsView";
 import {
+  getAccounts,
   getBudget,
   getDashboard,
   getExpenseYear,
@@ -19,7 +22,17 @@ import {
   getWealth,
 } from "./lib/api";
 
-const navItems = ["Home", "Ledger", "Expenses", "Imports", "Liabilities", "Goals", "Projects"] as const;
+const navItems = [
+  "Home",
+  "Ledger",
+  "Accounts",
+  "Expenses",
+  "Imports",
+  "Liabilities",
+  "Goals",
+  "Forecasts",
+  "Projects",
+] as const;
 type NavItem = (typeof navItems)[number];
 const ACTIVE_MONTH = "2026-07";
 
@@ -35,10 +48,12 @@ interface StandaloneNavigator extends Navigator {
 const navSlugs: Record<NavItem, string> = {
   Home: "home",
   Ledger: "ledger",
+  Accounts: "accounts",
   Expenses: "expenses",
   Imports: "imports",
   Liabilities: "liabilities",
   Goals: "goals",
+  Forecasts: "forecasts",
   Projects: "projects",
 };
 
@@ -96,6 +111,7 @@ export function App() {
     queryFn: ({ signal }) => getExpenseYear(year, signal),
   });
   const liabilities = useQuery({ queryKey: ["liabilities"], queryFn: ({ signal }) => getLiabilities(signal) });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: ({ signal }) => getAccounts(signal) });
   const referenceData = useQuery({
     queryKey: ["reference-data"],
     queryFn: ({ signal }) => getReferenceData(signal),
@@ -169,9 +185,12 @@ export function App() {
   const hasViewError =
     (activeNav === "Home" && (dashboard.isError || liabilities.isError || wealth.isError)) ||
     (activeNav === "Ledger" && (ledger.isError || referenceData.isError)) ||
+    (activeNav === "Accounts" && accounts.isError) ||
     (activeNav === "Expenses" && (expenseYear.isError || dashboard.isError || budget.isError)) ||
     (activeNav === "Liabilities" && liabilities.isError) ||
     (activeNav === "Goals" && wealth.isError) ||
+    (activeNav === "Forecasts" &&
+      (dashboard.isError || liabilities.isError || wealth.isError || homeConstruction.isError)) ||
     (activeNav === "Projects" && (homeConstruction.isError || referenceData.isError));
 
   function navigate(nav: NavItem, month = selectedMonth, nextYear = year) {
@@ -333,8 +352,20 @@ export function App() {
             month={selectedMonth}
             referenceData={referenceData.data}
           />
+        ) : activeNav === "Accounts" ? (
+          <AccountsView
+            data={accounts.data}
+            loading={accounts.isLoading}
+            money={money}
+            onOpenLiabilities={() => navigate("Liabilities")}
+          />
         ) : activeNav === "Liabilities" ? (
-          <LiabilitiesView data={liabilities.data} loading={liabilities.isLoading} money={money} />
+          <LiabilitiesView
+            data={liabilities.data}
+            loading={liabilities.isLoading}
+            money={money}
+            month={selectedMonth}
+          />
         ) : activeNav === "Goals" ? (
           <GoalsView
             dashboard={dashboard.data}
@@ -342,6 +373,16 @@ export function App() {
             liabilities={liabilities.data}
             loading={wealth.isLoading || dashboard.isLoading || liabilities.isLoading}
             money={money}
+          />
+        ) : activeNav === "Forecasts" ? (
+          <ForecastsView
+            dashboard={dashboard.data}
+            homeConstruction={homeConstruction.data}
+            liabilities={liabilities.data}
+            loading={dashboard.isLoading || liabilities.isLoading || wealth.isLoading || homeConstruction.isLoading}
+            money={money}
+            month={selectedMonth}
+            wealth={wealth.data}
           />
         ) : activeNav === "Projects" ? (
           <ProjectsView
@@ -370,16 +411,18 @@ export function App() {
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {(["Home", "Ledger", "Expenses", "Liabilities", "Goals", "Projects"] as const).map((item) => (
-          <button
-            className={activeNav === item ? "active" : ""}
-            key={item}
-            onClick={() => navigate(item)}
-            type="button"
-          >
-            {item}
-          </button>
-        ))}
+        {(["Home", "Ledger", "Accounts", "Expenses", "Liabilities", "Goals", "Forecasts", "Projects"] as const).map(
+          (item) => (
+            <button
+              className={activeNav === item ? "active" : ""}
+              key={item}
+              onClick={() => navigate(item)}
+              type="button"
+            >
+              {item}
+            </button>
+          ),
+        )}
       </nav>
     </div>
   );

@@ -50,6 +50,9 @@ importers:
       '@finance-hero/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@finance-hero/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@finance-hero/ui':
         specifier: workspace:*
         version: link:../../packages/ui

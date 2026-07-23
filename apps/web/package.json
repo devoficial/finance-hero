@@ -12,6 +12,7 @@
   "type": "module",
   "dependencies": {
     "@finance-hero/contracts": "workspace:*",
+    "@finance-hero/domain": "workspace:*",
     "@finance-hero/ui": "workspace:*",
     "@fontsource/dm-mono": "^5.2.7",
     "@fontsource/manrope": "^5.2.8",

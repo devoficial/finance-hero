@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   budgetMonthResponseSchema,
+  createFinancialAccountRequestSchema,
   createFinancialGoalRequestSchema,
   createLiabilityRequestSchema,
   createManualTransactionRequestSchema,
@@ -11,6 +12,8 @@ import {
   createWealthAssetRequestSchema,
   dashboardResponseSchema,
   expenseYearResponseSchema,
+  financialAccountSchema,
+  financialAccountsResponseSchema,
   financialGoalSchema,
   healthResponseSchema,
   ledgerResponseSchema,
@@ -26,6 +29,7 @@ import {
   replaceTransactionRequestSchema,
   reverseTransactionRequestSchema,
   updateBudgetMonthRequestSchema,
+  updateFinancialAccountRequestSchema,
   updateFinancialGoalRequestSchema,
   updateGoalAllocationsRequestSchema,
   updateLiabilityRequestSchema,
@@ -38,6 +42,7 @@ import {
   yearSchema,
 } from "@finance-hero/contracts";
 import {
+  AccountRepository,
   BudgetRepository,
   type FinanceHeroDatabase,
   initializeFoundationSchema,
@@ -60,6 +65,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const app = Fastify({ logger: options.logger ?? false });
   let database: FinanceHeroDatabase | undefined;
   let budgets: BudgetRepository | undefined;
+  let accounts: AccountRepository | undefined;
   let ledger: LedgerRepository | undefined;
   let projects: ProjectRepository | undefined;
   let wealth: WealthRepository | undefined;
@@ -73,6 +79,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     initializeFoundationSchema(database);
     seedAcceptedOpeningSnapshot(database);
     ledger = new LedgerRepository(database);
+    accounts = new AccountRepository(database);
     budgets = new BudgetRepository(database);
     projects = new ProjectRepository(database, ledger);
     wealth = new WealthRepository(database);
@@ -219,6 +226,43 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
 
     return reply.header("cache-control", "no-store").send(referenceDataResponseSchema.parse(ledger.getReferenceData()));
+  });
+
+  app.get("/api/v1/accounts", async (_request, reply) => {
+    if (!accounts) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    return reply
+      .header("cache-control", "no-store")
+      .send(financialAccountsResponseSchema.parse(accounts.getAccounts()));
+  });
+
+  app.post("/api/v1/accounts", async (request, reply) => {
+    if (!accounts) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const input = createFinancialAccountRequestSchema.parse(request.body);
+      return reply.code(201).send(financialAccountSchema.parse(accounts.createAccount(input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Financial account could not be created.";
+      return reply.code(400).send({ error: { code: "INVALID_ACCOUNT", message } });
+    }
+  });
+
+  app.patch("/api/v1/accounts/:id", async (request, reply) => {
+    if (!accounts) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const { id } = request.params as { id: string };
+      const input = updateFinancialAccountRequestSchema.parse(request.body);
+      return reply.send(financialAccountSchema.parse(accounts.updateAccount(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Financial account could not be updated.";
+      const statusCode = message === "Financial account does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_ACCOUNT", message } });
+    }
   });
 
   app.get("/api/v1/budgets/:month", async (request, reply) => {

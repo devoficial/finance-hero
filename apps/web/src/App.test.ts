@@ -21,6 +21,8 @@ describe("dashboard routes", () => {
   it("builds a reload-safe hash route", () => {
     expect(routeHash("Expenses", "2025-12", "2025")).toBe("#/expenses?month=2025-12&year=2025");
     expect(parseRouteHash("#/projects?month=2026-07&year=2026").nav).toBe("Projects");
+    expect(parseRouteHash("#/accounts?month=2026-07&year=2026").nav).toBe("Accounts");
+    expect(parseRouteHash("#/forecasts?month=2026-07&year=2026").nav).toBe("Forecasts");
   });
 
   it("keeps Home on the latest populated month while preserving future planning periods", () => {

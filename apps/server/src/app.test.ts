@@ -5,6 +5,8 @@ import {
   budgetMonthResponseSchema,
   dashboardResponseSchema,
   expenseYearResponseSchema,
+  financialAccountSchema,
+  financialAccountsResponseSchema,
   financialGoalSchema,
   healthResponseSchema,
   ledgerTransactionSchema,
@@ -79,6 +81,36 @@ describe("local API", () => {
     expect(liabilitiesResponseSchema.parse(liabilities.json()).totalPrincipalPaise).toBe(724854600);
     expect(liabilitiesResponseSchema.parse(liabilities.json()).otherLiabilityPaise).toBe(20000000);
     expect(liabilitiesResponseSchema.parse(liabilities.json()).receivablePaise).toBe(8700000);
+
+    const accounts = await app.inject({ method: "GET", url: "/api/v1/accounts" });
+    expect(accounts.statusCode).toBe(200);
+    expect(financialAccountsResponseSchema.parse(accounts.json()).accounts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "account-debt-home", managedBy: "liability" })]),
+    );
+    const accountCreate = await app.inject({
+      method: "POST",
+      url: "/api/v1/accounts",
+      payload: {
+        name: "Test cash reserve",
+        accountType: "investment",
+        institution: null,
+        openingBalancePaise: 150000,
+        restricted: false,
+      },
+    });
+    expect(accountCreate.statusCode).toBe(201);
+    const createdAccount = financialAccountSchema.parse(accountCreate.json());
+    expect(createdAccount.balancePaise).toBe(150000);
+    const accountUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/accounts/${createdAccount.id}`,
+      payload: { name: "Updated cash reserve" },
+    });
+    expect(accountUpdate.statusCode).toBe(200);
+    expect(financialAccountSchema.parse(accountUpdate.json())).toMatchObject({
+      name: "Updated cash reserve",
+      isActive: true,
+    });
 
     const liabilityUpdate = await app.inject({
       method: "PATCH",

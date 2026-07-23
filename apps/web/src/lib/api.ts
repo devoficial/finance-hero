@@ -1,6 +1,7 @@
 import {
   type BudgetMonthResponse,
   budgetMonthResponseSchema,
+  type CreateFinancialAccountRequest,
   type CreateFinancialGoalRequest,
   type CreateLiabilityRequest,
   type CreateManualTransactionRequest,
@@ -12,7 +13,11 @@ import {
   dashboardResponseSchema,
   type ExpenseYearResponse,
   expenseYearResponseSchema,
+  type FinancialAccount,
+  type FinancialAccountsResponse,
   type FinancialGoal,
+  financialAccountSchema,
+  financialAccountsResponseSchema,
   financialGoalSchema,
   type HealthResponse,
   healthResponseSchema,
@@ -36,6 +41,7 @@ import {
   type ReverseTransactionRequest,
   referenceDataResponseSchema,
   type UpdateBudgetMonthRequest,
+  type UpdateFinancialAccountRequest,
   type UpdateFinancialGoalRequest,
   type UpdateGoalAllocationsRequest,
   type UpdateLiabilityRequest,
@@ -79,6 +85,39 @@ export async function getExpenseYear(year: string, signal?: AbortSignal): Promis
 
 export async function getLiabilities(signal?: AbortSignal): Promise<LiabilitiesResponse> {
   return liabilitiesResponseSchema.parse(await getJson("/api/v1/liabilities", signal));
+}
+
+export async function getAccounts(signal?: AbortSignal): Promise<FinancialAccountsResponse> {
+  return financialAccountsResponseSchema.parse(await getJson("/api/v1/accounts", signal));
+}
+
+export async function createFinancialAccount(input: CreateFinancialAccountRequest): Promise<FinancialAccount> {
+  const response = await fetch("/api/v1/accounts", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return financialAccountSchema.parse(await response.json());
+}
+
+export async function updateFinancialAccount(
+  id: string,
+  input: UpdateFinancialAccountRequest,
+): Promise<FinancialAccount> {
+  const response = await fetch(`/api/v1/accounts/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return financialAccountSchema.parse(await response.json());
 }
 
 export async function createLiability(input: CreateLiabilityRequest): Promise<Liability> {

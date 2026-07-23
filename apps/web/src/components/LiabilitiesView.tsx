@@ -7,8 +7,9 @@ import type {
   UpdateLiabilityRequest,
   UpdatePersonalBalanceRequest,
 } from "@finance-hero/contracts";
+import { type DebtPlanStrategy, simulateDebtPlan } from "@finance-hero/domain";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import {
   createLiability,
   createPersonalBalance,
@@ -21,6 +22,7 @@ interface LiabilitiesViewProps {
   data?: LiabilitiesResponse;
   loading: boolean;
   money: (paise: number) => string;
+  month: string;
 }
 
 interface LiabilityForm {
@@ -63,7 +65,18 @@ function rupeesToPaise(value: string): number | null {
   return Number.isSafeInteger(paise) && paise >= 0 ? paise : null;
 }
 
-export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) {
+function monthLabel(month: string | null) {
+  if (!month) {
+    return "Payment change required";
+  }
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${month}-01T00:00:00Z`));
+}
+
+export function LiabilitiesView({ data, loading, money, month }: LiabilitiesViewProps) {
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creatingLiability, setCreatingLiability] = useState(false);
@@ -71,6 +84,8 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [personalForm, setPersonalForm] = useState<PersonalBalanceForm | null>(null);
   const [personalValidationError, setPersonalValidationError] = useState<string | null>(null);
+  const [debtStrategy, setDebtStrategy] = useState<DebtPlanStrategy>("snowball");
+  const [extraPayment, setExtraPayment] = useState("0");
   const mutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateLiabilityRequest }) => updateLiability(id, input),
     onSuccess: async () => {
@@ -78,6 +93,8 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
       setForm(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["liabilities"] }),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["wealth"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
       ]);
     },
@@ -89,6 +106,8 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
       setForm(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["liabilities"] }),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["wealth"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
       ]);
     },
@@ -98,6 +117,8 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["liabilities"] }),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["wealth"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
       ]);
     },
@@ -143,6 +164,38 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
       ]);
     },
   });
+
+  const plannerDebts = useMemo(
+    () =>
+      (data?.liabilities ?? [])
+        .filter((liability) => liability.status === "active" && liability.currentPrincipalPaise > 0)
+        .map((liability) => ({
+          id: liability.id,
+          name: liability.name,
+          principalPaise: liability.currentPrincipalPaise,
+          emiPaise: liability.emiPaise,
+          annualRateBps: liability.annualRateBps,
+        })),
+    [data],
+  );
+  const extraPaymentPaise = rupeesToPaise(extraPayment) ?? 0;
+  const baselinePlan = useMemo(() => simulateDebtPlan(plannerDebts, "snowball", 0, month), [month, plannerDebts]);
+  const snowballPlan = useMemo(
+    () => simulateDebtPlan(plannerDebts, "snowball", extraPaymentPaise, month),
+    [extraPaymentPaise, month, plannerDebts],
+  );
+  const avalanchePlan = useMemo(
+    () => simulateDebtPlan(plannerDebts, "avalanche", extraPaymentPaise, month),
+    [extraPaymentPaise, month, plannerDebts],
+  );
+  const selectedPlan = debtStrategy === "snowball" ? snowballPlan : avalanchePlan;
+  const monthsSaved =
+    baselinePlan.payoffMonths != null && selectedPlan.payoffMonths != null
+      ? Math.max(0, baselinePlan.payoffMonths - selectedPlan.payoffMonths)
+      : 0;
+  const interestSaved = Math.max(0, baselinePlan.totalInterestPaise - selectedPlan.totalInterestPaise);
+  const avalancheInterestAdvantage = Math.max(0, snowballPlan.totalInterestPaise - avalanchePlan.totalInterestPaise);
+  const unknownRateCount = plannerDebts.filter((debt) => debt.annualRateBps == null).length;
 
   if (loading || !data) {
     return <section className="panel loading-panel">Reading the liability register...</section>;
@@ -350,6 +403,113 @@ export function LiabilitiesView({ data, loading, money }: LiabilitiesViewProps) 
           <strong>{data.clearedCount}</strong>
           <small>{money(data.totalOriginalPaise)} original obligations</small>
         </article>
+      </section>
+
+      <section className="panel debt-planner">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">ADVANCED DEBT PLANNER / ROLLOVER METHOD</p>
+            <h2>Test your debt-free path</h2>
+          </div>
+          <fieldset className="debt-strategy-toggle">
+            <legend>Debt strategy</legend>
+            <button
+              className={debtStrategy === "snowball" ? "active" : ""}
+              onClick={() => setDebtStrategy("snowball")}
+              type="button"
+            >
+              Snowball
+            </button>
+            <button
+              className={debtStrategy === "avalanche" ? "active" : ""}
+              onClick={() => setDebtStrategy("avalanche")}
+              type="button"
+            >
+              Avalanche
+            </button>
+          </fieldset>
+        </div>
+        <div className="debt-planner-grid">
+          <div className="debt-extra-control">
+            <label>
+              <span>Extra payment each month</span>
+              <div>
+                <b>Rs</b>
+                <input
+                  inputMode="decimal"
+                  min="0"
+                  step="100"
+                  type="number"
+                  value={extraPayment}
+                  onChange={(event) => setExtraPayment(event.target.value)}
+                />
+              </div>
+            </label>
+            <div className="debt-extra-presets">
+              {[5_000, 10_000, 25_000].map((rupees) => (
+                <button key={rupees} onClick={() => setExtraPayment(String(rupees))} type="button">
+                  + Rs {rupees.toLocaleString("en-IN")}
+                </button>
+              ))}
+            </div>
+            <small>
+              The model keeps your total EMI budget constant and rolls every cleared EMI into the next account.
+            </small>
+          </div>
+          <div className="debt-plan-result">
+            <span>ESTIMATED DEBT-FREE DATE</span>
+            <strong>{monthLabel(selectedPlan.debtFreeMonth)}</strong>
+            <small>
+              {selectedPlan.payoffMonths == null
+                ? "At least one balance cannot amortize with the current payment."
+                : `${selectedPlan.payoffMonths} months · ${monthsSaved} months sooner than minimum payments`}
+            </small>
+          </div>
+          <div className="debt-plan-result">
+            <span>PROJECTED INTEREST</span>
+            <strong>{money(selectedPlan.totalInterestPaise)}</strong>
+            <small>{money(interestSaved)} saved versus the current snowball payment plan</small>
+          </div>
+        </div>
+        <div className="debt-strategy-comparison">
+          <article className={debtStrategy === "snowball" ? "selected" : ""}>
+            <span>SNOWBALL</span>
+            <strong>{monthLabel(snowballPlan.debtFreeMonth)}</strong>
+            <small>Smallest balance first · stronger momentum</small>
+            <b>{money(snowballPlan.totalInterestPaise)} interest</b>
+          </article>
+          <article className={debtStrategy === "avalanche" ? "selected" : ""}>
+            <span>AVALANCHE</span>
+            <strong>{monthLabel(avalanchePlan.debtFreeMonth)}</strong>
+            <small>Highest known rate first · mathematical minimum</small>
+            <b>{money(avalanchePlan.totalInterestPaise)} interest</b>
+          </article>
+          <div className="debt-strategy-note">
+            <span>TRADE-OFF</span>
+            <strong>
+              {avalancheInterestAdvantage > 0
+                ? `Avalanche saves ${money(avalancheInterestAdvantage)}`
+                : "Both strategies currently cost the same"}
+            </strong>
+            <small>
+              {unknownRateCount > 0
+                ? `${unknownRateCount} account rates are missing and treated as 0% until updated.`
+                : "All active account rates are included."}
+            </small>
+          </div>
+        </div>
+        <div className="debt-payoff-roadmap">
+          <span>PAYOFF ORDER</span>
+          <div>
+            {selectedPlan.payoffOrder.slice(0, 6).map((payoff, index) => (
+              <article key={payoff.id}>
+                <b>{String(index + 1).padStart(2, "0")}</b>
+                <span>{payoff.name}</span>
+                <small>{monthLabel(payoff.month)}</small>
+              </article>
+            ))}
+          </div>
+        </div>
       </section>
 
       {personalForm && (

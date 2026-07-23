@@ -1,4 +1,11 @@
 export {
+  AccountRepository,
+  type CreateFinancialAccountInput,
+  type FinancialAccountRecord,
+  type FinancialAccountsRecord,
+  type UpdateFinancialAccountInput,
+} from "./account-repository";
+export {
   type BudgetLineRecord,
   type BudgetMonthRecord,
   BudgetRepository,

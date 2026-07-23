@@ -34,6 +34,8 @@ FINANCE_HERO_DATABASE_KEY="your-development-key-of-at-least-32-characters" pnpm 
 - Expense year: `http://127.0.0.1:4317/api/v1/expenses/year?year=2026`
 - Liabilities: `http://127.0.0.1:4317/api/v1/liabilities`
 - Liability update: `PATCH /api/v1/liabilities/:id`
+- Financial accounts: `http://127.0.0.1:4317/api/v1/accounts`
+- Create/update financial account: `POST /api/v1/accounts`, `PATCH /api/v1/accounts/:id`
 - Reference data: `http://127.0.0.1:4317/api/v1/reference-data`
 - Manual transaction: `POST /api/v1/transactions/manual`
 - Audited reversal: `POST /api/v1/transactions/:id/reverse`
@@ -84,14 +86,17 @@ setup and will not use a checked-in environment variable.
 - Monthly `Overall Total Expenses` cash outflows from September 2025 through July 2026 are
   reconciled in the encrypted ledger, including debt payments, construction, savings, repayment,
   and emergency-fund rows. Full transaction-by-transaction Google Sheet migration is still pending.
-- Dashboard totals, category spending, institutional debts, personal payables, receivables, and the ledger are live
-  database queries. Personal balances can be created with `POST /api/v1/personal-balances` and edited or settled
-  with `PATCH /api/v1/personal-balances/:id`.
+- Dashboard totals, category spending, institutional debts, personal payables, receivables, financial accounts,
+  and the ledger are live database queries. Personal balances can be created with
+  `POST /api/v1/personal-balances` and edited or settled with `PATCH /api/v1/personal-balances/:id`.
 - Manual expenses, income, splits, transfers, card purchases, and debt payments are supported with audited
   reversals and replacements.
 - Savings, investments, food-only wallets, financial goals, allocations, and deterministic completion forecasts
   are live. Emergency-cover goals recalculate from active EMIs plus the latest applicable regular expense budget.
   Asset valuations remain manual until statement and market-value imports are implemented.
+- Debt snowball/avalanche scenarios and the twelve-month forecast are deterministic browser calculations over
+  current API data. Forecast assumptions remain editable and construction commitments are disclosed but excluded
+  until their payment dates are known.
 - Google login, device pairing, LAN HTTPS, Gmail, SMS, and statement parsing are not connected yet.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
 - PWA SVG branding is sufficient for development; release-quality iOS PNG icons are pending.

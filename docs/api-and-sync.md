@@ -105,6 +105,17 @@ The implemented Savings and Goals vertical slice exposes:
 | `PATCH` | `/wealth/goals/:id` | Update target, status, priority, or contribution assumptions |
 | `PUT` | `/wealth/goals/:id/allocations` | Earmark existing unrestricted assets without moving ledger money |
 
+The implemented account registry exposes:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/accounts` | List asset and liability accounts with live balances and ownership |
+| `POST` | `/accounts` | Add a bank, cash, savings, investment, wallet, or other asset account |
+| `PATCH` | `/accounts/:id` | Rename, reassign institution, archive, or reactivate an account |
+
+Debt strategy and twelve-month forecast scenarios run deterministically in the PWA from these read models. They do
+not persist hypothetical balances or alter the authoritative ledger.
+
 ### Operations
 
 | Method | Path | Purpose |
