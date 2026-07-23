@@ -20,5 +20,6 @@ describe("dashboard routes", () => {
 
   it("builds a reload-safe hash route", () => {
     expect(routeHash("Expenses", "2025-12", "2025")).toBe("#/expenses?month=2025-12&year=2025");
+    expect(parseRouteHash("#/projects?month=2026-07&year=2026").nav).toBe("Projects");
   });
 });

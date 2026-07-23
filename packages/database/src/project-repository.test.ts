@@ -1,0 +1,111 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
+import { LedgerRepository } from "./ledger-repository";
+import { seedAcceptedOpeningSnapshot } from "./opening-seed";
+import { ProjectRepository } from "./project-repository";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+function createRepository() {
+  const directory = mkdtempSync(join(tmpdir(), "finance-hero-projects-"));
+  temporaryDirectories.push(directory);
+  const database = openEncryptedDatabase(
+    join(directory, "finance-hero.db"),
+    Buffer.from("project-test-key-with-at-least-32-characters"),
+  );
+  initializeFoundationSchema(database);
+  seedAcceptedOpeningSnapshot(database);
+  const ledger = new LedgerRepository(database);
+  return { database, ledger, repository: new ProjectRepository(database, ledger) };
+}
+
+describe("project repository", () => {
+  it("preserves the imported Home Construction snapshot without changing the ledger", () => {
+    const { database, ledger, repository } = createRepository();
+    const before = ledger.getDashboard("2026-04", 30);
+    const project = repository.getHomeConstruction();
+
+    expect(project.freshness).toBe("needs_update");
+    expect(project.expenses).toHaveLength(144);
+    expect(project.commitments).toHaveLength(12);
+    expect(project.sourceExpensePaise).toBe(123581000);
+    expect(project.actualExpensePaise).toBe(122581000);
+    expect(project.excludedPaise).toBe(1000000);
+    expect(project.commitmentEstimatePaise).toBe(46286100);
+    expect(project.pendingCommitmentPaise).toBe(25486100);
+    expect(project.forecastPaise).toBe(148067100);
+    expect(project.latestExpenseOn).toBe("2026-04-01");
+    expect(project.needsReviewCount).toBe(8);
+    expect(project.monthlySpend).toEqual([
+      { month: "2025-09", amountPaise: 15902000 },
+      { month: "2025-10", amountPaise: 8307000 },
+      { month: "2025-11", amountPaise: 5268000 },
+      { month: "2025-12", amountPaise: 13282100 },
+      { month: "2026-01", amountPaise: 11346200 },
+      { month: "2026-02", amountPaise: 37773300 },
+      { month: "2026-03", amountPaise: 28002400 },
+      { month: "2026-04", amountPaise: 2700000 },
+    ]);
+    expect(ledger.getDashboard("2026-04", 30)).toEqual(before);
+    database.close();
+  });
+
+  it("reviews imported rows and audits the decision", () => {
+    const { database, repository } = createRepository();
+    const expense = repository.getHomeConstruction().expenses.find((item) => item.description === "Personal use");
+    expect(expense).toBeDefined();
+
+    const updated = repository.updateExpense(expense?.id ?? "", {
+      includedInActual: false,
+      reviewStatus: "confirmed",
+    });
+    expect(updated.includedInActual).toBe(false);
+    expect(updated.reviewStatus).toBe("confirmed");
+
+    const summary = repository.getHomeConstruction();
+    expect(summary.actualExpensePaise).toBe(122581000 - (expense?.amountPaise ?? 0));
+    expect(summary.needsReviewCount).toBe(7);
+    const audit = database.connection
+      .prepare("SELECT action FROM audit_events WHERE entity_id = ? ORDER BY created_at DESC LIMIT 1")
+      .get(expense?.id) as { action: string };
+    expect(audit.action).toBe("project_expense.updated");
+    database.close();
+  });
+
+  it("posts a manual construction expense to the balanced unified ledger exactly once", () => {
+    const { database, ledger, repository } = createRepository();
+    const input = {
+      occurredOn: "2026-07-20",
+      description: "Window installation",
+      amountPaise: 250000,
+      accountId: "account-primary-bank",
+      idempotencyKey: "project-test:window-installation",
+    };
+
+    const first = repository.createExpense(input);
+    const retry = repository.createExpense(input);
+    expect(retry.id).toBe(first.id);
+    expect(first.source).toBe("manual");
+    expect(first.linkedTransactionId).not.toBeNull();
+
+    const project = repository.getHomeConstruction();
+    expect(project.actualExpensePaise).toBe(122831000);
+    expect(project.monthlySpend.find((item) => item.month === "2026-07")?.amountPaise).toBe(250000);
+    expect(ledger.getDashboard("2026-07", 20).assetBuildingPaise).toBe(4845300);
+
+    const balance = database.connection
+      .prepare("SELECT SUM(amount_paise) AS total FROM postings WHERE transaction_id = ?")
+      .get(first.linkedTransactionId) as { total: number };
+    expect(balance.total).toBe(0);
+    database.close();
+  });
+});

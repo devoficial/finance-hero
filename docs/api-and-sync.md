@@ -76,6 +76,17 @@ This is the initial surface, not an exhaustive OpenAPI specification.
 | `GET/POST` | `/obligations` | People ledger |
 | `POST` | `/forecasts` | Generate versioned twelve-month forecast |
 
+The current Home Construction vertical slice exposes these concrete local endpoints under
+`/api/v1`:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/projects/home-construction` | Project KPIs, monthly spend, expenses, and commitments |
+| `POST` | `/projects/home-construction/expenses` | Post a project expense to the balanced ledger |
+| `PATCH` | `/projects/home-construction/expenses/:id` | Review, include/exclude, or rename an imported row |
+| `POST` | `/projects/home-construction/commitments` | Add a vendor estimate and pending balance |
+| `PATCH` | `/projects/home-construction/commitments/:id` | Update or settle a vendor commitment |
+
 ### Operations
 
 | Method | Path | Purpose |

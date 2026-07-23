@@ -147,10 +147,50 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       updated_at TEXT NOT NULL
     ) STRICT;
 
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      project_type TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('active', 'completed', 'on_hold')),
+      freshness TEXT NOT NULL CHECK (freshness IN ('current', 'needs_update')),
+      source_ref TEXT,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS project_expenses (
+      id TEXT PRIMARY KEY NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects(id),
+      occurred_on TEXT NOT NULL CHECK (length(occurred_on) = 10),
+      description TEXT NOT NULL,
+      amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
+      running_balance_paise INTEGER,
+      included_in_actual INTEGER NOT NULL DEFAULT 1 CHECK (included_in_actual IN (0, 1)),
+      review_status TEXT NOT NULL CHECK (review_status IN ('confirmed', 'needs_review')),
+      linked_transaction_id TEXT REFERENCES journal_transactions(id),
+      source_ref TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS project_commitments (
+      id TEXT PRIMARY KEY NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects(id),
+      vendor_name TEXT NOT NULL,
+      estimated_paise INTEGER NOT NULL DEFAULT 0 CHECK (estimated_paise >= 0),
+      pending_paise INTEGER NOT NULL DEFAULT 0 CHECK (pending_paise >= 0),
+      status TEXT NOT NULL CHECK (status IN ('open', 'settled', 'unknown')),
+      source_ref TEXT,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
     CREATE INDEX IF NOT EXISTS postings_transaction_idx ON postings(transaction_id);
     CREATE INDEX IF NOT EXISTS postings_account_idx ON postings(account_id);
     CREATE INDEX IF NOT EXISTS transactions_month_idx ON journal_transactions(effective_month, occurred_on);
     CREATE INDEX IF NOT EXISTS personal_balances_direction_idx ON personal_balances(direction, status);
+    CREATE INDEX IF NOT EXISTS project_expenses_project_date_idx ON project_expenses(project_id, occurred_on);
+    CREATE UNIQUE INDEX IF NOT EXISTS project_expenses_transaction_idx
+      ON project_expenses(linked_transaction_id) WHERE linked_transaction_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS project_commitments_project_idx ON project_commitments(project_id, status);
   `);
 
   const debtColumns = database.connection.prepare("PRAGMA table_info(debts)").all() as Array<{ name: string }>;

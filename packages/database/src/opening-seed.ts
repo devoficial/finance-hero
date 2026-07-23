@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { seedHomeConstructionSnapshot } from "./construction-seed";
 import type { FinanceHeroDatabase } from "./encrypted-database";
 
 const SOURCE = "Finance tracker 2025:accepted opening snapshot";
@@ -515,6 +516,7 @@ function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
 export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void {
   seedAcceptedLiabilities(database);
   seedAcceptedPersonalBalances(database);
+  seedHomeConstructionSnapshot(database);
 
   const seed = database.connection.transaction(() => {
     const insertAccount = database.connection.prepare(`

@@ -124,7 +124,11 @@ expense later without changing the original source evidence.
 ### Home Construction Details
 
 - Create project `Home Construction`, state `active`, freshness `needs_update`.
-- Import each of the 144 dated expense rows as an individual migrated journal transaction.
+- Import each of the 144 dated expense rows into the project register with stable source IDs.
+- Keep the stale imported history outside the reconciled journal until each source row is reviewed;
+  this prevents uncertain running balances and personal/self-use rows from changing accepted cash flow.
+- Post every new manually entered project expense to the balanced unified ledger and link it back to
+  its project row.
 - Link vendor, category/expense type, date, comments, and original source row.
 - Import vendor estimates/paid/pending data as project commitments/reference records only after
   detecting and excluding summary formulas.

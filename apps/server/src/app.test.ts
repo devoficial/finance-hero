@@ -9,6 +9,9 @@ import {
   liabilitiesResponseSchema,
   liabilitySchema,
   personalBalanceSchema,
+  projectCommitmentSchema,
+  projectExpenseSchema,
+  projectSummaryResponseSchema,
 } from "@finance-hero/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app";
@@ -114,6 +117,37 @@ describe("local API", () => {
     expect(personalBalanceUpdate.statusCode).toBe(200);
     expect(personalBalanceSchema.parse(personalBalanceUpdate.json()).status).toBe("settled");
 
+    const construction = await app.inject({
+      method: "GET",
+      url: "/api/v1/projects/home-construction",
+    });
+    expect(construction.statusCode).toBe(200);
+    const parsedConstruction = projectSummaryResponseSchema.parse(construction.json());
+    expect(parsedConstruction.expenses).toHaveLength(144);
+    expect(parsedConstruction.actualExpensePaise).toBe(122581000);
+    expect(parsedConstruction.freshness).toBe("needs_update");
+
+    const reviewedExpense = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/projects/home-construction/expenses/${parsedConstruction.expenses.find((item) => item.reviewStatus === "needs_review")?.id}`,
+      payload: { reviewStatus: "confirmed" },
+    });
+    expect(reviewedExpense.statusCode).toBe(200);
+    expect(projectExpenseSchema.parse(reviewedExpense.json()).reviewStatus).toBe("confirmed");
+
+    const commitment = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/home-construction/commitments",
+      payload: {
+        vendorName: "Test carpenter",
+        estimatedPaise: 500000,
+        pendingPaise: 200000,
+        status: "open",
+      },
+    });
+    expect(commitment.statusCode).toBe(201);
+    expect(projectCommitmentSchema.parse(commitment.json()).vendorName).toBe("Test carpenter");
+
     const manual = await app.inject({
       method: "POST",
       url: "/api/v1/transactions/manual",
@@ -129,6 +163,20 @@ describe("local API", () => {
     });
     expect(manual.statusCode).toBe(201);
     expect(ledgerTransactionSchema.parse(manual.json()).amountPaise).toBe(79900);
+
+    const constructionExpense = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects/home-construction/expenses",
+      payload: {
+        occurredOn: "2026-07-19",
+        description: "Test window fitting",
+        amountPaise: 150000,
+        accountId: "account-primary-bank",
+        idempotencyKey: "api-project-test:1",
+      },
+    });
+    expect(constructionExpense.statusCode).toBe(201);
+    expect(projectExpenseSchema.parse(constructionExpense.json()).linkedTransactionId).not.toBeNull();
     await app.close();
   });
 });

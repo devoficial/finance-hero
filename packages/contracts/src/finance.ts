@@ -142,6 +142,81 @@ export const liabilitiesResponseSchema = z.object({
   receivables: z.array(personalBalanceSchema),
 });
 
+export const projectExpenseSchema = z.object({
+  id: z.string(),
+  occurredOn: localDateSchema,
+  description: z.string(),
+  amountPaise: paiseSchema.positive(),
+  runningBalancePaise: paiseSchema.nullable(),
+  includedInActual: z.boolean(),
+  reviewStatus: z.enum(["confirmed", "needs_review"]),
+  linkedTransactionId: z.string().nullable(),
+  source: z.enum(["imported", "manual"]),
+});
+
+export const projectCommitmentSchema = z.object({
+  id: z.string(),
+  vendorName: z.string(),
+  estimatedPaise: paiseSchema.nonnegative(),
+  pendingPaise: paiseSchema.nonnegative(),
+  status: z.enum(["open", "settled", "unknown"]),
+});
+
+export const projectSummaryResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.enum(["active", "completed", "on_hold"]),
+  freshness: z.enum(["current", "needs_update"]),
+  sourceExpensePaise: paiseSchema.nonnegative(),
+  actualExpensePaise: paiseSchema.nonnegative(),
+  excludedPaise: paiseSchema.nonnegative(),
+  commitmentEstimatePaise: paiseSchema.nonnegative(),
+  pendingCommitmentPaise: paiseSchema.nonnegative(),
+  forecastPaise: paiseSchema.nonnegative(),
+  latestExpenseOn: localDateSchema.nullable(),
+  needsReviewCount: z.number().int().nonnegative(),
+  monthlySpend: z.array(
+    z.object({
+      month: monthSchema,
+      amountPaise: paiseSchema.nonnegative(),
+    }),
+  ),
+  expenses: z.array(projectExpenseSchema),
+  commitments: z.array(projectCommitmentSchema),
+});
+
+export const createProjectExpenseRequestSchema = z.object({
+  occurredOn: localDateSchema,
+  description: z.string().trim().min(1).max(240),
+  amountPaise: paiseSchema.positive(),
+  accountId: z.string().min(1),
+  idempotencyKey: z.string().min(8).max(200),
+});
+
+export const updateProjectExpenseRequestSchema = z
+  .object({
+    description: z.string().trim().min(1).max(240).optional(),
+    includedInActual: z.boolean().optional(),
+    reviewStatus: z.enum(["confirmed", "needs_review"]).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, { message: "At least one project expense field is required." });
+
+export const createProjectCommitmentRequestSchema = z.object({
+  vendorName: z.string().trim().min(1).max(160),
+  estimatedPaise: paiseSchema.nonnegative(),
+  pendingPaise: paiseSchema.nonnegative(),
+  status: z.enum(["open", "settled", "unknown"]),
+});
+
+export const updateProjectCommitmentRequestSchema = z
+  .object({
+    vendorName: z.string().trim().min(1).max(160).optional(),
+    estimatedPaise: paiseSchema.nonnegative().optional(),
+    pendingPaise: paiseSchema.nonnegative().optional(),
+    status: z.enum(["open", "settled", "unknown"]).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, { message: "At least one commitment field is required." });
+
 export const createPersonalBalanceRequestSchema = z.object({
   name: z.string().trim().min(1).max(160),
   direction: z.enum(["payable", "receivable"]),
@@ -243,3 +318,10 @@ export type UpdateLiabilityRequest = z.infer<typeof updateLiabilityRequestSchema
 export type CreateManualTransactionRequest = z.infer<typeof createManualTransactionRequestSchema>;
 export type ReplaceTransactionRequest = z.infer<typeof replaceTransactionRequestSchema>;
 export type ReverseTransactionRequest = z.infer<typeof reverseTransactionRequestSchema>;
+export type ProjectExpense = z.infer<typeof projectExpenseSchema>;
+export type ProjectCommitment = z.infer<typeof projectCommitmentSchema>;
+export type ProjectSummaryResponse = z.infer<typeof projectSummaryResponseSchema>;
+export type CreateProjectExpenseRequest = z.infer<typeof createProjectExpenseRequestSchema>;
+export type UpdateProjectExpenseRequest = z.infer<typeof updateProjectExpenseRequestSchema>;
+export type CreateProjectCommitmentRequest = z.infer<typeof createProjectCommitmentRequestSchema>;
+export type UpdateProjectCommitmentRequest = z.infer<typeof updateProjectCommitmentRequestSchema>;

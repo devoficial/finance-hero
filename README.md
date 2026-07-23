@@ -17,8 +17,10 @@ opening snapshot from encrypted storage. Manual expenses, income, category split
 transfers, credit-card purchases, and debt-principal payments use the same balanced journal.
 Posted corrections reverse and replace the original entry instead of mutating history. Dedicated
 dashboard, 12-month expenses, searchable ledger, and liability views project that data without
-duplicating storage. Full statement importing and automated source synchronization remain later
-phases.
+duplicating storage. The Home Construction project now preserves all 144 migrated source rows,
+tracks vendor estimates and pending commitments, highlights unreconciled rows, and posts new
+manual project expenses into the unified ledger. Full statement importing and automated source
+synchronization remain later phases.
 
 See [development setup](docs/development.md) to install, run, and verify the workspace.
 For the shortest owner-focused instructions, use [Run Finance Hero locally](LOCAL_SETUP.md).

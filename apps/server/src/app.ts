@@ -4,6 +4,8 @@ import {
   createLiabilityRequestSchema,
   createManualTransactionRequestSchema,
   createPersonalBalanceRequestSchema,
+  createProjectCommitmentRequestSchema,
+  createProjectExpenseRequestSchema,
   dashboardResponseSchema,
   expenseYearResponseSchema,
   healthResponseSchema,
@@ -13,11 +15,16 @@ import {
   liabilitySchema,
   monthSchema,
   personalBalanceSchema,
+  projectCommitmentSchema,
+  projectExpenseSchema,
+  projectSummaryResponseSchema,
   referenceDataResponseSchema,
   replaceTransactionRequestSchema,
   reverseTransactionRequestSchema,
   updateLiabilityRequestSchema,
   updatePersonalBalanceRequestSchema,
+  updateProjectCommitmentRequestSchema,
+  updateProjectExpenseRequestSchema,
   yearSchema,
 } from "@finance-hero/contracts";
 import {
@@ -25,6 +32,7 @@ import {
   initializeFoundationSchema,
   LedgerRepository,
   openEncryptedDatabase,
+  ProjectRepository,
   seedAcceptedOpeningSnapshot,
 } from "@finance-hero/database";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -40,6 +48,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const app = Fastify({ logger: options.logger ?? false });
   let database: FinanceHeroDatabase | undefined;
   let ledger: LedgerRepository | undefined;
+  let projects: ProjectRepository | undefined;
 
   if (options.config.databaseKey) {
     mkdirSync(options.config.dataDirectory, { recursive: true, mode: 0o700 });
@@ -50,6 +59,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     initializeFoundationSchema(database);
     seedAcceptedOpeningSnapshot(database);
     ledger = new LedgerRepository(database);
+    projects = new ProjectRepository(database, ledger);
   }
 
   app.get("/api/v1/health", async (_request, reply) => {
@@ -193,6 +203,76 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
 
     return reply.header("cache-control", "no-store").send(referenceDataResponseSchema.parse(ledger.getReferenceData()));
+  });
+
+  app.get("/api/v1/projects/home-construction", async (_request, reply) => {
+    if (!projects) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    return reply
+      .header("cache-control", "no-store")
+      .send(projectSummaryResponseSchema.parse(projects.getHomeConstruction()));
+  });
+
+  app.post("/api/v1/projects/home-construction/expenses", async (request, reply) => {
+    if (!projects) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const input = createProjectExpenseRequestSchema.parse(request.body);
+      return reply.code(201).send(projectExpenseSchema.parse(projects.createExpense(input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Project expense could not be created.";
+      return reply.code(400).send({ error: { code: "INVALID_PROJECT_EXPENSE", message } });
+    }
+  });
+
+  app.patch("/api/v1/projects/home-construction/expenses/:id", async (request, reply) => {
+    if (!projects) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+      const input = updateProjectExpenseRequestSchema.parse(request.body);
+      return reply.send(projectExpenseSchema.parse(projects.updateExpense(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Project expense could not be updated.";
+      const statusCode = message === "Project expense does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_PROJECT_EXPENSE", message } });
+    }
+  });
+
+  app.post("/api/v1/projects/home-construction/commitments", async (request, reply) => {
+    if (!projects) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const input = createProjectCommitmentRequestSchema.parse(request.body);
+      return reply.code(201).send(projectCommitmentSchema.parse(projects.createCommitment(input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Project commitment could not be created.";
+      return reply.code(400).send({ error: { code: "INVALID_PROJECT_COMMITMENT", message } });
+    }
+  });
+
+  app.patch("/api/v1/projects/home-construction/commitments/:id", async (request, reply) => {
+    if (!projects) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+      const input = updateProjectCommitmentRequestSchema.parse(request.body);
+      return reply.send(projectCommitmentSchema.parse(projects.updateCommitment(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Project commitment could not be updated.";
+      const statusCode = message === "Project commitment does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_PROJECT_COMMITMENT", message } });
+    }
   });
 
   app.post("/api/v1/transactions/manual", async (request, reply) => {

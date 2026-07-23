@@ -5,7 +5,16 @@ import { DashboardView } from "./components/DashboardView";
 import { ExpensesView } from "./components/ExpensesView";
 import { LedgerView } from "./components/LedgerView";
 import { LiabilitiesView } from "./components/LiabilitiesView";
-import { getDashboard, getExpenseYear, getHealth, getLedger, getLiabilities, getReferenceData } from "./lib/api";
+import { ProjectsView } from "./components/ProjectsView";
+import {
+  getDashboard,
+  getExpenseYear,
+  getHealth,
+  getHomeConstruction,
+  getLedger,
+  getLiabilities,
+  getReferenceData,
+} from "./lib/api";
 
 const navItems = ["Home", "Ledger", "Expenses", "Imports", "Liabilities", "Goals", "Projects"] as const;
 type NavItem = (typeof navItems)[number];
@@ -76,6 +85,10 @@ export function App() {
     queryKey: ["reference-data"],
     queryFn: ({ signal }) => getReferenceData(signal),
   });
+  const homeConstruction = useQuery({
+    queryKey: ["projects", "home-construction"],
+    queryFn: ({ signal }) => getHomeConstruction(signal),
+  });
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -133,7 +146,8 @@ export function App() {
     (activeNav === "Home" && (dashboard.isError || liabilities.isError)) ||
     (activeNav === "Ledger" && (ledger.isError || referenceData.isError)) ||
     (activeNav === "Expenses" && (expenseYear.isError || dashboard.isError)) ||
-    (activeNav === "Liabilities" && liabilities.isError);
+    (activeNav === "Liabilities" && liabilities.isError) ||
+    (activeNav === "Projects" && (homeConstruction.isError || referenceData.isError));
 
   function navigate(nav: NavItem, month = selectedMonth, nextYear = year) {
     const hash = routeHash(nav, month, nextYear);
@@ -290,6 +304,13 @@ export function App() {
           />
         ) : activeNav === "Liabilities" ? (
           <LiabilitiesView data={liabilities.data} loading={liabilities.isLoading} money={money} />
+        ) : activeNav === "Projects" ? (
+          <ProjectsView
+            data={homeConstruction.data}
+            loading={homeConstruction.isLoading || referenceData.isLoading}
+            money={money}
+            referenceData={referenceData.data}
+          />
         ) : (
           <section className="panel feature-placeholder">
             <p className="eyebrow">MODULE BOUNDARY READY</p>
@@ -310,7 +331,7 @@ export function App() {
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {navItems.slice(0, 4).map((item) => (
+        {(["Home", "Ledger", "Expenses", "Liabilities", "Projects"] as const).map((item) => (
           <button
             className={activeNav === item ? "active" : ""}
             key={item}

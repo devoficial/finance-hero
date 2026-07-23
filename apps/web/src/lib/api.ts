@@ -2,6 +2,8 @@ import {
   type CreateLiabilityRequest,
   type CreateManualTransactionRequest,
   type CreatePersonalBalanceRequest,
+  type CreateProjectCommitmentRequest,
+  type CreateProjectExpenseRequest,
   type DashboardResponse,
   dashboardResponseSchema,
   type ExpenseYearResponse,
@@ -17,12 +19,20 @@ import {
   liabilitiesResponseSchema,
   liabilitySchema,
   type PersonalBalance,
+  type ProjectCommitment,
+  type ProjectExpense,
+  type ProjectSummaryResponse,
   personalBalanceSchema,
+  projectCommitmentSchema,
+  projectExpenseSchema,
+  projectSummaryResponseSchema,
   type ReferenceDataResponse,
   type ReverseTransactionRequest,
   referenceDataResponseSchema,
   type UpdateLiabilityRequest,
   type UpdatePersonalBalanceRequest,
+  type UpdateProjectCommitmentRequest,
+  type UpdateProjectExpenseRequest,
 } from "@finance-hero/contracts";
 
 async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
@@ -123,6 +133,65 @@ export async function updatePersonalBalance(id: string, input: UpdatePersonalBal
 
 export async function getReferenceData(signal?: AbortSignal): Promise<ReferenceDataResponse> {
   return referenceDataResponseSchema.parse(await getJson("/api/v1/reference-data", signal));
+}
+
+export async function getHomeConstruction(signal?: AbortSignal): Promise<ProjectSummaryResponse> {
+  return projectSummaryResponseSchema.parse(await getJson("/api/v1/projects/home-construction", signal));
+}
+
+export async function createProjectExpense(input: CreateProjectExpenseRequest): Promise<ProjectExpense> {
+  const response = await fetch("/api/v1/projects/home-construction/expenses", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return projectExpenseSchema.parse(await response.json());
+}
+
+export async function updateProjectExpense(id: string, input: UpdateProjectExpenseRequest): Promise<ProjectExpense> {
+  const response = await fetch(`/api/v1/projects/home-construction/expenses/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return projectExpenseSchema.parse(await response.json());
+}
+
+export async function createProjectCommitment(input: CreateProjectCommitmentRequest): Promise<ProjectCommitment> {
+  const response = await fetch("/api/v1/projects/home-construction/commitments", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return projectCommitmentSchema.parse(await response.json());
+}
+
+export async function updateProjectCommitment(
+  id: string,
+  input: UpdateProjectCommitmentRequest,
+): Promise<ProjectCommitment> {
+  const response = await fetch(`/api/v1/projects/home-construction/commitments/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return projectCommitmentSchema.parse(await response.json());
 }
 
 export async function createManualTransaction(input: CreateManualTransactionRequest): Promise<LedgerTransaction> {

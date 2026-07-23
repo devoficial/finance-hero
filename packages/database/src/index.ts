@@ -13,3 +13,11 @@ export {
   type ReferenceDataRecord,
 } from "./ledger-repository";
 export { seedAcceptedOpeningSnapshot } from "./opening-seed";
+export {
+  type CreateProjectCommitmentInput,
+  type CreateProjectExpenseInput,
+  ProjectRepository,
+  type ProjectSummaryRecord,
+  type UpdateProjectCommitmentInput,
+  type UpdateProjectExpenseInput,
+} from "./project-repository";
