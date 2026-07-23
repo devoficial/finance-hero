@@ -2981,11 +2981,16 @@ h2 {
 }
 .wealth-asset-list > div {
   display: grid;
-  grid-template-columns: 105px minmax(150px, 1fr) auto minmax(115px, 0.7fr) auto;
+  grid-template-columns:
+    minmax(78px, 0.55fr) minmax(130px, 1.35fr) minmax(90px, auto)
+    minmax(120px, 0.9fr) 60px;
   align-items: center;
-  gap: 13px;
+  gap: clamp(8px, 1vw, 13px);
   min-height: 82px;
   border-top: 1px solid var(--line);
+}
+.wealth-asset-list > div > * {
+  min-width: 0;
 }
 .wealth-asset-list > div.restricted {
   background: linear-gradient(90deg, rgba(244, 185, 66, 0.1), transparent);
@@ -3013,8 +3018,12 @@ h2 {
 }
 .asset-allocation span {
   font-size: 10px;
+  overflow-wrap: anywhere;
 }
 .wealth-asset-list button {
+  width: 100%;
+  max-width: 60px;
+  justify-self: end;
   border: 1px solid var(--green);
   background: transparent;
   padding: 8px 10px;
@@ -3228,6 +3237,9 @@ h2 {
   .ledger-panel th:nth-child(5),
   .ledger-panel td:nth-child(5) {
     display: none;
+  }
+  .wealth-main-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -3696,11 +3708,16 @@ h2 {
     width: 100%;
   }
   .wealth-asset-list > div {
-    grid-template-columns: 80px minmax(120px, 1fr) auto;
+    grid-template-columns: 72px minmax(0, 1fr) 60px;
     padding: 12px 0;
+  }
+  .wealth-asset-list > div > b {
+    grid-column: 2;
+    grid-row: 2;
   }
   .wealth-asset-list .asset-allocation {
     grid-column: 2 / -1;
+    grid-row: 3;
   }
   .wealth-asset-list > div > button {
     grid-column: 3;
