@@ -538,10 +538,12 @@ function seedAcceptedWealthSnapshot(database: FinanceHeroDatabase): void {
     database.connection
       .prepare(`
         INSERT OR IGNORE INTO financial_goals
-          (id, name, target_paise, target_date, priority, status, monthly_contribution_paise,
+          (id, name, target_paise, target_mode, coverage_months, target_date,
+           priority, status, monthly_contribution_paise,
            notes, source_ref, created_at, updated_at)
         VALUES
-          ('goal-emergency-fund', 'Emergency fund', 56583000, NULL, 1, 'active', 0,
+          ('goal-emergency-fund', 'Emergency fund', 56583000, 'emergency_cover', 3,
+           NULL, 1, 'active', 0,
            'Imported from the accepted EF need in the finance tracker.',
            ?, ?, ?)
       `)

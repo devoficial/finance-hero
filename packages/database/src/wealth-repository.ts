@@ -3,6 +3,7 @@ import type { FinanceHeroDatabase } from "./encrypted-database";
 
 export type WealthAssetType = "savings" | "investment" | "emergency_fund" | "restricted_wallet";
 export type FinancialGoalStatus = "active" | "achieved" | "paused";
+export type FinancialGoalTargetMode = "fixed" | "emergency_cover";
 
 export interface WealthAssetRecord {
   id: string;
@@ -22,6 +23,9 @@ export interface FinancialGoalRecord {
   id: string;
   name: string;
   targetPaise: number;
+  targetMode: FinancialGoalTargetMode;
+  coverageMonths: number | null;
+  monthlyNeedPaise: number | null;
   targetDate: string | null;
   priority: number;
   status: FinancialGoalStatus;
@@ -65,6 +69,8 @@ export type UpdateWealthAssetInput = Partial<CreateWealthAssetInput>;
 export interface CreateFinancialGoalInput {
   name: string;
   targetPaise: number;
+  targetMode?: FinancialGoalTargetMode;
+  coverageMonths?: number | null;
   targetDate?: string | null;
   priority: number;
   status?: FinancialGoalStatus;
@@ -242,18 +248,23 @@ export class WealthRepository {
   createGoal(input: CreateFinancialGoalInput, today = currentLocalDate()): FinancialGoalRecord {
     const id = `goal-${randomUUID()}`;
     const now = new Date().toISOString();
+    const targetMode = input.targetMode ?? "fixed";
+    const coverageMonths = targetMode === "emergency_cover" ? (input.coverageMonths ?? 3) : null;
+    const targetPaise = this.resolveTargetPaise(targetMode, coverageMonths, input.targetPaise, today);
     const write = this.database.connection.transaction(() => {
       this.database.connection
         .prepare(`
           INSERT INTO financial_goals
-            (id, name, target_paise, target_date, priority, status, monthly_contribution_paise,
-             notes, source_ref, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual financial goal', ?, ?)
+            (id, name, target_paise, target_mode, coverage_months, target_date, priority, status,
+             monthly_contribution_paise, notes, source_ref, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual financial goal', ?, ?)
         `)
         .run(
           id,
           input.name,
-          input.targetPaise,
+          targetPaise,
+          targetMode,
+          coverageMonths,
           input.targetDate ?? null,
           input.priority,
           input.status ?? "active",
@@ -272,14 +283,26 @@ export class WealthRepository {
     const existing = this.requireGoal(id, today);
     const next = {
       name: input.name ?? existing.name,
-      targetPaise: input.targetPaise ?? existing.targetPaise,
+      targetMode: input.targetMode ?? existing.targetMode,
+      coverageMonths:
+        input.targetMode === "fixed"
+          ? null
+          : input.coverageMonths === undefined
+            ? existing.coverageMonths
+            : input.coverageMonths,
       targetDate: input.targetDate === undefined ? existing.targetDate : input.targetDate,
       priority: input.priority ?? existing.priority,
       status: input.status ?? existing.status,
       monthlyContributionPaise: input.monthlyContributionPaise ?? existing.monthlyContributionPaise,
       notes: input.notes === undefined ? existing.notes : input.notes,
     };
-    if (next.targetPaise < existing.allocatedPaise) {
+    const targetPaise = this.resolveTargetPaise(
+      next.targetMode,
+      next.targetMode === "emergency_cover" ? (next.coverageMonths ?? 3) : null,
+      input.targetPaise ?? existing.targetPaise,
+      today,
+    );
+    if (targetPaise < existing.allocatedPaise) {
       throw new Error("Goal target cannot be lower than its allocated savings.");
     }
     const now = new Date().toISOString();
@@ -287,13 +310,15 @@ export class WealthRepository {
       this.database.connection
         .prepare(`
           UPDATE financial_goals
-          SET name = ?, target_paise = ?, target_date = ?, priority = ?, status = ?,
-              monthly_contribution_paise = ?, notes = ?, updated_at = ?
+          SET name = ?, target_paise = ?, target_mode = ?, coverage_months = ?, target_date = ?,
+              priority = ?, status = ?, monthly_contribution_paise = ?, notes = ?, updated_at = ?
           WHERE id = ?
         `)
         .run(
           next.name,
-          next.targetPaise,
+          targetPaise,
+          next.targetMode,
+          next.targetMode === "emergency_cover" ? (next.coverageMonths ?? 3) : null,
           next.targetDate,
           next.priority,
           next.status,
@@ -414,6 +439,7 @@ export class WealthRepository {
     const rows = this.database.connection
       .prepare(`
         SELECT id, name, target_paise AS targetPaise, target_date AS targetDate, priority,
+               target_mode AS targetMode, coverage_months AS coverageMonths,
                status, monthly_contribution_paise AS monthlyContributionPaise, notes
         FROM financial_goals
         ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, priority, target_date, name
@@ -422,6 +448,8 @@ export class WealthRepository {
       id: string;
       name: string;
       targetPaise: number;
+      targetMode: FinancialGoalTargetMode;
+      coverageMonths: number | null;
       targetDate: string | null;
       priority: number;
       status: FinancialGoalStatus;
@@ -437,6 +465,7 @@ export class WealthRepository {
         ORDER BY goal_id, rowid
       `)
       .all() as Array<{ goalId: string; assetId: string; amountPaise: number }>;
+    const monthlyNeedPaise = this.monthlyNeedPaise(today);
 
     return rows.map((row) => {
       const allocations = allocationRows
@@ -447,7 +476,9 @@ export class WealthRepository {
           amountPaise: allocation.amountPaise,
         }));
       const allocatedPaise = allocations.reduce((sum, allocation) => sum + allocation.amountPaise, 0);
-      const remainingPaise = Math.max(0, row.targetPaise - allocatedPaise);
+      const targetPaise =
+        row.targetMode === "emergency_cover" ? monthlyNeedPaise * (row.coverageMonths ?? 3) : row.targetPaise;
+      const remainingPaise = Math.max(0, targetPaise - allocatedPaise);
       const months =
         remainingPaise === 0
           ? 0
@@ -457,14 +488,51 @@ export class WealthRepository {
       const forecastDate = months === null ? null : addMonths(today, months);
       return {
         ...row,
+        targetPaise,
+        coverageMonths: row.targetMode === "emergency_cover" ? (row.coverageMonths ?? 3) : null,
+        monthlyNeedPaise: row.targetMode === "emergency_cover" ? monthlyNeedPaise : null,
         allocatedPaise,
         remainingPaise,
-        progressPercentage: Math.min(100, Math.round((allocatedPaise / row.targetPaise) * 100)),
+        progressPercentage: Math.min(100, Math.round((allocatedPaise / targetPaise) * 100)),
         forecastDate,
         onTrack: row.targetDate && forecastDate ? forecastDate <= row.targetDate : null,
         allocations,
       };
     });
+  }
+
+  private monthlyNeedPaise(today: string): number {
+    const month = today.slice(0, 7);
+    const totals = this.database.connection
+      .prepare(`
+        SELECT
+          COALESCE((SELECT SUM(emi_paise) FROM debts WHERE status = 'active'), 0) AS emiPaise,
+          COALESCE((
+            SELECT regular_budget_paise
+            FROM budget_periods
+            WHERE month <= ? AND regular_budget_paise > 0
+            ORDER BY month DESC
+            LIMIT 1
+          ), 0) AS expenseBudgetPaise
+      `)
+      .get(month) as { emiPaise: number; expenseBudgetPaise: number };
+    return totals.emiPaise + totals.expenseBudgetPaise;
+  }
+
+  private resolveTargetPaise(
+    mode: FinancialGoalTargetMode,
+    coverageMonths: number | null,
+    fixedTargetPaise: number,
+    today: string,
+  ): number {
+    if (mode === "fixed") {
+      return fixedTargetPaise;
+    }
+    const targetPaise = this.monthlyNeedPaise(today) * (coverageMonths ?? 3);
+    if (targetPaise <= 0) {
+      throw new Error("Add an EMI or regular expense budget before using emergency coverage.");
+    }
+    return targetPaise;
   }
 
   private requireStoredAsset(id: string): StoredAssetRow {

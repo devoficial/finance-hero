@@ -76,7 +76,9 @@ The default authenticated screen shows:
 
 ### 4.5 Savings, investments, and goals
 
-- Savings accounts and restricted wallets such as the monthly Rs 8,800 Pluxee food benefit.
+- Savings accounts and food-only wallets such as the Rs 8,800 Pluxee balance. Pluxee purchases reduce
+  the wallet and count under the selected food or grocery expense category, but the balance cannot fund goals.
+- Emergency-fund goals can use a live coverage formula: coverage months x (active EMIs + regular expense budget).
 - Investments: mutual funds/SIPs, stocks, ETFs, FD, RD, EPF, PPF, NPS, insurance,
   gold, property, crypto, and custom assets.
 - Manual valuations are mandatory; automatic valuation connectors are optional and

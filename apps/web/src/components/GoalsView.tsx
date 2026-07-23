@@ -38,6 +38,8 @@ interface GoalForm {
   id: string | null;
   name: string;
   target: string;
+  targetMode: FinancialGoal["targetMode"];
+  coverageMonths: string;
   targetDate: string;
   priority: string;
   status: FinancialGoal["status"];
@@ -64,7 +66,7 @@ function assetTypeName(type: WealthAsset["assetType"]) {
     savings: "Savings",
     investment: "Investment",
     emergency_fund: "Emergency fund",
-    restricted_wallet: "Restricted wallet",
+    restricted_wallet: "Food wallet",
   };
   return labels[type];
 }
@@ -99,6 +101,8 @@ function goalFormFrom(goal: FinancialGoal): GoalForm {
     id: goal.id,
     name: goal.name,
     target: String(goal.targetPaise / 100),
+    targetMode: goal.targetMode,
+    coverageMonths: String(goal.coverageMonths ?? 3),
     targetDate: goal.targetDate ?? "",
     priority: String(goal.priority),
     status: goal.status,
@@ -168,6 +172,8 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
 
   const unrestrictedAssets = data.assets.filter((asset) => !asset.restricted);
   const activeGoals = data.goals.filter((goal) => goal.status === "active");
+  const emergencyMonthlyNeedPaise =
+    data.goals.find((goal) => goal.targetMode === "emergency_cover")?.monthlyNeedPaise ?? 0;
   const fundedPercentage =
     data.goals.reduce((sum, goal) => sum + goal.targetPaise, 0) > 0
       ? Math.round(
@@ -235,6 +241,8 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
             id: null,
             name: "",
             target: "",
+            targetMode: "fixed",
+            coverageMonths: "3",
             targetDate: "",
             priority: "3",
             status: "active",
@@ -249,23 +257,33 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
     if (!goalForm) {
       return;
     }
-    const targetPaise = rupeesToPaise(goalForm.target, true);
+    const coverageMonths = Number(goalForm.coverageMonths);
+    const targetPaise =
+      goalForm.targetMode === "emergency_cover"
+        ? Math.max(1, emergencyMonthlyNeedPaise * coverageMonths)
+        : rupeesToPaise(goalForm.target, true);
     const monthlyContributionPaise = rupeesToPaise(goalForm.monthlyContribution);
     const priority = Number(goalForm.priority);
     if (
       !goalForm.name.trim() ||
       targetPaise == null ||
+      (goalForm.targetMode === "emergency_cover" &&
+        (!Number.isInteger(coverageMonths) || coverageMonths < 1 || coverageMonths > 24)) ||
       monthlyContributionPaise == null ||
       !Number.isInteger(priority) ||
       priority < 1 ||
       priority > 5
     ) {
-      setFormError("Enter a goal name, positive target, monthly contribution, and priority from 1 to 5.");
+      setFormError(
+        "Enter a goal name, valid target or coverage months, monthly contribution, and priority from 1 to 5.",
+      );
       return;
     }
     const input: CreateFinancialGoalRequest = {
       name: goalForm.name,
       targetPaise,
+      targetMode: goalForm.targetMode,
+      coverageMonths: goalForm.targetMode === "emergency_cover" ? coverageMonths : null,
       targetDate: goalForm.targetDate || null,
       priority,
       status: goalForm.status,
@@ -318,7 +336,7 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
     <div className="wealth-workspace">
       <section className="wealth-hero">
         <div>
-          <p className="eyebrow">SAVINGS / INVESTMENTS / GOAL CAPITAL</p>
+          <p className="eyebrow">SAVINGS / INVESTMENTS / SPENDING WALLETS / GOALS</p>
           <h2>Build assets with a job to do.</h2>
           <p>
             Valuations are editable snapshots. Ledger transfers after the valuation date update the position
@@ -349,7 +367,7 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
         <article>
           <span>Available to allocate</span>
           <strong>{money(data.allocatablePaise)}</strong>
-          <small>Excludes restricted wallets</small>
+          <small>Excludes food-only spending wallets</small>
         </article>
         <article className={data.netWorthPaise < 0 ? "negative" : "positive"}>
           <span>Tracked net worth</span>
@@ -412,7 +430,7 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
                   <option value="savings">Savings</option>
                   <option value="investment">Investment</option>
                   <option value="emergency_fund">Emergency fund</option>
-                  <option value="restricted_wallet">Restricted wallet</option>
+                  <option value="restricted_wallet">Food wallet</option>
                 </select>
               </label>
               <label>
@@ -462,7 +480,7 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
                   type="checkbox"
                   onChange={(event) => setAssetForm({ ...assetForm, restricted: event.target.checked })}
                 />
-                <span>Restrict from financial-goal allocation</span>
+                <span>Exclude from financial-goal allocation</span>
               </label>
               <button className="wealth-save" disabled={assetMutation.isPending} type="submit">
                 {assetMutation.isPending ? "Saving..." : "Save asset"}
@@ -482,16 +500,51 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
                 />
               </label>
               <label>
-                <span>Target amount (INR)</span>
-                <input
-                  min="0.01"
-                  required
-                  step="0.01"
-                  type="number"
-                  value={goalForm.target}
-                  onChange={(event) => setGoalForm({ ...goalForm, target: event.target.value })}
-                />
+                <span>Target calculation</span>
+                <select
+                  value={goalForm.targetMode}
+                  onChange={(event) =>
+                    setGoalForm({
+                      ...goalForm,
+                      targetMode: event.target.value as FinancialGoal["targetMode"],
+                    })
+                  }
+                >
+                  <option value="fixed">Fixed amount</option>
+                  <option value="emergency_cover">EMIs + expense budget</option>
+                </select>
               </label>
+              {goalForm.targetMode === "fixed" ? (
+                <label>
+                  <span>Target amount (INR)</span>
+                  <input
+                    min="0.01"
+                    required
+                    step="0.01"
+                    type="number"
+                    value={goalForm.target}
+                    onChange={(event) => setGoalForm({ ...goalForm, target: event.target.value })}
+                  />
+                </label>
+              ) : (
+                <label>
+                  <span>Months of cover</span>
+                  <input
+                    max="24"
+                    min="1"
+                    required
+                    step="1"
+                    type="number"
+                    value={goalForm.coverageMonths}
+                    onChange={(event) => setGoalForm({ ...goalForm, coverageMonths: event.target.value })}
+                  />
+                  <small>
+                    Live target: {money(Number(goalForm.coverageMonths || 0) * emergencyMonthlyNeedPaise)}
+                    {" = "}
+                    {goalForm.coverageMonths || 0} months × {money(emergencyMonthlyNeedPaise)}
+                  </small>
+                </label>
+              )}
               <label>
                 <span>Target date</span>
                 <input
@@ -630,7 +683,7 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
               </div>
               <div>
                 <i className="restricted" />
-                <span>Restricted wallet</span>
+                <span>Food wallet</span>
                 <strong>{money(data.restrictedWalletPaise)}</strong>
               </div>
             </div>
@@ -646,7 +699,7 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
           <div className="panel-heading compact">
             <div>
               <p className="eyebrow">VALUATION REGISTER</p>
-              <h2>Savings and investments</h2>
+              <h2>Savings, investments and wallets</h2>
             </div>
             <button className="wealth-text-action" onClick={() => startAsset()} type="button">
               Add asset
@@ -664,11 +717,17 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
                 </div>
                 <b>{money(asset.currentValuePaise)}</b>
                 <div className="asset-allocation">
-                  <span>{asset.restricted ? "Not allocatable" : `${money(asset.allocatedPaise)} allocated`}</span>
+                  <span>
+                    {asset.restricted
+                      ? "Food spending only · excluded from goals"
+                      : `${money(asset.allocatedPaise)} allocated`}
+                  </span>
                   <small>
-                    {asset.monthlyContributionPaise > 0
-                      ? `${money(asset.monthlyContributionPaise)} / month`
-                      : "No monthly plan"}
+                    {asset.assetType === "restricted_wallet"
+                      ? "Use for orders and groceries"
+                      : asset.monthlyContributionPaise > 0
+                        ? `${money(asset.monthlyContributionPaise)} / month`
+                        : "No monthly plan"}
                   </small>
                 </div>
                 <button onClick={() => startAsset(asset)} type="button">
@@ -708,6 +767,11 @@ export function GoalsView({ data, loading, money }: GoalsViewProps) {
               <div className="goal-progress">
                 <i style={{ width: `${goal.progressPercentage}%` }} />
               </div>
+              {goal.targetMode === "emergency_cover" && goal.monthlyNeedPaise != null && (
+                <p>
+                  Live target: {goal.coverageMonths} months × {money(goal.monthlyNeedPaise)} (EMIs + expense budget)
+                </p>
+              )}
               <div className="goal-facts">
                 <span>
                   <small>Funded</small>

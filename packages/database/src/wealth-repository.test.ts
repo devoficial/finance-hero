@@ -45,12 +45,37 @@ describe("wealth repository", () => {
     expect(snapshot.assets.find((asset) => asset.name === "Pluxee food wallet")?.restricted).toBe(true);
     expect(snapshot.goals[0]).toMatchObject({
       name: "Emergency fund",
-      targetPaise: 56583000,
+      targetPaise: 56249700,
+      targetMode: "emergency_cover",
+      coverageMonths: 3,
+      monthlyNeedPaise: 18749900,
       allocatedPaise: 11880800,
-      remainingPaise: 44702200,
+      remainingPaise: 44368900,
       progressPercentage: 21,
       forecastDate: null,
     });
+    database.close();
+  });
+
+  it("counts Pluxee purchases as expenses and reduces the food-wallet balance", () => {
+    const { database, ledger, wealth } = createRepositories();
+    const before = ledger.getDashboard("2026-07", 23);
+
+    ledger.createManualTransaction({
+      occurredOn: "2026-07-23",
+      payee: "Grocery order",
+      kind: "expense",
+      amountPaise: 100000,
+      accountId: "account-pluxee",
+      categoryId: "category-groceries",
+      idempotencyKey: "wealth-test:pluxee-expense-1",
+    });
+
+    const after = ledger.getDashboard("2026-07", 23);
+    const pluxee = wealth.getWealth("2026-07-23").assets.find((asset) => asset.id === "asset-pluxee");
+    expect(pluxee?.currentValuePaise).toBe(780000);
+    expect(after.regularExpensePaise).toBe(before.regularExpensePaise + 100000);
+    expect(after.totalExpensePaise).toBe(before.totalExpensePaise + 100000);
     database.close();
   });
 

@@ -89,8 +89,9 @@ setup and will not use a checked-in environment variable.
   with `PATCH /api/v1/personal-balances/:id`.
 - Manual expenses, income, splits, transfers, card purchases, and debt payments are supported with audited
   reversals and replacements.
-- Savings, investments, restricted wallets, financial goals, allocations, and deterministic completion forecasts
-  are live. Asset valuations remain manual until statement and market-value imports are implemented.
+- Savings, investments, food-only wallets, financial goals, allocations, and deterministic completion forecasts
+  are live. Emergency-cover goals recalculate from active EMIs plus the latest applicable regular expense budget.
+  Asset valuations remain manual until statement and market-value imports are implemented.
 - Google login, device pairing, LAN HTTPS, Gmail, SMS, and statement parsing are not connected yet.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
 - PWA SVG branding is sufficient for development; release-quality iOS PNG icons are pending.

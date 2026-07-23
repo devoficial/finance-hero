@@ -153,7 +153,7 @@ export function DashboardView({
         <div>
           <span>TRACKED ASSETS</span>
           <strong>{money(wealth.totalAssetPaise)}</strong>
-          <small>{money(wealth.restrictedWalletPaise)} is restricted wallet value</small>
+          <small>{money(wealth.restrictedWalletPaise)} is food-wallet spending balance</small>
         </div>
         <div>
           <span>GOAL CAPITAL</span>

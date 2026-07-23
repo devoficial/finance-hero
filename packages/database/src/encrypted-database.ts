@@ -45,7 +45,7 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     ) STRICT;
 
     INSERT INTO app_metadata (key, value, updated_at)
-    VALUES ('schema_version', 'phase-4', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    VALUES ('schema_version', 'phase-5', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     ON CONFLICT(key) DO UPDATE SET
       value = excluded.value,
       updated_at = excluded.updated_at;
@@ -200,6 +200,8 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
       target_paise INTEGER NOT NULL CHECK (target_paise > 0),
+      target_mode TEXT NOT NULL DEFAULT 'fixed' CHECK (target_mode IN ('fixed', 'emergency_cover')),
+      coverage_months INTEGER CHECK (coverage_months IS NULL OR coverage_months BETWEEN 1 AND 24),
       target_date TEXT CHECK (target_date IS NULL OR length(target_date) = 10),
       priority INTEGER NOT NULL CHECK (priority BETWEEN 1 AND 5),
       status TEXT NOT NULL CHECK (status IN ('active', 'achieved', 'paused')),
@@ -239,4 +241,21 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     );
     database.connection.exec("UPDATE debts SET original_amount_paise = current_principal_paise");
   }
+
+  const goalColumns = database.connection.prepare("PRAGMA table_info(financial_goals)").all() as Array<{
+    name: string;
+  }>;
+  if (!goalColumns.some((column) => column.name === "target_mode")) {
+    database.connection.exec("ALTER TABLE financial_goals ADD COLUMN target_mode TEXT NOT NULL DEFAULT 'fixed'");
+  }
+  if (!goalColumns.some((column) => column.name === "coverage_months")) {
+    database.connection.exec("ALTER TABLE financial_goals ADD COLUMN coverage_months INTEGER");
+  }
+  database.connection
+    .prepare(`
+      UPDATE financial_goals
+      SET target_mode = 'emergency_cover', coverage_months = COALESCE(coverage_months, 3)
+      WHERE id = 'goal-emergency-fund'
+    `)
+    .run();
 }

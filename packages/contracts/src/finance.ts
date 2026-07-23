@@ -273,6 +273,9 @@ export const financialGoalSchema = z.object({
   id: z.string(),
   name: z.string(),
   targetPaise: paiseSchema.positive(),
+  targetMode: z.enum(["fixed", "emergency_cover"]),
+  coverageMonths: z.number().int().min(1).max(24).nullable(),
+  monthlyNeedPaise: paiseSchema.nonnegative().nullable(),
   targetDate: localDateSchema.nullable(),
   priority: z.number().int().min(1).max(5),
   status: z.enum(["active", "achieved", "paused"]),
@@ -334,6 +337,8 @@ export const updateWealthAssetRequestSchema = wealthAssetFieldsSchema
 export const createFinancialGoalRequestSchema = z.object({
   name: z.string().trim().min(1).max(160),
   targetPaise: paiseSchema.positive(),
+  targetMode: z.enum(["fixed", "emergency_cover"]).default("fixed"),
+  coverageMonths: z.number().int().min(1).max(24).nullable().optional(),
   targetDate: localDateSchema.nullable().optional(),
   priority: z.number().int().min(1).max(5),
   status: z.enum(["active", "achieved", "paused"]).default("active"),
