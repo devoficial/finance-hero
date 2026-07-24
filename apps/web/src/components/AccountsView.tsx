@@ -37,6 +37,7 @@ function accountTypeLabel(account: FinancialAccount): string {
 export function AccountsView({ data, loading, money, onOpenLedger, onOpenLiabilities }: AccountsViewProps) {
   const queryClient = useQueryClient();
   const formRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<AccountFilter>("all");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<FinancialAccount | null>(null);
@@ -269,7 +270,12 @@ export function AccountsView({ data, loading, money, onOpenLedger, onOpenLiabili
             <button
               className={filter === item ? "active" : ""}
               key={item}
-              onClick={() => setFilter(item)}
+              onClick={() => {
+                setFilter(item);
+                if (tableRef.current) {
+                  tableRef.current.scrollLeft = 0;
+                }
+              }}
               type="button"
             >
               {item}
@@ -277,7 +283,7 @@ export function AccountsView({ data, loading, money, onOpenLedger, onOpenLiabili
           ))}
         </fieldset>
 
-        <div className="accounts-table">
+        <div className="accounts-table" ref={tableRef}>
           <div className="accounts-table-header">
             <span>ACCOUNT</span>
             <span>CLASS</span>

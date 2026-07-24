@@ -4295,6 +4295,28 @@ h2 {
   .accounts-table article {
     min-width: 900px;
   }
+  .accounts-table-header > span:first-child,
+  .accounts-table article > div:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+  }
+  .accounts-table-header > span:first-child {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    z-index: 3;
+    background: #dcdbd3;
+  }
+  .accounts-table article > div:first-child {
+    align-self: stretch;
+    align-content: center;
+    background: var(--paper);
+    box-shadow: 14px 0 16px -18px rgba(18, 49, 40, 0.65);
+  }
+  .accounts-table article.inactive > div:first-child {
+    background: var(--paper);
+  }
   .accounts-kpis,
   .forecast-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5011,6 +5033,8 @@ h2 {
   .accounts-table article > div:first-child {
     grid-column: 1;
     grid-row: 1;
+    position: static;
+    box-shadow: none;
   }
   .accounts-table article > div:nth-child(2) {
     grid-column: 1;
