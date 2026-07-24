@@ -4,7 +4,7 @@ import type {
   ProjectSummaryResponse,
   WealthResponse,
 } from "@finance-hero/contracts";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { buildTwelveMonthForecast } from "../lib/forecast";
 
 interface ForecastsViewProps {
@@ -15,6 +15,7 @@ interface ForecastsViewProps {
   loading: boolean;
   money: (paise: number) => string;
   month: string;
+  onOpenBudget: () => void;
 }
 
 function monthLabel(month: string, includeYear = false): string {
@@ -42,10 +43,41 @@ export function ForecastsView({
   loading,
   money,
   month,
+  onOpenBudget,
 }: ForecastsViewProps) {
+  const [scenarioIncome, setScenarioIncome] = useState("");
+  const [scenarioExpense, setScenarioExpense] = useState("");
   const [extraDebtPayment, setExtraDebtPayment] = useState("0");
   const [incomeGrowth, setIncomeGrowth] = useState("0");
   const [expenseInflation, setExpenseInflation] = useState("5");
+
+  function resetScenario() {
+    if (!dashboard) {
+      return;
+    }
+    setScenarioIncome(String(dashboard.plannedIncomePaise / 100));
+    setScenarioExpense(String(dashboard.regularBudgetPaise / 100));
+    setExtraDebtPayment("0");
+    setIncomeGrowth("0");
+    setExpenseInflation("5");
+  }
+
+  useEffect(() => {
+    if (!dashboard) {
+      return;
+    }
+    setScenarioIncome(String(dashboard.plannedIncomePaise / 100));
+    setScenarioExpense(String(dashboard.regularBudgetPaise / 100));
+    setExtraDebtPayment("0");
+    setIncomeGrowth("0");
+    setExpenseInflation("5");
+  }, [dashboard]);
+
+  const scenarioIncomePaise =
+    scenarioIncome === "" ? (dashboard?.plannedIncomePaise ?? 0) : paiseFromRupees(scenarioIncome);
+  const scenarioExpensePaise =
+    scenarioExpense === "" ? (dashboard?.regularBudgetPaise ?? 0) : paiseFromRupees(scenarioExpense);
+  const extraDebtPaymentPaise = paiseFromRupees(extraDebtPayment);
 
   const forecast = useMemo(() => {
     if (!dashboard || !liabilities || !wealth) {
@@ -53,8 +85,8 @@ export function ForecastsView({
     }
     return buildTwelveMonthForecast({
       startMonth: month,
-      plannedIncomePaise: dashboard.plannedIncomePaise,
-      regularExpensePaise: dashboard.regularBudgetPaise,
+      plannedIncomePaise: scenarioIncomePaise,
+      regularExpensePaise: scenarioExpensePaise,
       currentAssetPaise: wealth.totalAssetPaise,
       receivablePaise: liabilities.receivablePaise,
       personalPayablePaise: liabilities.otherLiabilityPaise,
@@ -67,18 +99,29 @@ export function ForecastsView({
           emiPaise: liability.emiPaise,
           annualRateBps: liability.annualRateBps,
         })),
-      extraDebtPaymentPaise: paiseFromRupees(extraDebtPayment),
+      extraDebtPaymentPaise,
       annualIncomeGrowthPercentage: Number(incomeGrowth) || 0,
       annualExpenseInflationPercentage: Number(expenseInflation) || 0,
     });
-  }, [dashboard, expenseInflation, extraDebtPayment, incomeGrowth, liabilities, month, wealth]);
+  }, [
+    dashboard,
+    expenseInflation,
+    extraDebtPaymentPaise,
+    incomeGrowth,
+    liabilities,
+    month,
+    scenarioExpensePaise,
+    scenarioIncomePaise,
+    wealth,
+  ]);
 
   if (loading || !dashboard || !liabilities || !wealth || !forecast) {
     return <section className="panel loading-panel">Building the 12-month outlook...</section>;
   }
 
   const finalMonth = forecast.months.at(-1);
-  const netWorthChange = (finalMonth?.projectedNetWorthPaise ?? wealth.netWorthPaise) - wealth.netWorthPaise;
+  const finalNetWorthPaise = finalMonth?.projectedNetWorthPaise ?? wealth.netWorthPaise;
+  const netWorthChange = finalNetWorthPaise - wealth.netWorthPaise;
   const debtReduction = liabilities.totalPrincipalPaise - forecast.remainingDebtPaise;
   const maxChartValue = Math.max(
     1,
@@ -97,36 +140,81 @@ export function ForecastsView({
           emergencyGoal.targetPaise,
       )?.month
     : null;
-  const monthlyNeedPaise = dashboard.regularBudgetPaise + dashboard.totalEmiPaise;
-  const baseHeadroomPaise = dashboard.plannedIncomePaise - monthlyNeedPaise;
+  const scheduledEmiPaise = dashboard.totalEmiPaise;
+  const monthlyNeedPaise = scenarioExpensePaise + scheduledEmiPaise + extraDebtPaymentPaise;
+  const baseHeadroomPaise = scenarioIncomePaise - monthlyNeedPaise;
   const lowestCashMonth = forecast.months.toSorted((left, right) => left.cashSurplusPaise - right.cashSurplusPaise)[0];
   const monthsWithDeficit = forecast.months.filter((item) => item.cashSurplusPaise < 0).length;
   const ratesMissing = liabilities.liabilities.filter(
     (item) => item.status === "active" && item.currentPrincipalPaise > 0 && item.annualRateBps == null,
   ).length;
+  const scenarioChanged =
+    scenarioIncomePaise !== dashboard.plannedIncomePaise ||
+    scenarioExpensePaise !== dashboard.regularBudgetPaise ||
+    extraDebtPaymentPaise !== 0 ||
+    Number(incomeGrowth) !== 0 ||
+    Number(expenseInflation) !== 5;
 
   return (
     <section className="forecast-workspace">
       <div className="forecast-hero">
         <div>
           <p className="eyebrow">12-MONTH FORWARD VIEW / EXPLAINABLE MODEL</p>
-          <h2>See the next decision before it reaches your bank.</h2>
+          <h2>Test a decision before it reaches your bank.</h2>
           <p>
-            A cash-flow forecast built from your current income plan, expense budget, assets and live loan balances.
+            The live plan is your starting point. Inputs below are a private what-if scenario and never overwrite saved
+            income, budgets, assets or loan balances.
           </p>
         </div>
         <div className={`forecast-verdict ${monthsWithDeficit > 0 ? "danger" : ""}`}>
-          <span>BASE CASE</span>
+          <span>{scenarioChanged ? "CUSTOM SCENARIO" : "LIVE PLAN SCENARIO"}</span>
           <strong>{monthsWithDeficit > 0 ? `${monthsWithDeficit} deficit months` : "Positive monthly headroom"}</strong>
-          <small>Lowest month: {lowestCashMonth ? money(lowestCashMonth.cashSurplusPaise) : money(0)}</small>
+          <small>Lowest monthly surplus: {lowestCashMonth ? money(lowestCashMonth.cashSurplusPaise) : money(0)}</small>
         </div>
       </div>
 
       <div className="forecast-controls panel">
-        <div>
-          <p className="eyebrow">SCENARIO CONTROLS</p>
-          <h3>Change the assumptions</h3>
+        <div className="forecast-controls-heading">
+          <div>
+            <p className="eyebrow">EDITABLE WHAT-IF MODEL</p>
+            <h3>Scenario assumptions</h3>
+            <small>Changes recalculate instantly and remain unsaved.</small>
+          </div>
+          <div>
+            <button className="ghost-button" onClick={resetScenario} type="button">
+              Reset to live plan
+            </button>
+            <button className="ghost-button" onClick={onOpenBudget} type="button">
+              Edit saved budget
+            </button>
+          </div>
         </div>
+        <label>
+          Monthly take-home
+          <span>
+            <b>Rs</b>
+            <input
+              min="0"
+              onChange={(event) => setScenarioIncome(event.target.value)}
+              step="100"
+              type="number"
+              value={scenarioIncome}
+            />
+          </span>
+        </label>
+        <label>
+          Regular expense budget
+          <span>
+            <b>Rs</b>
+            <input
+              min="0"
+              onChange={(event) => setScenarioExpense(event.target.value)}
+              step="100"
+              type="number"
+              value={scenarioExpense}
+            />
+          </span>
+        </label>
         <label>
           Extra debt payment / month
           <span>
@@ -169,6 +257,7 @@ export function ForecastsView({
           </span>
         </label>
         <div className="forecast-presets">
+          <small>EXTRA DEBT PRESETS</small>
           {[0, 5000, 10000, 25000].map((amount) => (
             <button
               className={Number(extraDebtPayment) === amount ? "active" : ""}
@@ -182,34 +271,71 @@ export function ForecastsView({
         </div>
       </div>
 
+      <div className={`forecast-cash-equation ${baseHeadroomPaise < 0 ? "danger" : ""}`}>
+        <article>
+          <span>MONTHLY INCOME</span>
+          <strong className="money-value">{money(scenarioIncomePaise)}</strong>
+        </article>
+        <i>−</i>
+        <article>
+          <span>REGULAR BUDGET</span>
+          <strong className="money-value">{money(scenarioExpensePaise)}</strong>
+        </article>
+        <i>−</i>
+        <article>
+          <span>SCHEDULED EMIS</span>
+          <strong className="money-value">{money(scheduledEmiPaise)}</strong>
+        </article>
+        <i>−</i>
+        <article>
+          <span>EXTRA DEBT</span>
+          <strong className="money-value">{money(extraDebtPaymentPaise)}</strong>
+        </article>
+        <i>=</i>
+        <article className="result">
+          <span>STARTING SURPLUS</span>
+          <strong className="money-value">{money(baseHeadroomPaise)}</strong>
+        </article>
+      </div>
+
       <div className="forecast-kpis">
         <article>
-          <span>12-MONTH NET WORTH</span>
-          <strong className={(finalMonth?.projectedNetWorthPaise ?? 0) < 0 ? "negative" : ""}>
-            {money(finalMonth?.projectedNetWorthPaise ?? wealth.netWorthPaise)}
+          <span>NET WORTH AFTER 12 MONTHS</span>
+          <strong className={`money-value ${finalNetWorthPaise < 0 ? "negative" : ""}`}>
+            {money(finalNetWorthPaise)}
           </strong>
           <small>
-            {netWorthChange >= 0 ? "+" : ""}
-            {money(netWorthChange)} change
+            Today {money(wealth.netWorthPaise)} · {netWorthChange >= 0 ? "up" : "down"}{" "}
+            {money(Math.abs(netWorthChange))}
           </small>
         </article>
         <article>
-          <span>DEBT REDUCTION</span>
-          <strong>{money(debtReduction)}</strong>
-          <small>{percentage(debtReduction, liabilities.totalPrincipalPaise)}% of current bank principal</small>
+          <span>BANK DEBT AFTER 12 MONTHS</span>
+          <strong className="money-value">{money(forecast.remainingDebtPaise)}</strong>
+          <small>
+            Down {money(debtReduction)} ({percentage(debtReduction, liabilities.totalPrincipalPaise)}%) from today
+          </small>
         </article>
         <article>
-          <span>PROJECTED ASSETS</span>
-          <strong>{money(forecast.projectedAssetPaise)}</strong>
-          <small>{money(forecast.cumulativeSurplusPaise)} retained cash flow</small>
+          <span>ASSETS AFTER 12 MONTHS</span>
+          <strong className="money-value">{money(forecast.projectedAssetPaise)}</strong>
+          <small>
+            Today {money(wealth.totalAssetPaise)} · retained surplus {money(forecast.cumulativeSurplusPaise)}
+          </small>
         </article>
         <article>
-          <span>EMERGENCY FUND</span>
-          <strong>{emergencyCompletion ? monthLabel(emergencyCompletion, true) : "Beyond 12 mo"}</strong>
+          <span>EMERGENCY RESERVE OUTLOOK</span>
+          <strong className="forecast-date-value">
+            {emergencyGoal
+              ? emergencyCompletion
+                ? monthLabel(emergencyCompletion, true)
+                : "Beyond 12 months"
+              : "No goal"}
+          </strong>
           <small>
             {emergencyGoal
-              ? `${percentage(emergencyGoal.allocatedPaise, emergencyGoal.targetPaise)}% funded today`
-              : "Add an emergency-cover goal"}
+              ? `${money(emergencyGoal.allocatedPaise)} of ${money(emergencyGoal.targetPaise)} allocated today`
+              : "Create an emergency-cover goal first"}
           </small>
         </article>
       </div>
@@ -258,20 +384,20 @@ export function ForecastsView({
 
         <aside className="panel forecast-risk-panel">
           <div>
-            <p className="eyebrow">RISK RADAR</p>
+            <p className="eyebrow">RISK AND SCOPE</p>
             <h2>What can move the result</h2>
           </div>
           <div className="forecast-risk-item">
-            <span>Fixed monthly need</span>
-            <strong>{money(monthlyNeedPaise)}</strong>
-            <small>{percentage(monthlyNeedPaise, dashboard.plannedIncomePaise)}% of planned income</small>
+            <span>Monthly committed need</span>
+            <strong className="money-value">{money(monthlyNeedPaise)}</strong>
+            <small>{percentage(monthlyNeedPaise, scenarioIncomePaise)}% of scenario income</small>
           </div>
           <div
             className={homeConstruction?.pendingCommitmentPaise ? "forecast-risk-item warning" : "forecast-risk-item"}
           >
             <span>Construction exposure</span>
-            <strong>{money(homeConstruction?.pendingCommitmentPaise ?? 0)}</strong>
-            <small>Held outside this base case until payment timing is known</small>
+            <strong className="money-value">{money(homeConstruction?.pendingCommitmentPaise ?? 0)}</strong>
+            <small>Excluded because payment timing is not scheduled</small>
           </div>
           <div className={ratesMissing > 0 ? "forecast-risk-item warning" : "forecast-risk-item"}>
             <span>Unknown loan rates</span>
@@ -281,9 +407,9 @@ export function ForecastsView({
             </small>
           </div>
           <div className={baseHeadroomPaise < 0 ? "forecast-risk-item danger" : "forecast-risk-item"}>
-            <span>Starting monthly headroom</span>
-            <strong>{money(baseHeadroomPaise)}</strong>
-            <small>Before optional extra debt payment</small>
+            <span>Starting monthly surplus</span>
+            <strong className="money-value">{money(baseHeadroomPaise)}</strong>
+            <small>Income less budget, scheduled EMIs and extra debt</small>
           </div>
         </aside>
       </div>
@@ -336,10 +462,11 @@ export function ForecastsView({
 
       <div className="forecast-assumptions">
         <strong>MODEL BOUNDARY</strong>
-        <span>Income repeats from the selected monthly plan and grows by your scenario rate.</span>
-        <span>Expenses begin at the regular budget, not the current partial-month spend.</span>
-        <span>All cash surplus stays in tracked assets; no investment return or tax is assumed.</span>
-        <span>Loan rates use current stored values; unknown rates are conservatively flagged.</span>
+        <span>Scenario inputs are temporary; “Edit saved budget” changes the live monthly plan.</span>
+        <span>Regular budget is used instead of partial-month actual spend.</span>
+        <span>Positive cash surplus stays in tracked assets; no investment return or tax is assumed.</span>
+        <span>Emergency completion assumes all new surplus is directed to that goal.</span>
+        <span>Loan rates use current stored values; missing rates are modelled at 0% and flagged.</span>
       </div>
     </section>
   );

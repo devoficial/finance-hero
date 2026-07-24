@@ -32,6 +32,7 @@ export interface UpdateFinancialAccountInput {
   name?: string;
   institution?: string | null;
   isActive?: boolean;
+  balancePaise?: number;
 }
 
 export class AccountRepository {
@@ -133,6 +134,13 @@ export class AccountRepository {
 
   updateAccount(id: string, input: UpdateFinancialAccountInput): FinancialAccountRecord {
     const existing = this.requireAccount(id);
+    if (input.balancePaise !== undefined && existing.managedBy !== "wealth") {
+      throw new Error(
+        existing.managedBy === "liability"
+          ? "Edit the linked liability principal in Liabilities."
+          : "Use the ledger or reconciliation to change this account balance.",
+      );
+    }
     if (input.isActive === false && existing.balancePaise !== 0) {
       throw new Error(
         existing.managedBy === "liability"
@@ -146,6 +154,7 @@ export class AccountRepository {
       isActive: input.isActive ?? existing.isActive,
     };
     const now = new Date().toISOString();
+    const asOfDate = now.slice(0, 10);
     const write = this.database.connection.transaction(() => {
       this.database.connection
         .prepare("UPDATE accounts SET name = ?, institution = ?, is_active = ? WHERE id = ?")
@@ -155,7 +164,39 @@ export class AccountRepository {
           .prepare("UPDATE debts SET lender = ?, updated_at = ? WHERE account_id = ?")
           .run(next.name, now, id);
       }
-      this.insertAudit("account.updated", id, { before: existing, after: next }, now);
+      if (input.balancePaise !== undefined) {
+        const asset = this.database.connection
+          .prepare(`
+            SELECT ap.id,
+                   COALESCE((
+                     SELECT SUM(ga.amount_paise)
+                     FROM goal_allocations ga
+                     WHERE ga.asset_position_id = ap.id
+                   ), 0) AS allocatedPaise
+            FROM asset_positions ap
+            WHERE ap.account_id = ?
+          `)
+          .get(id) as { id: string; allocatedPaise: number } | undefined;
+        if (!asset) {
+          throw new Error("The account valuation could not be found.");
+        }
+        if (input.balancePaise < asset.allocatedPaise) {
+          throw new Error("Account balance cannot be lower than its active goal allocations.");
+        }
+        this.database.connection
+          .prepare(`
+            UPDATE asset_positions
+            SET baseline_value_paise = ?, as_of_date = ?, valued_at = ?, updated_at = ?
+            WHERE id = ?
+          `)
+          .run(input.balancePaise, asOfDate, now, now, asset.id);
+      }
+      this.insertAudit(
+        "account.updated",
+        id,
+        { before: existing, after: { ...next, balancePaise: input.balancePaise ?? existing.balancePaise } },
+        now,
+      );
     });
     write.immediate();
     return this.requireAccount(id);

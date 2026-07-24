@@ -3628,14 +3628,57 @@ h2 {
   letter-spacing: 0.08em;
 }
 .accounts-kpis strong {
-  overflow-wrap: anywhere;
   font:
-    600 clamp(23px, 2.6vw, 39px) "Newsreader",
+    600 clamp(22px, 2.25vw, 36px) "Newsreader",
     serif;
+}
+.money-value {
+  min-width: 0;
+  white-space: nowrap;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
 }
 .accounts-kpis strong.negative,
 .accounts-table strong.negative {
   color: #b33b28;
+}
+.account-source-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  background: #ebe7dd;
+}
+.account-source-guide article {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  border-right: 1px solid var(--line);
+  padding: 15px 18px;
+}
+.account-source-guide article:last-child {
+  border-right: 0;
+}
+.account-source-guide span,
+.account-source-guide small {
+  color: #63726c;
+  font-size: 8px;
+}
+.account-source-guide span {
+  font:
+    600 8px "DM Mono",
+    monospace;
+  letter-spacing: 0.08em;
+}
+.account-source-guide button {
+  width: fit-content;
+  border: 0;
+  border-bottom: 1px solid var(--green);
+  background: transparent;
+  padding: 3px 0;
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 700;
 }
 .accounts-register {
   overflow: hidden;
@@ -3808,6 +3851,32 @@ h2 {
 .account-form-actions {
   grid-column: 1 / -1;
 }
+.account-balance-owner {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-content: center;
+  gap: 4px 12px;
+  border: 1px solid var(--line);
+  background: #ebe7dd;
+  padding: 8px 11px;
+}
+.account-balance-owner span {
+  grid-column: 1 / -1;
+  color: #65746d;
+  font:
+    600 7px "DM Mono",
+    monospace;
+}
+.account-balance-owner button {
+  border: 0;
+  border-bottom: 1px solid var(--green);
+  background: transparent;
+  padding: 0;
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 700;
+}
 .account-form-actions {
   display: flex;
   gap: 8px;
@@ -3870,10 +3939,26 @@ h2 {
 }
 .forecast-controls {
   display: grid;
-  grid-template-columns: minmax(170px, 0.8fr) repeat(3, minmax(145px, 1fr));
+  grid-template-columns: repeat(5, minmax(125px, 1fr));
   align-items: end;
   gap: 14px;
   padding: 18px 22px;
+}
+.forecast-controls-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 13px;
+}
+.forecast-controls-heading > div:last-child {
+  display: flex;
+  gap: 7px;
+}
+.forecast-controls-heading small {
+  color: #65746d;
 }
 .forecast-controls h3 {
   margin: 2px 0 0;
@@ -3913,9 +3998,17 @@ h2 {
     monospace;
 }
 .forecast-presets {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
   display: flex;
+  align-items: center;
   gap: 6px;
+}
+.forecast-presets small {
+  margin-right: 3px;
+  color: #66756f;
+  font:
+    600 7px "DM Mono",
+    monospace;
 }
 .forecast-presets button {
   min-height: 30px;
@@ -3932,6 +4025,49 @@ h2 {
   border-color: var(--yellow);
   background: var(--yellow);
   color: var(--green);
+}
+.forecast-cash-equation {
+  display: grid;
+  grid-template-columns:
+    minmax(135px, 1fr) auto minmax(135px, 1fr) auto minmax(135px, 1fr) auto
+    minmax(135px, 1fr) auto minmax(145px, 1.05fr);
+  align-items: stretch;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.forecast-cash-equation article {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 15px 17px;
+}
+.forecast-cash-equation article.result {
+  background: #dce9e2;
+}
+.forecast-cash-equation.danger article.result {
+  background: #f4d4cc;
+  color: #a43726;
+}
+.forecast-cash-equation > i {
+  display: grid;
+  place-items: center;
+  color: #8b958f;
+  font:
+    600 18px "Newsreader",
+    serif;
+}
+.forecast-cash-equation span {
+  color: #62716b;
+  font:
+    600 7px "DM Mono",
+    monospace;
+  letter-spacing: 0.07em;
+}
+.forecast-cash-equation strong {
+  font:
+    600 clamp(17px, 1.6vw, 25px) "Newsreader",
+    serif;
 }
 .forecast-kpis {
   display: grid;
@@ -3962,10 +4098,13 @@ h2 {
   letter-spacing: 0.08em;
 }
 .forecast-kpis strong {
-  overflow-wrap: anywhere;
   font:
-    600 clamp(23px, 2.6vw, 39px) "Newsreader",
+    600 clamp(22px, 2.25vw, 36px) "Newsreader",
     serif;
+}
+.forecast-kpis .forecast-date-value {
+  line-height: 1.05;
+  overflow-wrap: normal;
 }
 .forecast-kpis strong.negative {
   color: #b33b28;
@@ -4117,7 +4256,7 @@ h2 {
 }
 .forecast-assumptions {
   display: grid;
-  grid-template-columns: auto repeat(4, minmax(0, 1fr));
+  grid-template-columns: auto repeat(5, minmax(0, 1fr));
   gap: 15px;
   border: 1px solid var(--line);
   background: #ebe7dd;
@@ -4155,6 +4294,21 @@ h2 {
   .accounts-table-header,
   .accounts-table article {
     min-width: 900px;
+  }
+  .accounts-kpis,
+  .forecast-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .accounts-kpis article:nth-child(2),
+  .forecast-kpis article:nth-child(2) {
+    border-right: 0;
+  }
+  .accounts-kpis article:nth-child(-n + 2),
+  .forecast-kpis article:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+  .forecast-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .forecast-main-grid {
     grid-template-columns: 1fr;
@@ -4357,9 +4511,6 @@ h2 {
   .forecast-controls {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .forecast-controls > div:first-child {
-    grid-column: 1 / -1;
-  }
   .forecast-presets {
     grid-column: 1 / -1;
   }
@@ -4371,6 +4522,24 @@ h2 {
   }
   .forecast-kpis article:nth-child(-n + 2) {
     border-bottom: 1px solid var(--line);
+  }
+  .forecast-cash-equation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .forecast-cash-equation > i {
+    display: none;
+  }
+  .forecast-cash-equation article {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .forecast-cash-equation article:nth-of-type(even) {
+    border-right: 0;
+  }
+  .forecast-cash-equation article.result {
+    grid-column: 1 / -1;
+    border-right: 0;
+    border-bottom: 0;
   }
   .forecast-assumptions {
     grid-template-columns: 1fr 1fr;
@@ -4771,6 +4940,17 @@ h2 {
   .accounts-brief-actions {
     width: 100%;
   }
+  .accounts-brief-actions .ghost-button,
+  .account-form-actions .ghost-button,
+  .forecast-controls-heading .ghost-button {
+    display: block;
+  }
+  .account-form-actions .add-button {
+    font-size: inherit;
+  }
+  .account-form-actions .add-button::after {
+    content: none;
+  }
   .accounts-brief-actions button {
     flex: 1;
   }
@@ -4780,6 +4960,17 @@ h2 {
   }
   .accounts-kpis strong {
     font-size: 20px;
+  }
+  .accounts-kpis {
+    grid-template-columns: 1fr;
+  }
+  .accounts-kpis article,
+  .accounts-kpis article:nth-child(2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .accounts-kpis article:last-child {
+    border-bottom: 0;
   }
   .accounts-search {
     width: 100%;
@@ -4793,6 +4984,57 @@ h2 {
   }
   .accounts-table article {
     margin: 0 12px;
+  }
+  .account-source-guide {
+    grid-template-columns: 1fr;
+  }
+  .account-source-guide article {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .account-source-guide article:last-child {
+    border-bottom: 0;
+  }
+  .accounts-table {
+    overflow: visible;
+  }
+  .accounts-table-header {
+    display: none;
+  }
+  .accounts-table article {
+    min-width: 0;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 14px;
+    padding: 15px 2px;
+  }
+  .accounts-table article > div:first-child {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .accounts-table article > div:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .accounts-table article > span:nth-child(3) {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .accounts-table article > .account-balance {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    font-size: 15px;
+  }
+  .accounts-table article > span:nth-child(5) {
+    grid-column: 2;
+    grid-row: 2 / 4;
+    align-self: center;
+    text-align: right;
+  }
+  .accounts-table article > .table-action {
+    grid-column: 1 / -1;
+    grid-row: 4;
   }
   .account-form-shell {
     padding: 18px;
@@ -4814,9 +5056,17 @@ h2 {
     grid-template-columns: 1fr;
     padding: 16px;
   }
-  .forecast-controls > div:first-child,
+  .forecast-controls-heading,
   .forecast-presets {
     grid-column: 1;
+  }
+  .forecast-controls-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .forecast-controls-heading > div:last-child {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
   .forecast-presets {
     overflow-x: auto;
@@ -4830,6 +5080,30 @@ h2 {
   }
   .forecast-kpis strong {
     font-size: 20px;
+  }
+  .forecast-kpis {
+    grid-template-columns: 1fr;
+  }
+  .forecast-kpis article,
+  .forecast-kpis article:nth-child(2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .forecast-kpis article:last-child {
+    border-bottom: 0;
+  }
+  .forecast-cash-equation {
+    grid-template-columns: 1fr;
+  }
+  .forecast-cash-equation article,
+  .forecast-cash-equation article:nth-of-type(even),
+  .forecast-cash-equation article.result {
+    grid-column: 1;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .forecast-cash-equation article.result {
+    border-bottom: 0;
   }
   .forecast-chart {
     min-height: 270px;

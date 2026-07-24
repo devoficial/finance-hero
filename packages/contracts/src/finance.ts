@@ -120,6 +120,7 @@ export const updateFinancialAccountRequestSchema = z
     name: z.string().trim().min(1).max(160).optional(),
     institution: z.string().trim().max(160).nullable().optional(),
     isActive: z.boolean().optional(),
+    balancePaise: paiseSchema.nonnegative().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, { message: "At least one account field is required." });
 

@@ -54,10 +54,22 @@ describe("account repository", () => {
     });
     expect(account).toMatchObject({ name: "Cash reserve", balancePaise: 250000, managedBy: "wealth" });
 
-    const updated = repository.updateAccount(account.id, { name: "Home cash" });
-    expect(updated).toMatchObject({ name: "Home cash", isActive: true, balancePaise: 250000 });
+    const updated = repository.updateAccount(account.id, { name: "Home cash", balancePaise: 325000 });
+    expect(updated).toMatchObject({ name: "Home cash", isActive: true, balancePaise: 325000 });
     expect(() => repository.updateAccount(account.id, { isActive: false })).toThrow(
       "Move or reconcile the remaining balance before deactivating this account.",
+    );
+    database.close();
+  });
+
+  it("requires ledger and liability balances to be edited at their source", () => {
+    const { database, repository } = createRepository();
+
+    expect(() => repository.updateAccount("account-primary-bank", { balancePaise: 100000 })).toThrow(
+      "Use the ledger or reconciliation to change this account balance.",
+    );
+    expect(() => repository.updateAccount("account-debt-home", { balancePaise: 100000 })).toThrow(
+      "Edit the linked liability principal in Liabilities.",
     );
     database.close();
   });

@@ -12,6 +12,7 @@ interface AccountsViewProps {
   data?: FinancialAccountsResponse;
   loading: boolean;
   money: (paise: number) => string;
+  onOpenLedger: () => void;
   onOpenLiabilities: () => void;
 }
 
@@ -33,7 +34,7 @@ function accountTypeLabel(account: FinancialAccount): string {
   return account.accountType.replaceAll("_", " ");
 }
 
-export function AccountsView({ data, loading, money, onOpenLiabilities }: AccountsViewProps) {
+export function AccountsView({ data, loading, money, onOpenLedger, onOpenLiabilities }: AccountsViewProps) {
   const queryClient = useQueryClient();
   const formRef = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<AccountFilter>("all");
@@ -44,6 +45,7 @@ export function AccountsView({ data, loading, money, onOpenLiabilities }: Accoun
   const [accountType, setAccountType] = useState<AccountType>("bank");
   const [institution, setInstitution] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
+  const [balance, setBalance] = useState("");
   const [restricted, setRestricted] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
@@ -103,6 +105,7 @@ export function AccountsView({ data, loading, money, onOpenLiabilities }: Accoun
     setAccountType("bank");
     setInstitution("");
     setOpeningBalance("");
+    setBalance("");
     setRestricted(false);
     setIsActive(true);
     setFormError(null);
@@ -114,6 +117,7 @@ export function AccountsView({ data, loading, money, onOpenLiabilities }: Accoun
     setEditing(account);
     setName(account.name);
     setInstitution(account.institution ?? "");
+    setBalance(String(account.balancePaise / 100));
     setIsActive(account.isActive);
     setFormError(null);
     setShowForm(true);
@@ -128,6 +132,11 @@ export function AccountsView({ data, loading, money, onOpenLiabilities }: Accoun
     }
     setFormError(null);
     if (editing) {
+      const balancePaise = editing.managedBy === "wealth" ? rupeesToPaise(balance) : null;
+      if (editing.managedBy === "wealth" && balancePaise == null) {
+        setFormError("Enter a valid non-negative current balance.");
+        return;
+      }
       accountMutation.mutate({
         mode: "update",
         id: editing.id,
@@ -135,6 +144,7 @@ export function AccountsView({ data, loading, money, onOpenLiabilities }: Accoun
           name: name.trim(),
           institution: institution.trim() || null,
           isActive,
+          ...(balancePaise == null ? {} : { balancePaise }),
         },
       });
       return;
@@ -169,7 +179,10 @@ export function AccountsView({ data, loading, money, onOpenLiabilities }: Accoun
         <div>
           <p className="eyebrow">ACCOUNT CONTROL / ONE SOURCE OF TRUTH</p>
           <h2>Every balance has an owner.</h2>
-          <p>Bank, cash, wallet and investment accounts live here. Loans remain connected to the liability register.</p>
+          <p>
+            Edit savings and wallet valuations here. Transaction accounts follow the ledger; loans follow the liability
+            register.
+          </p>
         </div>
         <div className="accounts-brief-actions">
           <button className="ghost-button" onClick={onOpenLiabilities} type="button">
@@ -184,27 +197,55 @@ export function AccountsView({ data, loading, money, onOpenLiabilities }: Accoun
       <div className="accounts-kpis">
         <article>
           <span>ASSET BALANCES</span>
-          <strong>{money(data.totalAssetBalancePaise)}</strong>
+          <strong className="money-value">{money(data.totalAssetBalancePaise)}</strong>
           <small>{activeAssets} active asset accounts</small>
         </article>
         <article>
           <span>LIABILITY BALANCES</span>
-          <strong>{money(data.totalLiabilityBalancePaise)}</strong>
+          <strong className="money-value">{money(data.totalLiabilityBalancePaise)}</strong>
           <small>{activeLiabilities} linked liability accounts</small>
         </article>
         <article>
-          <span>NET ACCOUNT POSITION</span>
-          <strong className={data.totalAssetBalancePaise - data.totalLiabilityBalancePaise < 0 ? "negative" : ""}>
+          <span>ACCOUNT POSITION</span>
+          <strong
+            className={`money-value ${
+              data.totalAssetBalancePaise - data.totalLiabilityBalancePaise < 0 ? "negative" : ""
+            }`}
+          >
             {money(data.totalAssetBalancePaise - data.totalLiabilityBalancePaise)}
           </strong>
-          <small>Assets minus linked account debt</small>
+          <small>Tracked assets minus bank and card principal</small>
         </article>
         <article>
           <span>ARCHIVED</span>
-          <strong>{inactiveAccounts}</strong>
+          <strong className="money-value">{inactiveAccounts}</strong>
           <small>Kept for complete history</small>
         </article>
       </div>
+
+      <section className="account-source-guide" aria-label="How account balances are edited">
+        <article>
+          <span>DIRECT VALUATION</span>
+          <strong>Savings, investments and wallets</strong>
+          <small>Edit the current balance here; it becomes a dated valuation.</small>
+        </article>
+        <article>
+          <span>LEDGER CALCULATED</span>
+          <strong>Bank and cash transaction accounts</strong>
+          <small>Post or reconcile transactions so the audit trail remains intact.</small>
+          <button onClick={onOpenLedger} type="button">
+            Open ledger
+          </button>
+        </article>
+        <article>
+          <span>LIABILITY CALCULATED</span>
+          <strong>Loans and credit cards</strong>
+          <small>Edit principal or clear the facility in the liability register.</small>
+          <button onClick={onOpenLiabilities} type="button">
+            Open liabilities
+          </button>
+        </article>
+      </section>
 
       <div className="accounts-register panel">
         <div className="accounts-register-head">
@@ -256,7 +297,11 @@ export function AccountsView({ data, loading, money, onOpenLiabilities }: Accoun
                 <small>{account.managedBy === "ledger" ? "Unified ledger" : `Managed in ${account.managedBy}`}</small>
               </div>
               <span>{account.institution || "Independent"}</span>
-              <strong className={account.accountClass === "liability" && account.balancePaise > 0 ? "negative" : ""}>
+              <strong
+                className={`account-balance money-value ${
+                  account.accountClass === "liability" && account.balancePaise > 0 ? "negative" : ""
+                }`}
+              >
                 {money(account.balancePaise)}
               </strong>
               <span>
@@ -280,7 +325,11 @@ export function AccountsView({ data, loading, money, onOpenLiabilities }: Accoun
             <p>
               {editing?.managedBy === "liability"
                 ? "The name is shared with the liability register. Clear active debt there before archiving it."
-                : "Opening balance becomes the starting valuation; later transactions update it automatically."}
+                : editing?.managedBy === "ledger"
+                  ? "This balance is calculated from the unified ledger. Use transactions or reconciliation to change it."
+                  : editing
+                    ? "Saving the balance creates a fresh dated valuation while preserving prior ledger history."
+                    : "Opening balance becomes the starting valuation; later transactions update it automatically."}
             </p>
           </div>
           <form className="account-form" onSubmit={submitAccount}>
@@ -333,10 +382,36 @@ export function AccountsView({ data, loading, money, onOpenLiabilities }: Accoun
               </>
             )}
             {editing && (
-              <label className="account-checkbox">
-                <input checked={isActive} onChange={(event) => setIsActive(event.target.checked)} type="checkbox" />
-                Active account
-              </label>
+              <>
+                {editing.managedBy === "wealth" ? (
+                  <label>
+                    Current balance (INR)
+                    <input
+                      min="0"
+                      onChange={(event) => setBalance(event.target.value)}
+                      required
+                      step="0.01"
+                      type="number"
+                      value={balance}
+                    />
+                  </label>
+                ) : (
+                  <div className="account-balance-owner">
+                    <span>BALANCE SOURCE</span>
+                    <strong>{editing.managedBy === "liability" ? "Liability register" : "Unified ledger"}</strong>
+                    <button
+                      onClick={editing.managedBy === "liability" ? onOpenLiabilities : onOpenLedger}
+                      type="button"
+                    >
+                      Edit at source
+                    </button>
+                  </div>
+                )}
+                <label className="account-checkbox">
+                  <input checked={isActive} onChange={(event) => setIsActive(event.target.checked)} type="checkbox" />
+                  Active account
+                </label>
+              </>
             )}
             {formError && <p className="form-error">{formError}</p>}
             <div className="account-form-actions">

@@ -357,6 +357,7 @@ export function App() {
             data={accounts.data}
             loading={accounts.isLoading}
             money={money}
+            onOpenLedger={() => navigate("Ledger")}
             onOpenLiabilities={() => navigate("Liabilities")}
           />
         ) : activeNav === "Liabilities" ? (
@@ -382,6 +383,7 @@ export function App() {
             loading={dashboard.isLoading || liabilities.isLoading || wealth.isLoading || homeConstruction.isLoading}
             money={money}
             month={selectedMonth}
+            onOpenBudget={() => navigate("Expenses")}
             wealth={wealth.data}
           />
         ) : activeNav === "Projects" ? (
