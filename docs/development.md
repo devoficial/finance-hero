@@ -11,19 +11,20 @@
 
 ```bash
 pnpm install
-cp .env.example .env
+pnpm setup:local
 ```
 
-Generate a development-only database key with at least 32 random characters and set
-`FINANCE_HERO_DATABASE_KEY` in the shell or `.env`. The current server reads environment
-variables from the launching shell; automatic `.env` loading will be added with the Mac launcher.
+The local setup command generates or validates the database key and stores it in
+macOS Keychain. Existing `.env` and `FINANCE_HERO_DATABASE_KEY` values are accepted
+only as migration inputs and are verified against an existing database before being
+stored.
 
 Never commit `.env`, databases, certificates, statements, exports, or personal fixtures.
 
 ## Run
 
 ```bash
-FINANCE_HERO_DATABASE_KEY="your-development-key-of-at-least-32-characters" pnpm dev
+pnpm start:local
 ```
 
 - PWA: `http://127.0.0.1:4318`
@@ -68,18 +69,10 @@ verifies that a wrong key cannot read it.
 
 ## Database keys
 
-Production will use `MacOSKeychainDatabaseKeyProvider`. To create a manual development entry:
-
-```bash
-security add-generic-password \
-  -U \
-  -s finance-hero.database \
-  -a primary \
-  -w "$(openssl rand -base64 48)"
-```
-
-Do not paste or print the resulting key. The Mac launcher will create this entry during guided
-setup and will not use a checked-in environment variable.
+`MacOSKeychainDatabaseKeyProvider` is active in local runtime configuration.
+`pnpm setup:local` owns Keychain creation and migration. Do not add, print, or
+replace the Keychain item manually; setup verifies the key against existing data
+before updating it.
 
 ## Current limitations
 

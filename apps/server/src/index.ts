@@ -1,7 +1,7 @@
 import { buildApp } from "./app";
-import { readConfig } from "./config";
+import { readRuntimeConfig } from "./config";
 
-const config = readConfig();
+const config = await readRuntimeConfig();
 const app = await buildApp({ config, logger: true });
 
 try {

@@ -5,7 +5,11 @@
   "scripts": {
     "test": "turbo test",
     "dev": "turbo dev",
-    "start:local": "node --env-file-if-exists=.env node_modules/turbo/bin/turbo dev",
+    "setup:local": "node scripts/local-control.mjs setup",
+    "start:local": "node scripts/local-control.mjs start",
+    "stop:local": "node scripts/local-control.mjs stop",
+    "status:local": "node scripts/local-control.mjs status",
+    "logs:local": "node scripts/local-control.mjs logs",
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "lint": "biome check .",

@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { type DatabaseKeyProvider, MacOSKeychainDatabaseKeyProvider } from "@finance-hero/database";
 
 export interface ServerConfig {
   host: string;
@@ -20,4 +21,21 @@ export function readConfig(environment = process.env): ServerConfig {
     dataDirectory: resolve(environment.FINANCE_HERO_DATA_DIR ?? "./data"),
     databaseKey: environment.FINANCE_HERO_DATABASE_KEY,
   };
+}
+
+export async function readRuntimeConfig(
+  environment = process.env,
+  keyProvider: DatabaseKeyProvider = new MacOSKeychainDatabaseKeyProvider(),
+): Promise<ServerConfig> {
+  const config = readConfig(environment);
+  if (config.databaseKey) {
+    return config;
+  }
+
+  try {
+    const key = await keyProvider.getKey();
+    return { ...config, databaseKey: key.toString("utf8") };
+  } catch {
+    return config;
+  }
 }

@@ -26,7 +26,8 @@ and Goals module tracks editable asset valuations, the restricted Pluxee wallet,
 completion forecasts, and net worth without counting earmarked savings twice.
 
 See [development setup](docs/development.md) to install, run, and verify the workspace.
-For the shortest owner-focused instructions, use [Run Finance Hero locally](LOCAL_SETUP.md).
+For owner-focused Keychain setup, one-click start/stop, and troubleshooting, use
+[Run Finance Hero locally](LOCAL_SETUP.md).
 
 ## Documentation
 
