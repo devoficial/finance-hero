@@ -19,8 +19,10 @@ Posted corrections reverse and replace the original entry instead of mutating hi
 dashboard, 12-month expenses, searchable ledger, and liability views project that data without
 duplicating storage. The Home Construction project now preserves all 144 migrated source rows,
 tracks vendor estimates and pending commitments, highlights unreconciled rows, and posts new
-manual project expenses into the unified ledger. Full statement importing and automated source
-synchronization remain later phases. Monthly income plans and category allocations are editable,
+manual project expenses into the unified ledger. The Imports module now quarantines local statement
+files, extracts CSV/TSV rows into an editable review queue, blocks duplicate file hashes, and posts
+only explicitly approved candidates. PDF/Excel extraction and automated source synchronization
+remain later parser/connector slices. Monthly income plans and category allocations are editable,
 audited, and immediately drive dashboard budget percentages and danger thresholds. The Savings
 and Goals module tracks editable asset valuations, the restricted Pluxee wallet, goal allocations,
 completion forecasts, and net worth without counting earmarked savings twice.

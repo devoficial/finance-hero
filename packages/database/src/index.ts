@@ -13,6 +13,15 @@ export {
 } from "./budget-repository";
 export { type FinanceHeroDatabase, initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
 export {
+  type CreateImportArtifactInput,
+  type ImportArtifactRecord,
+  type ImportCandidateRecord,
+  type ImportCandidateStatus,
+  type ImportQueueRecord,
+  ImportRepository,
+  type UpdateImportCandidateInput,
+} from "./import-repository";
+export {
   type DatabaseKeyProvider,
   EnvironmentDatabaseKeyProvider,
   MacOSKeychainDatabaseKeyProvider,

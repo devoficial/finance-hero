@@ -88,6 +88,77 @@ export const referenceDataResponseSchema = z.object({
   categories: z.array(z.object({ id: z.string(), name: z.string() })),
 });
 
+export const importArtifactSchema = z.object({
+  id: z.string(),
+  filename: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  accountId: z.string().nullable(),
+  accountName: z.string().nullable(),
+  status: z.enum(["parsed", "needs_parser", "failed"]),
+  parserMessage: z.string().nullable(),
+  rowCount: z.number().int().nonnegative(),
+  pendingCount: z.number().int().nonnegative(),
+  approvedCount: z.number().int().nonnegative(),
+  rejectedCount: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+});
+
+export const importCandidateSchema = z.object({
+  id: z.string(),
+  artifactId: z.string(),
+  filename: z.string(),
+  sourceRow: z.number().int().positive(),
+  version: z.number().int().positive(),
+  occurredOn: localDateSchema.nullable(),
+  payee: z.string(),
+  amountPaise: paiseSchema.positive(),
+  direction: z.enum(["debit", "credit"]),
+  accountId: z.string().nullable(),
+  accountName: z.string().nullable(),
+  categoryId: z.string().nullable(),
+  categoryName: z.string().nullable(),
+  status: z.enum(["pending", "approved", "rejected"]),
+  confidence: z.number().int().min(0).max(100),
+  warnings: z.array(z.string()),
+  source: z.record(z.string(), z.string()),
+  transactionId: z.string().nullable(),
+  rejectionReason: z.string().nullable(),
+  updatedAt: z.string().datetime(),
+});
+
+export const importQueueResponseSchema = z.object({
+  pendingCount: z.number().int().nonnegative(),
+  approvedCount: z.number().int().nonnegative(),
+  rejectedCount: z.number().int().nonnegative(),
+  artifacts: z.array(importArtifactSchema),
+  candidates: z.array(importCandidateSchema),
+});
+
+export const statementUploadResponseSchema = z.object({
+  duplicate: z.boolean(),
+  artifact: importArtifactSchema,
+});
+
+export const updateImportCandidateRequestSchema = z
+  .object({
+    occurredOn: localDateSchema.nullable().optional(),
+    payee: z.string().trim().min(1).max(160).optional(),
+    amountPaise: paiseSchema.positive().optional(),
+    direction: z.enum(["debit", "credit"]).optional(),
+    accountId: z.string().min(1).nullable().optional(),
+    categoryId: z.string().min(1).nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, { message: "At least one candidate field is required." });
+
+export const importCandidateActionRequestSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(500),
+});
+
+export const rejectImportCandidatesRequestSchema = importCandidateActionRequestSchema.extend({
+  reason: z.string().trim().min(3).max(500),
+});
+
 export const financialAccountSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -484,6 +555,13 @@ export type DashboardResponse = z.infer<typeof dashboardResponseSchema>;
 export type LedgerTransaction = z.infer<typeof ledgerTransactionSchema>;
 export type LedgerResponse = z.infer<typeof ledgerResponseSchema>;
 export type ReferenceDataResponse = z.infer<typeof referenceDataResponseSchema>;
+export type ImportArtifact = z.infer<typeof importArtifactSchema>;
+export type ImportCandidate = z.infer<typeof importCandidateSchema>;
+export type ImportQueueResponse = z.infer<typeof importQueueResponseSchema>;
+export type StatementUploadResponse = z.infer<typeof statementUploadResponseSchema>;
+export type UpdateImportCandidateRequest = z.infer<typeof updateImportCandidateRequestSchema>;
+export type ImportCandidateActionRequest = z.infer<typeof importCandidateActionRequestSchema>;
+export type RejectImportCandidatesRequest = z.infer<typeof rejectImportCandidatesRequestSchema>;
 export type FinancialAccount = z.infer<typeof financialAccountSchema>;
 export type FinancialAccountsResponse = z.infer<typeof financialAccountsResponseSchema>;
 export type CreateFinancialAccountRequest = z.infer<typeof createFinancialAccountRequestSchema>;

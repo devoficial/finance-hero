@@ -61,6 +61,19 @@ This is the initial surface, not an exhaustive OpenAPI specification.
 | `POST` | `/candidate-actions/merge` | Merge evidence into one candidate group |
 | `POST` | `/candidate-actions/split` | Split one candidate into several |
 
+The first implemented import vertical slice exposes these concrete loopback endpoints:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/imports` | Source register, review counts, and editable candidates |
+| `POST` | `/statement-uploads?filename=&accountId=` | Bounded raw upload, SHA-256 deduplication, quarantine, and CSV/TSV extraction |
+| `PATCH` | `/candidates/:id` | Correct date, payee, direction, amount, account, or category before posting |
+| `POST` | `/candidate-actions/approve` | Validate and post selected candidates into the balanced ledger |
+| `POST` | `/candidate-actions/reject` | Retain selected candidates as rejected evidence with a reason |
+
+PDF, XLS, and XLSX uploads are accepted into quarantine but return `needs_parser`. This is deliberate:
+the system does not pretend a binary statement was parsed until a bounded parser plug-in exists.
+
 ### Planning and trackers
 
 | Method | Path | Purpose |

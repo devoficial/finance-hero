@@ -221,6 +221,41 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       PRIMARY KEY (goal_id, asset_position_id)
     ) STRICT;
 
+    CREATE TABLE IF NOT EXISTS import_artifacts (
+      id TEXT PRIMARY KEY NOT NULL,
+      filename TEXT NOT NULL,
+      content_hash TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+      account_id TEXT REFERENCES accounts(id),
+      status TEXT NOT NULL CHECK (status IN ('parsed', 'needs_parser', 'failed')),
+      parser_message TEXT,
+      row_count INTEGER NOT NULL DEFAULT 0 CHECK (row_count >= 0),
+      created_at TEXT NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS import_candidates (
+      id TEXT PRIMARY KEY NOT NULL,
+      artifact_id TEXT NOT NULL REFERENCES import_artifacts(id),
+      source_row INTEGER NOT NULL CHECK (source_row > 0),
+      version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+      occurred_on TEXT CHECK (occurred_on IS NULL OR length(occurred_on) = 10),
+      payee TEXT NOT NULL,
+      amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
+      direction TEXT NOT NULL CHECK (direction IN ('debit', 'credit')),
+      account_id TEXT REFERENCES accounts(id),
+      category_id TEXT REFERENCES categories(id),
+      status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+      confidence INTEGER NOT NULL CHECK (confidence BETWEEN 0 AND 100),
+      warnings_json TEXT NOT NULL,
+      source_json TEXT NOT NULL,
+      transaction_id TEXT REFERENCES journal_transactions(id),
+      rejection_reason TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (artifact_id, source_row)
+    ) STRICT;
+
     CREATE INDEX IF NOT EXISTS postings_transaction_idx ON postings(transaction_id);
     CREATE INDEX IF NOT EXISTS postings_account_idx ON postings(account_id);
     CREATE INDEX IF NOT EXISTS transactions_month_idx ON journal_transactions(effective_month, occurred_on);
@@ -232,6 +267,9 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     CREATE INDEX IF NOT EXISTS asset_positions_type_idx ON asset_positions(asset_type);
     CREATE INDEX IF NOT EXISTS financial_goals_status_priority_idx ON financial_goals(status, priority);
     CREATE INDEX IF NOT EXISTS goal_allocations_asset_idx ON goal_allocations(asset_position_id);
+    CREATE INDEX IF NOT EXISTS import_artifacts_created_idx ON import_artifacts(created_at DESC);
+    CREATE INDEX IF NOT EXISTS import_candidates_status_idx ON import_candidates(status, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS import_candidates_artifact_idx ON import_candidates(artifact_id, source_row);
   `);
 
   const debtColumns = database.connection.prepare("PRAGMA table_info(debts)").all() as Array<{ name: string }>;

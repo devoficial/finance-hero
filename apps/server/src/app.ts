@@ -1,4 +1,5 @@
-import { mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   budgetMonthResponseSchema,
@@ -16,6 +17,9 @@ import {
   financialAccountsResponseSchema,
   financialGoalSchema,
   healthResponseSchema,
+  importCandidateActionRequestSchema,
+  importCandidateSchema,
+  importQueueResponseSchema,
   ledgerResponseSchema,
   ledgerTransactionSchema,
   liabilitiesResponseSchema,
@@ -26,12 +30,15 @@ import {
   projectExpenseSchema,
   projectSummaryResponseSchema,
   referenceDataResponseSchema,
+  rejectImportCandidatesRequestSchema,
   replaceTransactionRequestSchema,
   reverseTransactionRequestSchema,
+  statementUploadResponseSchema,
   updateBudgetMonthRequestSchema,
   updateFinancialAccountRequestSchema,
   updateFinancialGoalRequestSchema,
   updateGoalAllocationsRequestSchema,
+  updateImportCandidateRequestSchema,
   updateLiabilityRequestSchema,
   updatePersonalBalanceRequestSchema,
   updateProjectCommitmentRequestSchema,
@@ -45,6 +52,7 @@ import {
   AccountRepository,
   BudgetRepository,
   type FinanceHeroDatabase,
+  ImportRepository,
   initializeFoundationSchema,
   LedgerRepository,
   openEncryptedDatabase,
@@ -54,6 +62,7 @@ import {
 } from "@finance-hero/database";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { ServerConfig } from "./config";
+import { parseStatementDelimitedFile } from "./statement-parser";
 
 export interface BuildAppOptions {
   config: ServerConfig;
@@ -61,12 +70,62 @@ export interface BuildAppOptions {
   logger?: boolean;
 }
 
+const CATEGORY_RULES: Array<{ categoryId: string; terms: string[] }> = [
+  {
+    categoryId: "category-groceries",
+    terms: ["swiggy", "zomato", "blinkit", "zepto", "bigbasket", "grocery", "supermarket", "restaurant", "cafe"],
+  },
+  {
+    categoryId: "category-transport",
+    terms: ["uber", "ola", "rapido", "petrol", "fuel", "irctc", "airlines", "metro"],
+  },
+  {
+    categoryId: "category-shopping",
+    terms: ["amazon", "flipkart", "myntra", "ajio", "shopping", "decathlon"],
+  },
+  {
+    categoryId: "category-entertainment",
+    terms: ["netflix", "spotify", "hotstar", "prime video", "bookmyshow", "subscription"],
+  },
+  {
+    categoryId: "category-medical",
+    terms: ["pharmacy", "apollo", "hospital", "clinic", "medical", "diagnostic"],
+  },
+  {
+    categoryId: "category-broadband",
+    terms: ["airtel", "jio", "broadband", "electricity", "bescom"],
+  },
+];
+
+function suggestCategoryId(payee: string): string | undefined {
+  const normalized = payee.toLowerCase();
+  return CATEGORY_RULES.find((rule) => rule.terms.some((term) => normalized.includes(term)))?.categoryId;
+}
+
+function detectStatementType(content: Buffer, extension: string): string {
+  if (content.subarray(0, 5).toString("ascii") === "%PDF-") return "pdf";
+  if (content.subarray(0, 4).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0]))) return "xls";
+  if (content.subarray(0, 2).toString("ascii") === "PK") return "xlsx";
+  if ((extension === "csv" || extension === "tsv") && !content.includes(0)) return extension;
+  return "unknown";
+}
+
+function statementMimeType(fileType: string): string {
+  if (fileType === "csv") return "text/csv";
+  if (fileType === "tsv") return "text/tab-separated-values";
+  if (fileType === "pdf") return "application/pdf";
+  if (fileType === "xls") return "application/vnd.ms-excel";
+  if (fileType === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  return "application/octet-stream";
+}
+
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger: options.logger ?? false });
+  const app = Fastify({ logger: options.logger ?? false, bodyLimit: 10 * 1024 * 1024 });
   let database: FinanceHeroDatabase | undefined;
   let budgets: BudgetRepository | undefined;
   let accounts: AccountRepository | undefined;
   let ledger: LedgerRepository | undefined;
+  let imports: ImportRepository | undefined;
   let projects: ProjectRepository | undefined;
   let wealth: WealthRepository | undefined;
 
@@ -79,11 +138,18 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     initializeFoundationSchema(database);
     seedAcceptedOpeningSnapshot(database);
     ledger = new LedgerRepository(database);
+    imports = new ImportRepository(database, ledger);
     accounts = new AccountRepository(database);
     budgets = new BudgetRepository(database);
     projects = new ProjectRepository(database, ledger);
     wealth = new WealthRepository(database);
   }
+
+  app.addContentTypeParser(
+    "application/octet-stream",
+    { parseAs: "buffer", bodyLimit: 10 * 1024 * 1024 },
+    (_request, body, done) => done(null, body),
+  );
 
   app.get("/api/v1/health", async (_request, reply) => {
     const payload = healthResponseSchema.parse({
@@ -226,6 +292,129 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
 
     return reply.header("cache-control", "no-store").send(referenceDataResponseSchema.parse(ledger.getReferenceData()));
+  });
+
+  app.get("/api/v1/imports", async (_request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    return reply.header("cache-control", "no-store").send(importQueueResponseSchema.parse(imports.getQueue()));
+  });
+
+  app.post("/api/v1/statement-uploads", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const query = request.query as { filename?: string; accountId?: string };
+      const filename = (query.filename ?? "").trim();
+      if (!filename || filename.length > 240 || filename.includes("/") || filename.includes("\\")) {
+        throw new Error("A valid statement filename is required.");
+      }
+      const content = request.body;
+      if (!Buffer.isBuffer(content) || content.length === 0) {
+        throw new Error("The statement file is empty.");
+      }
+
+      const extension = filename.toLowerCase().split(".").pop() ?? "";
+      const contentHash = createHash("sha256").update(content).digest("hex");
+      const fileType = detectStatementType(content, extension);
+      const textStatement = fileType === "csv" || fileType === "tsv";
+      const recognizedBinary = ["pdf", "xls", "xlsx"].includes(fileType);
+      let rows: ReturnType<typeof parseStatementDelimitedFile>["rows"] = [];
+      let status: "parsed" | "needs_parser" | "failed";
+      let parserMessage: string;
+      if (textStatement) {
+        try {
+          const parsed = parseStatementDelimitedFile(content, `statement.${fileType}`);
+          rows = parsed.rows.map((row) => {
+            const categoryId = row.direction === "debit" ? suggestCategoryId(row.payee) : undefined;
+            return {
+              ...row,
+              categoryId,
+              confidence: categoryId ? row.confidence : Math.min(row.confidence, 60),
+              warnings:
+                row.direction === "debit" && !categoryId
+                  ? [...row.warnings, "Choose an expense category"]
+                  : row.warnings,
+            };
+          });
+          status = "parsed";
+          parserMessage = parsed.message;
+        } catch (error) {
+          status = "failed";
+          parserMessage = error instanceof Error ? error.message : "Statement text could not be parsed.";
+        }
+      } else if (recognizedBinary) {
+        status = "needs_parser";
+        parserMessage = "File secured locally. PDF and Excel extraction is the next parser plug-in.";
+      } else {
+        status = "failed";
+        parserMessage = "Unsupported file type. Upload CSV, TSV, PDF, XLS, or XLSX.";
+      }
+
+      const quarantineDirectory = join(options.config.dataDirectory, "imports", "quarantine");
+      mkdirSync(quarantineDirectory, { recursive: true, mode: 0o700 });
+      const quarantinePath = join(quarantineDirectory, `${contentHash}.${fileType === "unknown" ? "bin" : fileType}`);
+      writeFileSync(quarantinePath, content, { mode: 0o600 });
+      chmodSync(quarantinePath, 0o600);
+
+      const result = imports.createArtifact({
+        filename,
+        contentHash,
+        mimeType: statementMimeType(fileType),
+        sizeBytes: content.length,
+        accountId: query.accountId || undefined,
+        status,
+        parserMessage,
+        rows,
+      });
+      return reply.code(result.duplicate ? 200 : 201).send(statementUploadResponseSchema.parse(result));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Statement could not be uploaded.";
+      return reply.code(400).send({ error: { code: "INVALID_STATEMENT_UPLOAD", message } });
+    }
+  });
+
+  app.patch("/api/v1/candidates/:id", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const { id } = request.params as { id: string };
+      const input = updateImportCandidateRequestSchema.parse(request.body);
+      return reply.send(importCandidateSchema.parse(imports.updateCandidate(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Import candidate could not be updated.";
+      const statusCode = message === "Import candidate does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_IMPORT_CANDIDATE", message } });
+    }
+  });
+
+  app.post("/api/v1/candidate-actions/approve", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const input = importCandidateActionRequestSchema.parse(request.body);
+      return reply.send(importQueueResponseSchema.parse(imports.approveCandidates(input.ids)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Import candidates could not be approved.";
+      return reply.code(400).send({ error: { code: "INVALID_IMPORT_APPROVAL", message } });
+    }
+  });
+
+  app.post("/api/v1/candidate-actions/reject", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const input = rejectImportCandidatesRequestSchema.parse(request.body);
+      return reply.send(importQueueResponseSchema.parse(imports.rejectCandidates(input.ids, input.reason)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Import candidates could not be rejected.";
+      return reply.code(400).send({ error: { code: "INVALID_IMPORT_REJECTION", message } });
+    }
   });
 
   app.get("/api/v1/accounts", async (_request, reply) => {

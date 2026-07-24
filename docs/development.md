@@ -41,6 +41,10 @@ pnpm start:local
 - Manual transaction: `POST /api/v1/transactions/manual`
 - Audited reversal: `POST /api/v1/transactions/:id/reverse`
 - Audited correction: `POST /api/v1/transactions/:id/replace`
+- Import queue: `GET /api/v1/imports`
+- Statement upload: `POST /api/v1/statement-uploads?filename=&accountId=`
+- Candidate edit: `PATCH /api/v1/candidates/:id`
+- Candidate approval/rejection: `POST /api/v1/candidate-actions/approve`, `POST /api/v1/candidate-actions/reject`
 
 Development binds only to loopback. LAN HTTPS, Bonjour discovery, and iPhone certificate
 installation remain a Phase 0 spike and must not be simulated by exposing the HTTP server.
@@ -90,6 +94,10 @@ before updating it.
 - Debt snowball/avalanche scenarios and the twelve-month forecast are deterministic browser calculations over
   current API data. Forecast assumptions remain editable and construction commitments are disclosed but excluded
   until their payment dates are known.
-- Google login, device pairing, LAN HTTPS, Gmail, SMS, and statement parsing are not connected yet.
+- Google login, device pairing, LAN HTTPS, Gmail, SMS, and binary statement parsing are not connected yet.
+- Local CSV/TSV statement extraction and review are connected. Uploaded PDF/XLS/XLSX files are preserved in
+  `data/imports/quarantine` and explicitly marked `needs_parser`; they are never presented as parsed data.
+- Institution-specific PDF/Excel extraction, statement balance reconciliation, merge/split review actions,
+  Gmail discovery, and iPhone Shortcut ingestion remain pending.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
 - PWA SVG branding is sufficient for development; release-quality iOS PNG icons are pending.

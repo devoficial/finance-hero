@@ -21,6 +21,11 @@ import {
   financialGoalSchema,
   type HealthResponse,
   healthResponseSchema,
+  type ImportCandidate,
+  type ImportCandidateActionRequest,
+  type ImportQueueResponse,
+  importCandidateSchema,
+  importQueueResponseSchema,
   type LedgerResponse,
   type LedgerTransaction,
   type LiabilitiesResponse,
@@ -38,12 +43,16 @@ import {
   projectExpenseSchema,
   projectSummaryResponseSchema,
   type ReferenceDataResponse,
+  type RejectImportCandidatesRequest,
   type ReverseTransactionRequest,
   referenceDataResponseSchema,
+  type StatementUploadResponse,
+  statementUploadResponseSchema,
   type UpdateBudgetMonthRequest,
   type UpdateFinancialAccountRequest,
   type UpdateFinancialGoalRequest,
   type UpdateGoalAllocationsRequest,
+  type UpdateImportCandidateRequest,
   type UpdateLiabilityRequest,
   type UpdatePersonalBalanceRequest,
   type UpdateProjectCommitmentRequest,
@@ -186,6 +195,66 @@ export async function updatePersonalBalance(id: string, input: UpdatePersonalBal
 
 export async function getReferenceData(signal?: AbortSignal): Promise<ReferenceDataResponse> {
   return referenceDataResponseSchema.parse(await getJson("/api/v1/reference-data", signal));
+}
+
+export async function getImports(signal?: AbortSignal): Promise<ImportQueueResponse> {
+  return importQueueResponseSchema.parse(await getJson("/api/v1/imports", signal));
+}
+
+export async function uploadStatement(file: File, accountId?: string): Promise<StatementUploadResponse> {
+  const query = new URLSearchParams({ filename: file.name });
+  if (accountId) {
+    query.set("accountId", accountId);
+  }
+  const response = await fetch(`/api/v1/statement-uploads?${query}`, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body: file,
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return statementUploadResponseSchema.parse(await response.json());
+}
+
+export async function updateImportCandidate(id: string, input: UpdateImportCandidateRequest): Promise<ImportCandidate> {
+  const response = await fetch(`/api/v1/candidates/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return importCandidateSchema.parse(await response.json());
+}
+
+export async function approveImportCandidates(input: ImportCandidateActionRequest): Promise<ImportQueueResponse> {
+  const response = await fetch("/api/v1/candidate-actions/approve", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return importQueueResponseSchema.parse(await response.json());
+}
+
+export async function rejectImportCandidates(input: RejectImportCandidatesRequest): Promise<ImportQueueResponse> {
+  const response = await fetch("/api/v1/candidate-actions/reject", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return importQueueResponseSchema.parse(await response.json());
 }
 
 export async function getBudget(month: string, signal?: AbortSignal): Promise<BudgetMonthResponse> {

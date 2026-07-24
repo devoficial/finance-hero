@@ -6,6 +6,7 @@ import { DashboardView } from "./components/DashboardView";
 import { ExpensesView } from "./components/ExpensesView";
 import { ForecastsView } from "./components/ForecastsView";
 import { GoalsView } from "./components/GoalsView";
+import { ImportsView } from "./components/ImportsView";
 import { LedgerView } from "./components/LedgerView";
 import { LiabilitiesView } from "./components/LiabilitiesView";
 import { ProjectsView } from "./components/ProjectsView";
@@ -16,6 +17,7 @@ import {
   getExpenseYear,
   getHealth,
   getHomeConstruction,
+  getImports,
   getLedger,
   getLiabilities,
   getReferenceData,
@@ -116,6 +118,10 @@ export function App() {
     queryKey: ["reference-data"],
     queryFn: ({ signal }) => getReferenceData(signal),
   });
+  const imports = useQuery({
+    queryKey: ["imports"],
+    queryFn: ({ signal }) => getImports(signal),
+  });
   const homeConstruction = useQuery({
     queryKey: ["projects", "home-construction"],
     queryFn: ({ signal }) => getHomeConstruction(signal),
@@ -187,6 +193,7 @@ export function App() {
     (activeNav === "Ledger" && (ledger.isError || referenceData.isError)) ||
     (activeNav === "Accounts" && accounts.isError) ||
     (activeNav === "Expenses" && (expenseYear.isError || dashboard.isError || budget.isError)) ||
+    (activeNav === "Imports" && (imports.isError || referenceData.isError)) ||
     (activeNav === "Liabilities" && liabilities.isError) ||
     (activeNav === "Goals" && wealth.isError) ||
     (activeNav === "Forecasts" &&
@@ -247,7 +254,7 @@ export function App() {
             >
               <span className="nav-index">0{index + 1}</span>
               {item}
-              {item === "Imports" && <span className="nav-badge">0</span>}
+              {item === "Imports" && <span className="nav-badge">{imports.data?.pendingCount ?? 0}</span>}
             </button>
           ))}
         </nav>
@@ -352,6 +359,13 @@ export function App() {
             month={selectedMonth}
             referenceData={referenceData.data}
           />
+        ) : activeNav === "Imports" ? (
+          <ImportsView
+            data={imports.data}
+            loading={imports.isLoading || referenceData.isLoading}
+            money={money}
+            referenceData={referenceData.data}
+          />
         ) : activeNav === "Accounts" ? (
           <AccountsView
             data={accounts.data}
@@ -413,18 +427,28 @@ export function App() {
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {(["Home", "Ledger", "Accounts", "Expenses", "Liabilities", "Goals", "Forecasts", "Projects"] as const).map(
-          (item) => (
-            <button
-              className={activeNav === item ? "active" : ""}
-              key={item}
-              onClick={() => navigate(item)}
-              type="button"
-            >
-              {item}
-            </button>
-          ),
-        )}
+        {(
+          [
+            "Home",
+            "Ledger",
+            "Accounts",
+            "Expenses",
+            "Imports",
+            "Liabilities",
+            "Goals",
+            "Forecasts",
+            "Projects",
+          ] as const
+        ).map((item) => (
+          <button
+            className={activeNav === item ? "active" : ""}
+            key={item}
+            onClick={() => navigate(item)}
+            type="button"
+          >
+            {item}
+          </button>
+        ))}
       </nav>
     </div>
   );
