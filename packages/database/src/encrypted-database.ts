@@ -114,6 +114,23 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       PRIMARY KEY (month, category_id)
     ) STRICT;
 
+    CREATE TABLE IF NOT EXISTS monthly_cash_carryover_overrides (
+      month TEXT PRIMARY KEY NOT NULL REFERENCES budget_periods(month),
+      amount_paise INTEGER NOT NULL,
+      source_ref TEXT,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS monthly_cash_adjustments (
+      id TEXT PRIMARY KEY NOT NULL,
+      month TEXT NOT NULL REFERENCES budget_periods(month),
+      occurred_on TEXT NOT NULL CHECK (length(occurred_on) = 10),
+      label TEXT NOT NULL,
+      amount_paise INTEGER NOT NULL CHECK (amount_paise <> 0),
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
     CREATE TABLE IF NOT EXISTS debts (
       id TEXT PRIMARY KEY NOT NULL,
       account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id),

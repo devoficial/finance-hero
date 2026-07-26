@@ -534,6 +534,57 @@ function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
   seed.immediate();
 }
 
+function seedAcceptedCashBridge(database: FinanceHeroDatabase): void {
+  const seed = database.connection.transaction(() => {
+    const existing = database.connection
+      .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_cash_bridge_seed'")
+      .get() as { value: string } | undefined;
+    if (existing?.value === "2026-07-v1") {
+      return;
+    }
+
+    database.connection
+      .prepare(`
+        INSERT OR IGNORE INTO monthly_cash_carryover_overrides
+          (month, amount_paise, source_ref, updated_at)
+        VALUES ('2026-06', 17133100, 'Daily Expenses JUN 26:A3 formula', ?)
+      `)
+      .run(SEEDED_AT);
+    const insertAdjustment = database.connection.prepare(`
+      INSERT OR IGNORE INTO monthly_cash_adjustments
+        (id, month, occurred_on, label, amount_paise, sort_order, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertAdjustment.run(
+      "cash-adjustment-2026-06-salary",
+      "2026-06",
+      "2026-06-28",
+      "June salary",
+      30089300,
+      1,
+      SEEDED_AT,
+    );
+    insertAdjustment.run(
+      "cash-adjustment-2026-06-extra",
+      "2026-06",
+      "2026-06-30",
+      "Extra income",
+      1716000,
+      2,
+      SEEDED_AT,
+    );
+    insertAdjustment.run("cash-adjustment-2026-07-extra", "2026-07", "2026-07-01", "Extra income", 40800, 1, SEEDED_AT);
+    database.connection
+      .prepare(`
+        INSERT INTO app_metadata (key, value, updated_at)
+        VALUES ('accepted_cash_bridge_seed', '2026-07-v1', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `)
+      .run(SEEDED_AT);
+  });
+  seed.immediate();
+}
+
 function seedAcceptedWealthSnapshot(database: FinanceHeroDatabase): void {
   const seed = database.connection.transaction(() => {
     const existing = database.connection
@@ -697,5 +748,6 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
 
   seed.immediate();
   seedAcceptedExpenseHistory(database);
+  seedAcceptedCashBridge(database);
   seedAcceptedWealthSnapshot(database);
 }

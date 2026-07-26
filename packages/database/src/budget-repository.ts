@@ -14,6 +14,22 @@ export interface BudgetLineRecord {
   updatedAt: string | null;
 }
 
+export interface MonthlyCashAdjustmentRecord {
+  id: string;
+  occurredOn: string;
+  label: string;
+  amountPaise: number;
+}
+
+export interface MonthlyCashBridgeRecord {
+  carryoverPaise: number;
+  adjustments: MonthlyCashAdjustmentRecord[];
+  adjustmentTotalPaise: number;
+  fundsAvailablePaise: number;
+  cashOutflowPaise: number;
+  closingBalancePaise: number;
+}
+
 export interface BudgetMonthRecord {
   month: string;
   state: "open" | "closed";
@@ -21,11 +37,18 @@ export interface BudgetMonthRecord {
   regularBudgetPaise: number;
   unallocatedIncomePaise: number;
   updatedAt: string | null;
+  cashBridge: MonthlyCashBridgeRecord;
   lines: BudgetLineRecord[];
 }
 
 export interface UpdateBudgetMonthInput {
   plannedIncomePaise?: number;
+  cashAdjustments?: Array<{
+    id?: string;
+    occurredOn: string;
+    label: string;
+    amountPaise: number;
+  }>;
   lines?: Array<{
     categoryId: string;
     plannedPaise?: number;
@@ -150,6 +173,7 @@ export class BudgetRepository {
       regularBudgetPaise,
       unallocatedIncomePaise: plannedIncomePaise - regularBudgetPaise,
       updatedAt: period?.updatedAt ?? null,
+      cashBridge: this.getCashBridge(month),
       lines,
     };
   }
@@ -176,6 +200,14 @@ export class BudgetRepository {
         throw new Error("Only regular expense categories can have a monthly limit.");
       }
       seen.add(line.categoryId);
+    }
+    for (const adjustment of input.cashAdjustments ?? []) {
+      if (!adjustment.occurredOn.startsWith(`${month}-`)) {
+        throw new Error("Cash adjustment date must be inside the selected month.");
+      }
+      if (adjustment.amountPaise === 0) {
+        throw new Error("Cash adjustment cannot be zero.");
+      }
     }
 
     const now = new Date().toISOString();
@@ -220,6 +252,25 @@ export class BudgetRepository {
         const existing = existingSheetRow.get(month, line.categoryId) as { comment: string | null } | undefined;
         upsertSheetRow.run(month, line.categoryId, line.comment ?? existing?.comment ?? null, now);
       }
+      if (input.cashAdjustments !== undefined) {
+        this.database.connection.prepare("DELETE FROM monthly_cash_adjustments WHERE month = ?").run(month);
+        const insertAdjustment = this.database.connection.prepare(`
+          INSERT INTO monthly_cash_adjustments
+            (id, month, occurred_on, label, amount_paise, sort_order, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        input.cashAdjustments.forEach((adjustment, index) => {
+          insertAdjustment.run(
+            adjustment.id ?? randomUUID(),
+            month,
+            adjustment.occurredOn,
+            adjustment.label,
+            adjustment.amountPaise,
+            index,
+            now,
+          );
+        });
+      }
 
       const total = this.database.connection
         .prepare(`
@@ -242,6 +293,94 @@ export class BudgetRepository {
     });
     write.immediate();
     return this.getMonth(month);
+  }
+
+  private getCashBridge(month: string): MonthlyCashBridgeRecord {
+    const adjustments = this.database.connection
+      .prepare(`
+        SELECT id, occurred_on AS occurredOn, label, amount_paise AS amountPaise
+        FROM monthly_cash_adjustments
+        WHERE month = ?
+        ORDER BY occurred_on, sort_order, rowid
+      `)
+      .all(month) as MonthlyCashAdjustmentRecord[];
+    const months = this.database.connection
+      .prepare(`
+        SELECT month
+        FROM budget_periods
+        WHERE month <= ?
+        UNION SELECT ?
+        ORDER BY month
+      `)
+      .all(month, month) as Array<{ month: string }>;
+    const adjustmentTotals = new Map(
+      (
+        this.database.connection
+          .prepare(`
+            SELECT month, SUM(amount_paise) AS amountPaise
+            FROM monthly_cash_adjustments
+            WHERE month <= ?
+            GROUP BY month
+          `)
+          .all(month) as Array<{ month: string; amountPaise: number }>
+      ).map((row) => [row.month, row.amountPaise]),
+    );
+    const overrides = new Map(
+      (
+        this.database.connection
+          .prepare(`
+            SELECT month, amount_paise AS amountPaise
+            FROM monthly_cash_carryover_overrides
+            WHERE month <= ?
+          `)
+          .all(month) as Array<{ month: string; amountPaise: number }>
+      ).map((row) => [row.month, row.amountPaise]),
+    );
+    const outflows = new Map(
+      (
+        this.database.connection
+          .prepare(`
+            SELECT t.effective_month AS month,
+                   COALESCE(SUM(CASE
+                     WHEN a.account_class = 'expense' THEN p.amount_paise
+                     WHEN t.origin = 'manual_debt_payment'
+                       AND a.account_class = 'asset' AND p.amount_paise < 0
+                       THEN -p.amount_paise
+                     ELSE 0
+                   END), 0) AS amountPaise
+            FROM journal_transactions t
+            JOIN postings p ON p.transaction_id = t.id
+            JOIN accounts a ON a.id = p.account_id
+            WHERE t.effective_month <= ? AND t.status = 'posted'
+            GROUP BY t.effective_month
+          `)
+          .all(month) as Array<{ month: string; amountPaise: number }>
+      ).map((row) => [row.month, row.amountPaise]),
+    );
+
+    let previousClosing = 0;
+    let selectedCarryover = 0;
+    let selectedOutflow = 0;
+    for (const item of months) {
+      const carryover = overrides.get(item.month) ?? previousClosing;
+      const adjustmentTotal = adjustmentTotals.get(item.month) ?? 0;
+      const cashOutflow = outflows.get(item.month) ?? 0;
+      previousClosing = carryover + adjustmentTotal - cashOutflow;
+      if (item.month === month) {
+        selectedCarryover = carryover;
+        selectedOutflow = cashOutflow;
+      }
+    }
+    const adjustmentTotalPaise = adjustments.reduce((sum, adjustment) => sum + adjustment.amountPaise, 0);
+    const fundsAvailablePaise = selectedCarryover + adjustmentTotalPaise;
+    return {
+      carryoverPaise: selectedCarryover,
+      adjustments,
+      adjustmentTotalPaise,
+      fundsAvailablePaise,
+      cashOutflowPaise: selectedOutflow,
+      closingBalancePaise: fundsAvailablePaise - selectedOutflow,
+    };
   }
 
   private setCategoryActual(month: string, category: StoredCategory, desiredPaise: number, now: string) {

@@ -79,6 +79,76 @@ describe("budget repository", () => {
     database.close();
   });
 
+  it("carries June closing cash into July", () => {
+    const { database, repository } = createRepository();
+    const june = repository.getMonth("2026-06");
+    const july = repository.getMonth("2026-07");
+
+    expect(june.cashBridge).toMatchObject({
+      carryoverPaise: 17133100,
+      adjustmentTotalPaise: 31805300,
+      fundsAvailablePaise: 48938400,
+      cashOutflowPaise: 23953400,
+      closingBalancePaise: 24985000,
+    });
+    expect(june.cashBridge.adjustments).toEqual([
+      expect.objectContaining({
+        occurredOn: "2026-06-28",
+        label: "June salary",
+        amountPaise: 30089300,
+      }),
+      expect.objectContaining({
+        occurredOn: "2026-06-30",
+        label: "Extra income",
+        amountPaise: 1716000,
+      }),
+    ]);
+    expect(july.cashBridge).toMatchObject({
+      carryoverPaise: 24985000,
+      adjustmentTotalPaise: 40800,
+      fundsAvailablePaise: 25025800,
+      cashOutflowPaise: 20459200,
+      closingBalancePaise: 4566600,
+    });
+    database.close();
+  });
+
+  it("recalculates later carryover when an earlier month cash entry changes", () => {
+    const { database, repository } = createRepository();
+    const june = repository.getMonth("2026-06");
+
+    repository.updateMonth("2026-06", {
+      cashAdjustments: [
+        ...june.cashBridge.adjustments,
+        {
+          occurredOn: "2026-06-30",
+          label: "Bank correction",
+          amountPaise: -50000,
+        },
+      ],
+    });
+
+    expect(repository.getMonth("2026-06").cashBridge.closingBalancePaise).toBe(24935000);
+    expect(repository.getMonth("2026-07").cashBridge.carryoverPaise).toBe(24935000);
+    database.close();
+  });
+
+  it("rejects a cash entry outside the selected month", () => {
+    const { database, repository } = createRepository();
+    expect(() =>
+      repository.updateMonth("2026-06", {
+        cashAdjustments: [
+          {
+            occurredOn: "2026-07-01",
+            label: "Wrong month",
+            amountPaise: 10000,
+          },
+        ],
+      }),
+    ).toThrow("inside the selected month");
+    database.close();
+  });
+
   it("edits a sheet row and updates the ledger, dashboard, monthly cards, and emergency-cover target", () => {
     const { database, ledger, repository, wealth } = createRepository();
     const dashboardBefore = ledger.getDashboard("2026-07", 18);

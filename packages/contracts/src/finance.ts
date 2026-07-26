@@ -229,6 +229,22 @@ export const budgetLineSchema = z.object({
   updatedAt: z.string().datetime().nullable(),
 });
 
+export const monthlyCashAdjustmentSchema = z.object({
+  id: z.string(),
+  occurredOn: localDateSchema,
+  label: z.string(),
+  amountPaise: paiseSchema,
+});
+
+export const monthlyCashBridgeSchema = z.object({
+  carryoverPaise: paiseSchema,
+  adjustments: z.array(monthlyCashAdjustmentSchema),
+  adjustmentTotalPaise: paiseSchema,
+  fundsAvailablePaise: paiseSchema,
+  cashOutflowPaise: paiseSchema,
+  closingBalancePaise: paiseSchema,
+});
+
 export const budgetMonthResponseSchema = z.object({
   month: monthSchema,
   state: z.enum(["open", "closed"]),
@@ -236,12 +252,24 @@ export const budgetMonthResponseSchema = z.object({
   regularBudgetPaise: paiseSchema.nonnegative(),
   unallocatedIncomePaise: paiseSchema,
   updatedAt: z.string().datetime().nullable(),
+  cashBridge: monthlyCashBridgeSchema,
   lines: z.array(budgetLineSchema),
 });
 
 export const updateBudgetMonthRequestSchema = z
   .object({
     plannedIncomePaise: paiseSchema.nonnegative().optional(),
+    cashAdjustments: z
+      .array(
+        z.object({
+          id: z.string().min(1).optional(),
+          occurredOn: localDateSchema,
+          label: z.string().trim().min(1).max(120),
+          amountPaise: paiseSchema.refine((value) => value !== 0, { message: "Cash adjustment cannot be zero." }),
+        }),
+      )
+      .max(100)
+      .optional(),
     lines: z
       .array(
         z
@@ -260,9 +288,13 @@ export const updateBudgetMonthRequestSchema = z
       .min(1)
       .optional(),
   })
-  .refine((value) => value.plannedIncomePaise !== undefined || value.lines !== undefined, {
-    message: "At least one budget field is required.",
-  });
+  .refine(
+    (value) =>
+      value.plannedIncomePaise !== undefined || value.cashAdjustments !== undefined || value.lines !== undefined,
+    {
+      message: "At least one budget field is required.",
+    },
+  );
 
 export const liabilitySchema = z.object({
   id: z.string(),
@@ -586,6 +618,8 @@ export type UpdateFinancialAccountRequest = z.infer<typeof updateFinancialAccoun
 export type ExpenseMonthSummary = z.infer<typeof expenseMonthSummarySchema>;
 export type ExpenseYearResponse = z.infer<typeof expenseYearResponseSchema>;
 export type BudgetLine = z.infer<typeof budgetLineSchema>;
+export type MonthlyCashAdjustment = z.infer<typeof monthlyCashAdjustmentSchema>;
+export type MonthlyCashBridge = z.infer<typeof monthlyCashBridgeSchema>;
 export type BudgetMonthResponse = z.infer<typeof budgetMonthResponseSchema>;
 export type UpdateBudgetMonthRequest = z.infer<typeof updateBudgetMonthRequestSchema>;
 export type Liability = z.infer<typeof liabilitySchema>;
