@@ -37,11 +37,11 @@ const MAXIMUM_XLSX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
 const MAXIMUM_XLSX_ENTRIES = 5_000;
 const DATE_HEADERS = ["date", "trandate", "transactiondate", "txndate", "valuedate", "posteddate"];
 const DESCRIPTION_HEADERS = ["description", "narration", "particulars", "merchant", "transactiondetails", "remarks"];
-const DEBIT_HEADERS = ["debit", "debitamount", "withdrawal", "withdrawals"];
-const CREDIT_HEADERS = ["credit", "creditamount", "deposit", "deposits"];
+const DEBIT_HEADERS = ["debit", "debitamount", "withdrawal", "withdrawals", "dr"];
+const CREDIT_HEADERS = ["credit", "creditamount", "deposit", "deposits", "cr"];
 const AMOUNT_HEADERS = ["amount", "transactionamount", "txnamount"];
 const DIRECTION_HEADERS = ["direction", "type", "drcr", "debitcredit"];
-const BALANCE_HEADERS = ["balance", "closingbalance", "availablebalance", "runningbalance"];
+const BALANCE_HEADERS = ["balance", "closingbalance", "availablebalance", "runningbalance", "bal"];
 
 function normalizeHeader(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -104,6 +104,15 @@ function parseAmount(value: string): number | null {
     return null;
   }
   return Math.round(Math.abs(amount) * 100);
+}
+
+function parseBalance(value: string): number | null {
+  const normalized = value.replace(/[₹,\s]/g, "").replace(/\(([^)]+)\)/, "-$1");
+  if (!normalized) {
+    return null;
+  }
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? Math.round(amount * 100) : null;
 }
 
 function parseDate(value: string): string | null {
@@ -170,12 +179,41 @@ export function parseStatementTable(table: string[][], sourceName?: string): Par
   const creditIndex = findColumn(headers, CREDIT_HEADERS);
   const amountIndex = findColumn(headers, AMOUNT_HEADERS);
   const directionIndex = findColumn(headers, DIRECTION_HEADERS);
+  const balanceIndex = findColumn(headers, BALANCE_HEADERS);
   const rows: ParsedStatementRow[] = [];
+  let normalDirectionMatches = 0;
+  let swappedDirectionMatches = 0;
+  let previousBalance: number | null = null;
+
+  if (debitIndex >= 0 && creditIndex >= 0 && balanceIndex >= 0) {
+    for (let index = headerRow + 1; index < table.length; index += 1) {
+      const values = table[index] ?? [];
+      const debit = parseAmount(values[debitIndex] ?? "");
+      const credit = parseAmount(values[creditIndex] ?? "");
+      const balance = parseBalance(values[balanceIndex] ?? "");
+      if (balance == null) continue;
+      if (previousBalance != null && (debit != null || credit != null) && balance !== previousBalance) {
+        const balanceIncreased = balance > previousBalance;
+        const labelledCredit = credit != null && debit == null;
+        const labelledDebit = debit != null && credit == null;
+        if ((balanceIncreased && labelledCredit) || (!balanceIncreased && labelledDebit)) {
+          normalDirectionMatches += 1;
+        }
+        if ((balanceIncreased && labelledDebit) || (!balanceIncreased && labelledCredit)) {
+          swappedDirectionMatches += 1;
+        }
+      }
+      previousBalance = balance;
+    }
+  }
+  const swapDebitCredit = swappedDirectionMatches >= 2 && swappedDirectionMatches > normalDirectionMatches * 2;
 
   for (let index = headerRow + 1; index < table.length; index += 1) {
     const values = table[index] ?? [];
-    const debit = debitIndex >= 0 ? parseAmount(values[debitIndex] ?? "") : null;
-    const credit = creditIndex >= 0 ? parseAmount(values[creditIndex] ?? "") : null;
+    const debitSourceIndex = swapDebitCredit ? creditIndex : debitIndex;
+    const creditSourceIndex = swapDebitCredit ? debitIndex : creditIndex;
+    const debit = debitSourceIndex >= 0 ? parseAmount(values[debitSourceIndex] ?? "") : null;
+    const credit = creditSourceIndex >= 0 ? parseAmount(values[creditSourceIndex] ?? "") : null;
     const rawAmount = amountIndex >= 0 ? (values[amountIndex] ?? "") : "";
     const amount = debit ?? credit ?? parseAmount(rawAmount);
     if (!amount) {
@@ -219,7 +257,12 @@ export function parseStatementTable(table: string[][], sourceName?: string): Par
   if (rows.length === 0) {
     throw new Error("No transaction rows with valid amounts were found.");
   }
-  return { rows, message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted.` };
+  return {
+    rows,
+    message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted.${
+      swapDebitCredit ? " Debit and credit labels were corrected from running balance movements." : ""
+    }`,
+  };
 }
 
 export function parseStatementDelimitedFile(content: Buffer, filename: string): ParsedStatement {

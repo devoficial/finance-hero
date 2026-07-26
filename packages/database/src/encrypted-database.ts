@@ -131,6 +131,14 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       updated_at TEXT NOT NULL
     ) STRICT;
 
+    CREATE TABLE IF NOT EXISTS monthly_bank_reconciliations (
+      month TEXT PRIMARY KEY NOT NULL REFERENCES budget_periods(month),
+      account_id TEXT NOT NULL REFERENCES accounts(id),
+      statement_balance_paise INTEGER NOT NULL CHECK (statement_balance_paise >= 0),
+      reconciled_on TEXT NOT NULL CHECK (length(reconciled_on) = 10),
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
     CREATE TABLE IF NOT EXISTS debts (
       id TEXT PRIMARY KEY NOT NULL,
       account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id),

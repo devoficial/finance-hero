@@ -3001,6 +3001,62 @@ h2 {
   background: #f1d7cf;
   color: var(--red);
 }
+.bank-reconciliation {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(180px, 0.8fr) minmax(170px, 0.7fr) minmax(190px, 0.8fr);
+  gap: 14px;
+  align-items: end;
+  padding: 16px 18px;
+  border-top: 1px solid var(--line);
+  border-left: 5px solid var(--amber);
+  background: #fffaf0;
+}
+.bank-reconciliation.reconciled {
+  border-left-color: var(--green);
+  background: #edf4ef;
+}
+.bank-reconciliation h4 {
+  margin: 3px 0 4px;
+  font-size: 16px;
+}
+.bank-reconciliation small {
+  color: var(--muted);
+}
+.bank-reconciliation label {
+  display: grid;
+  gap: 6px;
+  color: #607169;
+  font:
+    8px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.bank-reconciliation label > input {
+  min-height: 42px;
+  border: 1px solid #b9bdb6;
+  background: #fffdf7;
+  padding: 8px 10px;
+}
+.reconciliation-result {
+  display: grid;
+  gap: 4px;
+}
+.reconciliation-result > span {
+  color: #607169;
+  font:
+    8px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.reconciliation-result strong {
+  color: var(--red);
+  font:
+    21px "Newsreader",
+    serif;
+}
+.bank-reconciliation.reconciled .reconciliation-result strong {
+  color: var(--green);
+}
 .cash-adjustment-list {
   display: grid;
   gap: 8px;
@@ -5443,6 +5499,9 @@ h2 {
   .cash-adjustment-row {
     grid-template-columns: 140px minmax(180px, 1fr) 180px;
   }
+  .bank-reconciliation {
+    grid-template-columns: 1fr 1fr;
+  }
   .cash-adjustment-row > button {
     grid-column: 3;
   }
@@ -5614,6 +5673,9 @@ h2 {
     grid-column: auto;
   }
   .cash-adjustment-row {
+    grid-template-columns: 1fr;
+  }
+  .bank-reconciliation {
     grid-template-columns: 1fr;
   }
   .cash-adjustment-row > button {

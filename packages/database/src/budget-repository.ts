@@ -29,6 +29,10 @@ export interface MonthlyCashBridgeRecord {
   adjustmentTotalPaise: number;
   fundsAvailablePaise: number;
   cashOutflowPaise: number;
+  calculatedClosingBalancePaise: number;
+  statementBalancePaise: number | null;
+  reconciliationDifferencePaise: number;
+  reconciledOn: string | null;
   closingBalancePaise: number;
 }
 
@@ -45,6 +49,10 @@ export interface BudgetMonthRecord {
 
 export interface UpdateBudgetMonthInput {
   plannedIncomePaise?: number;
+  reconciliation?: {
+    statementBalancePaise: number;
+    reconciledOn: string;
+  } | null;
   cashAdjustments?: Array<{
     id?: string;
     occurredOn: string;
@@ -216,6 +224,14 @@ export class BudgetRepository {
         throw new Error("An imported credit must remain a positive cash entry.");
       }
     }
+    if (input.reconciliation) {
+      if (!input.reconciliation.reconciledOn.startsWith(`${month}-`)) {
+        throw new Error("Bank reconciliation date must be inside the selected month.");
+      }
+      if (input.reconciliation.statementBalancePaise < 0) {
+        throw new Error("Bank statement balance cannot be negative.");
+      }
+    }
 
     const now = new Date().toISOString();
     const write = this.database.connection.transaction(() => {
@@ -230,6 +246,22 @@ export class BudgetRepository {
             updated_at = excluded.updated_at
         `)
         .run(month, input.plannedIncomePaise ?? before.plannedIncomePaise, now);
+
+      if (input.reconciliation === null) {
+        this.database.connection.prepare("DELETE FROM monthly_bank_reconciliations WHERE month = ?").run(month);
+      } else if (input.reconciliation) {
+        this.database.connection
+          .prepare(`
+            INSERT INTO monthly_bank_reconciliations
+              (month, account_id, statement_balance_paise, reconciled_on, updated_at)
+            VALUES (?, 'account-primary-bank', ?, ?, ?)
+            ON CONFLICT(month) DO UPDATE SET
+              statement_balance_paise = excluded.statement_balance_paise,
+              reconciled_on = excluded.reconciled_on,
+              updated_at = excluded.updated_at
+          `)
+          .run(month, input.reconciliation.statementBalancePaise, input.reconciliation.reconciledOn, now);
+      }
 
       const upsertLine = this.database.connection.prepare(`
         INSERT INTO budget_lines (month, category_id, planned_paise)
@@ -449,6 +481,18 @@ export class BudgetRepository {
           .all(month) as Array<{ month: string; amountPaise: number }>
       ).map((row) => [row.month, row.amountPaise]),
     );
+    const reconciliations = new Map(
+      (
+        this.database.connection
+          .prepare(`
+            SELECT month, statement_balance_paise AS statementBalancePaise,
+                   reconciled_on AS reconciledOn
+            FROM monthly_bank_reconciliations
+            WHERE month <= ?
+          `)
+          .all(month) as Array<{ month: string; statementBalancePaise: number; reconciledOn: string }>
+      ).map((row) => [row.month, row]),
+    );
     const outflows = new Map(
       (
         this.database.connection
@@ -474,14 +518,20 @@ export class BudgetRepository {
     let previousClosing = 0;
     let selectedCarryover = 0;
     let selectedOutflow = 0;
+    let selectedCalculatedClosing = 0;
+    let selectedReconciliation: { statementBalancePaise: number; reconciledOn: string } | undefined;
     for (const item of months) {
       const carryover = overrides.get(item.month) ?? previousClosing;
       const adjustmentTotal = adjustmentTotals.get(item.month) ?? 0;
       const cashOutflow = outflows.get(item.month) ?? 0;
-      previousClosing = carryover + adjustmentTotal - cashOutflow;
+      const calculatedClosing = carryover + adjustmentTotal - cashOutflow;
+      const reconciliation = reconciliations.get(item.month);
+      previousClosing = reconciliation?.statementBalancePaise ?? calculatedClosing;
       if (item.month === month) {
         selectedCarryover = carryover;
         selectedOutflow = cashOutflow;
+        selectedCalculatedClosing = calculatedClosing;
+        selectedReconciliation = reconciliation;
       }
     }
     const adjustmentTotalPaise = adjustments.reduce((sum, adjustment) => sum + adjustment.amountPaise, 0);
@@ -492,7 +542,12 @@ export class BudgetRepository {
       adjustmentTotalPaise,
       fundsAvailablePaise,
       cashOutflowPaise: selectedOutflow,
-      closingBalancePaise: fundsAvailablePaise - selectedOutflow,
+      calculatedClosingBalancePaise: selectedCalculatedClosing,
+      statementBalancePaise: selectedReconciliation?.statementBalancePaise ?? null,
+      reconciliationDifferencePaise:
+        (selectedReconciliation?.statementBalancePaise ?? selectedCalculatedClosing) - selectedCalculatedClosing,
+      reconciledOn: selectedReconciliation?.reconciledOn ?? null,
+      closingBalancePaise: selectedReconciliation?.statementBalancePaise ?? selectedCalculatedClosing,
     };
   }
 

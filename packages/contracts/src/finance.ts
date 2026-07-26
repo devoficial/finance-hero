@@ -244,6 +244,10 @@ export const monthlyCashBridgeSchema = z.object({
   adjustmentTotalPaise: paiseSchema,
   fundsAvailablePaise: paiseSchema,
   cashOutflowPaise: paiseSchema,
+  calculatedClosingBalancePaise: paiseSchema,
+  statementBalancePaise: paiseSchema.nullable(),
+  reconciliationDifferencePaise: paiseSchema,
+  reconciledOn: localDateSchema.nullable(),
   closingBalancePaise: paiseSchema,
 });
 
@@ -261,6 +265,13 @@ export const budgetMonthResponseSchema = z.object({
 export const updateBudgetMonthRequestSchema = z
   .object({
     plannedIncomePaise: paiseSchema.nonnegative().optional(),
+    reconciliation: z
+      .object({
+        statementBalancePaise: paiseSchema.nonnegative(),
+        reconciledOn: localDateSchema,
+      })
+      .nullable()
+      .optional(),
     cashAdjustments: z
       .array(
         z.object({
@@ -294,7 +305,10 @@ export const updateBudgetMonthRequestSchema = z
   })
   .refine(
     (value) =>
-      value.plannedIncomePaise !== undefined || value.cashAdjustments !== undefined || value.lines !== undefined,
+      value.plannedIncomePaise !== undefined ||
+      value.reconciliation !== undefined ||
+      value.cashAdjustments !== undefined ||
+      value.lines !== undefined,
     {
       message: "At least one budget field is required.",
     },

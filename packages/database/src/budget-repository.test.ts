@@ -143,6 +143,27 @@ describe("budget repository", () => {
     database.close();
   });
 
+  it("uses a bank-confirmed closing balance and exposes the reconciliation difference", () => {
+    const { database, repository } = createRepository();
+
+    const july = repository.updateMonth("2026-07", {
+      reconciliation: {
+        statementBalancePaise: 1216050,
+        reconciledOn: "2026-07-26",
+      },
+    });
+
+    expect(july.cashBridge).toMatchObject({
+      calculatedClosingBalancePaise: 4566600,
+      statementBalancePaise: 1216050,
+      reconciliationDifferencePaise: -3350550,
+      reconciledOn: "2026-07-26",
+      closingBalancePaise: 1216050,
+    });
+    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1216050);
+    database.close();
+  });
+
   it("shows approved imported credits as editable extra income without duplicating cash", () => {
     const { database, imports, ledger, repository } = createRepository();
     imports.createArtifact({

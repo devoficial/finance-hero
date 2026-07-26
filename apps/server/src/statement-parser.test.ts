@@ -102,6 +102,27 @@ describe("statement delimited parser", () => {
     expect(candidate?.warnings).toContain("Date needs review");
   });
 
+  it("corrects reversed debit and credit labels using running balances", () => {
+    const parsed = parseStatementDelimitedFile(
+      Buffer.from(
+        [
+          "Tran Date,PARTICULARS,DR,CR,BAL",
+          "01-07-2026,SHOP,,5000.00,244850.91",
+          "01-07-2026,INTEREST,408.00,,245258.91",
+          "02-07-2026,RENT,,16433.00,228825.91",
+        ].join("\n"),
+      ),
+      "axis.csv",
+    );
+
+    expect(parsed.message).toContain("labels were corrected");
+    expect(parsed.rows).toEqual([
+      expect.objectContaining({ payee: "SHOP", amountPaise: 500000, direction: "debit" }),
+      expect.objectContaining({ payee: "INTEREST", amountPaise: 40800, direction: "credit" }),
+      expect.objectContaining({ payee: "RENT", amountPaise: 1643300, direction: "debit" }),
+    ]);
+  });
+
   it("rejects a table without recognizable statement headers", () => {
     expect(() => parseStatementDelimitedFile(Buffer.from("A,B,C\n1,2,3"), "statement.csv")).toThrow(
       "Required date, description, and amount columns could not be detected.",

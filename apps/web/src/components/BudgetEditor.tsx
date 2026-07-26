@@ -34,6 +34,8 @@ interface CashAdjustmentDraft {
 
 interface SheetSnapshot {
   income: string;
+  statementBalance: string;
+  reconciliationDate: string;
   lineValues: Record<string, ExpenseSheetDraft>;
   cashAdjustments: CashAdjustmentDraft[];
 }
@@ -47,6 +49,8 @@ function snapshotSignature(snapshot: SheetSnapshot): string {
 function copySnapshot(snapshot: SheetSnapshot): SheetSnapshot {
   return {
     income: snapshot.income,
+    statementBalance: snapshot.statementBalance,
+    reconciliationDate: snapshot.reconciliationDate,
     lineValues: Object.fromEntries(
       Object.entries(snapshot.lineValues).map(([categoryId, line]) => [categoryId, { ...line }]),
     ),
@@ -115,6 +119,8 @@ function lineType(line: BudgetLine): string {
 export function BudgetEditor({ budget, emiPaise, historical, loading, money }: BudgetEditorProps) {
   const queryClient = useQueryClient();
   const [income, setIncome] = useState("");
+  const [statementBalance, setStatementBalance] = useState("");
+  const [reconciliationDate, setReconciliationDate] = useState("");
   const [lineValues, setLineValues] = useState<Record<string, ExpenseSheetDraft>>({});
   const [cashAdjustments, setCashAdjustments] = useState<CashAdjustmentDraft[]>([]);
   const [undoStack, setUndoStack] = useState<SheetSnapshot[]>([]);
@@ -128,10 +134,17 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const loadDraft = useCallback((currentBudget: BudgetMonthResponse) => {
     const snapshot = {
       income: rupeeInput(currentBudget.plannedIncomePaise),
+      statementBalance:
+        currentBudget.cashBridge.statementBalancePaise == null
+          ? ""
+          : rupeeInput(currentBudget.cashBridge.statementBalancePaise),
+      reconciliationDate: currentBudget.cashBridge.reconciledOn ?? "",
       lineValues: Object.fromEntries(currentBudget.lines.map((line) => [line.categoryId, draftFor(line)])),
       cashAdjustments: currentBudget.cashBridge.adjustments.map(cashDraftFor),
     };
     setIncome(snapshot.income);
+    setStatementBalance(snapshot.statementBalance);
+    setReconciliationDate(snapshot.reconciliationDate);
     setLineValues(snapshot.lineValues);
     setCashAdjustments(snapshot.cashAdjustments);
     setSavedSignature(snapshotSignature(snapshot));
@@ -175,7 +188,10 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const draftCashOutflow =
     (budget?.cashBridge.cashOutflowPaise ?? 0) + (draftTotals.overallActual - persistedSheetOutflow);
   const fundsAvailable = (budget?.cashBridge.carryoverPaise ?? 0) + adjustmentTotal;
-  const closingBalance = fundsAvailable - draftCashOutflow;
+  const calculatedClosingBalance = fundsAvailable - draftCashOutflow;
+  const parsedStatementBalance = statementBalance.trim() ? parseRupeeExpression(statementBalance) : null;
+  const closingBalance = parsedStatementBalance ?? calculatedClosingBalance;
+  const reconciliationDifference = closingBalance - calculatedClosingBalance;
   const plannedIncome = parseRupeeExpression(income) ?? 0;
   const hasIncomePlan = plannedIncome > 0;
   const freeAfterPlan = plannedIncome - emiPaise - draftTotals.planned;
@@ -219,12 +235,14 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const currentBudget = budget;
 
   function currentSnapshot(): SheetSnapshot {
-    return copySnapshot({ income, lineValues, cashAdjustments });
+    return copySnapshot({ income, statementBalance, reconciliationDate, lineValues, cashAdjustments });
   }
 
   function applySnapshot(snapshot: SheetSnapshot) {
     const copy = copySnapshot(snapshot);
     setIncome(copy.income);
+    setStatementBalance(copy.statementBalance);
+    setReconciliationDate(copy.reconciliationDate);
     setLineValues(copy.lineValues);
     setCashAdjustments(copy.cashAdjustments);
     setDirty(snapshotSignature(copy) !== savedSignature);
@@ -350,6 +368,13 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
       setValidationError("Enter a valid non-negative monthly income.");
       return;
     }
+    if (
+      statementBalance.trim() &&
+      (parsedStatementBalance == null || !reconciliationDate.startsWith(`${currentBudget.month}-`))
+    ) {
+      setValidationError("Bank reconciliation needs a non-negative statement balance and a date in this month.");
+      return;
+    }
 
     const changedLines: NonNullable<UpdateBudgetMonthRequest["lines"]> = [];
     for (const line of currentBudget.lines) {
@@ -404,7 +429,16 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
     }));
     const changedAdjustments = JSON.stringify(normalizedAdjustments) !== JSON.stringify(currentAdjustments);
     const changedIncome = plannedIncomePaise !== currentBudget.plannedIncomePaise;
-    if (!changedIncome && !changedAdjustments && changedLines.length === 0) {
+    const reconciliation = statementBalance.trim()
+      ? {
+          statementBalancePaise: parsedStatementBalance ?? 0,
+          reconciledOn: reconciliationDate,
+        }
+      : null;
+    const changedReconciliation =
+      reconciliation?.statementBalancePaise !== currentBudget.cashBridge.statementBalancePaise ||
+      reconciliation?.reconciledOn !== currentBudget.cashBridge.reconciledOn;
+    if (!changedIncome && !changedReconciliation && !changedAdjustments && changedLines.length === 0) {
       setDirty(false);
       setSavedMessage("No changes to save");
       return;
@@ -412,6 +446,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
     setValidationError(null);
     mutation.mutate({
       ...(changedIncome ? { plannedIncomePaise } : {}),
+      ...(changedReconciliation ? { reconciliation } : {}),
       ...(changedAdjustments ? { cashAdjustments: normalizedAdjustments } : {}),
       ...(changedLines.length > 0 ? { lines: changedLines } : {}),
     });
@@ -491,10 +526,65 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
             <small>Updates with the expense sheet</small>
           </article>
           <article className={`closing ${closingBalance < 0 ? "negative" : ""}`}>
-            <span>Current / closing balance</span>
+            <span>
+              {parsedStatementBalance == null ? "Calculated closing balance" : "Bank-confirmed closing balance"}
+            </span>
             <strong>{money(closingBalance)}</strong>
             <small>Becomes next month’s carryover</small>
           </article>
+        </div>
+        <div className={`bank-reconciliation ${reconciliationDifference === 0 ? "reconciled" : "unreconciled"}`}>
+          <div>
+            <p className="eyebrow">BANK RECONCILIATION</p>
+            <h4>
+              {parsedStatementBalance == null
+                ? "Confirm the real bank balance"
+                : "Statement balance overrides the estimate"}
+            </h4>
+            <small>
+              The expense sheet calculates {money(calculatedClosingBalance)}. Enter the Axis statement balance to expose
+              missing, duplicated, or pending transactions without hiding the difference.
+            </small>
+          </div>
+          <label>
+            <span>Statement balance</span>
+            <div className="sheet-money-input">
+              <b>₹</b>
+              <input
+                aria-label="Bank statement closing balance"
+                inputMode="decimal"
+                onChange={(event) => {
+                  checkpoint();
+                  setStatementBalance(event.target.value);
+                  setDirty(true);
+                }}
+                placeholder="12160.50"
+                type="text"
+                value={statementBalance}
+              />
+            </div>
+          </label>
+          <label>
+            <span>Balance as of</span>
+            <input
+              aria-label="Bank statement balance date"
+              onChange={(event) => {
+                checkpoint();
+                setReconciliationDate(event.target.value);
+                setDirty(true);
+              }}
+              type="date"
+              value={reconciliationDate}
+            />
+          </label>
+          <div className="reconciliation-result">
+            <span>Difference to investigate</span>
+            <strong>
+              {reconciliationDifference >= 0 ? "+" : ""}
+              {money(reconciliationDifference)}
+            </strong>
+            <small>{reconciliationDifference === 0 ? "Reconciled" : "Sheet estimate versus bank statement"}</small>
+          </div>
         </div>
         <div className="cash-adjustment-list">
           {cashAdjustments.map((adjustment, index) => (
