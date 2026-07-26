@@ -5,7 +5,8 @@ import type {
   UpdateImportCandidateRequest,
 } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   approveImportCandidates,
   parseStatementArtifact,
@@ -46,7 +47,25 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const [editDirection, setEditDirection] = useState<"debit" | "credit">("debit");
   const [editAccountId, setEditAccountId] = useState("");
   const [editCategoryId, setEditCategoryId] = useState("");
+  const [rejectRequest, setRejectRequest] = useState<{ ids: string[]; label: string } | null>(null);
+  const [rejectReason, setRejectReason] = useState("Not a valid transaction");
   const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editing && !rejectRequest) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setEditing(null);
+      setRejectRequest(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [editing, rejectRequest]);
 
   const refresh = async () => {
     await Promise.all([
@@ -108,6 +127,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     mutationFn: ({ ids, reason }: { ids: string[]; reason: string }) => rejectImportCandidates({ ids, reason }),
     onSuccess: async () => {
       setSelected(new Set());
+      setRejectRequest(null);
       setActionError(null);
       await refresh();
     },
@@ -175,18 +195,24 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     });
   }
 
-  function rejectSelected() {
-    const reason = window.prompt("Why should these candidates be rejected?", "Not a valid transaction");
-    if (reason?.trim()) {
-      rejectMutation.mutate({ ids: [...selected], reason: reason.trim() });
-    }
+  function beginReject(ids: string[], label: string) {
+    setRejectReason("Not a valid transaction");
+    setRejectRequest({ ids, label });
+    setActionError(null);
   }
 
   function rejectCandidate(candidate: ImportCandidate) {
-    const reason = window.prompt(`Why should "${candidate.payee}" be rejected?`, "Not a valid transaction");
-    if (reason?.trim()) {
-      rejectMutation.mutate({ ids: [candidate.id], reason: reason.trim() });
+    beginReject([candidate.id], candidate.payee);
+  }
+
+  function submitReject() {
+    if (!rejectRequest) return;
+    const reason = rejectReason.trim();
+    if (reason.length < 3) {
+      setActionError("Enter a rejection reason.");
+      return;
     }
+    rejectMutation.mutate({ ids: rejectRequest.ids, reason });
   }
 
   function retryExtraction(id: string, parserMessage: string | null) {
@@ -380,7 +406,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
           <button
             className="danger-outline"
             disabled={selected.size === 0 || rejectMutation.isPending}
-            onClick={rejectSelected}
+            onClick={() => beginReject([...selected], `${selected.size} selected transactions`)}
             type="button"
           >
             Reject
@@ -534,8 +560,11 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                       )}
                     </td>
                     <td className="candidate-signal">
-                      <span className={`confidence ${candidate.confidence >= 75 ? "high" : "review"}`}>
-                        {candidate.confidence}% confidence
+                      <span
+                        className={`confidence ${candidate.confidence >= 75 ? "high" : "review"}`}
+                        title={`${candidate.confidence}% confidence`}
+                      >
+                        {candidate.confidence}%
                       </span>
                       <small>{candidate.warnings[0] ?? candidate.status}</small>
                     </td>
@@ -546,6 +575,11 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                             className="candidate-approve"
                             disabled={!candidateIsReady(candidate) || approveMutation.isPending}
                             onClick={() => approveMutation.mutate([candidate.id])}
+                            title={
+                              candidateIsReady(candidate)
+                                ? "Approve and post this transaction to the ledger"
+                                : "Choose the required account and expense category first"
+                            }
                             type="button"
                           >
                             {approveMutation.isPending && approveMutation.variables?.includes(candidate.id)
@@ -583,89 +617,141 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
         </div>
       </section>
 
-      {editing && (
-        <div className="modal-backdrop" role="presentation">
-          <section aria-labelledby="candidate-editor-title" className="wealth-modal import-editor" role="dialog">
-            <div className="modal-title">
-              <div>
-                <p className="eyebrow">REVIEW SOURCE ROW {editing.sourceRow}</p>
-                <h2 id="candidate-editor-title">Correct before approval</h2>
+      {editing &&
+        createPortal(
+          <div className="modal-backdrop" role="presentation">
+            <section
+              aria-labelledby="candidate-editor-title"
+              aria-modal="true"
+              className="wealth-modal import-editor"
+              role="dialog"
+            >
+              <div className="modal-title">
+                <div>
+                  <p className="eyebrow">REVIEW SOURCE ROW {editing.sourceRow}</p>
+                  <h2 id="candidate-editor-title">Correct before approval</h2>
+                </div>
+                <button onClick={() => setEditing(null)} type="button">
+                  Close
+                </button>
               </div>
-              <button onClick={() => setEditing(null)} type="button">
-                Close
-              </button>
-            </div>
-            <div className="import-editor-grid">
-              <label>
-                Date
-                <input onChange={(event) => setEditDate(event.target.value)} type="date" value={editDate} />
-              </label>
-              <label>
-                Direction
-                <select
-                  onChange={(event) => setEditDirection(event.target.value as "debit" | "credit")}
-                  value={editDirection}
-                >
-                  <option value="debit">Debit / expense</option>
-                  <option value="credit">Credit / income</option>
-                </select>
-              </label>
-              <label className="wide">
-                Payee or merchant
-                <input onChange={(event) => setEditPayee(event.target.value)} value={editPayee} />
-              </label>
-              <label>
-                Amount (INR)
-                <input inputMode="decimal" onChange={(event) => setEditAmount(event.target.value)} value={editAmount} />
-              </label>
-              <label>
-                Account
-                <select onChange={(event) => setEditAccountId(event.target.value)} value={editAccountId}>
-                  <option value="">Choose account</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {editDirection === "debit" && (
+              <div className="import-editor-grid">
+                <label>
+                  Date
+                  <input onChange={(event) => setEditDate(event.target.value)} type="date" value={editDate} />
+                </label>
+                <label>
+                  Direction
+                  <select
+                    onChange={(event) => setEditDirection(event.target.value as "debit" | "credit")}
+                    value={editDirection}
+                  >
+                    <option value="debit">Debit / expense</option>
+                    <option value="credit">Credit / income</option>
+                  </select>
+                </label>
                 <label className="wide">
-                  Expense category
-                  <select onChange={(event) => setEditCategoryId(event.target.value)} value={editCategoryId}>
-                    <option value="">Choose category</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
+                  Payee or merchant
+                  <input onChange={(event) => setEditPayee(event.target.value)} value={editPayee} />
+                </label>
+                <label>
+                  Amount (INR)
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) => setEditAmount(event.target.value)}
+                    value={editAmount}
+                  />
+                </label>
+                <label>
+                  Account
+                  <select onChange={(event) => setEditAccountId(event.target.value)} value={editAccountId}>
+                    <option value="">Choose account</option>
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
                       </option>
                     ))}
                   </select>
                 </label>
-              )}
-            </div>
-            <div className="source-evidence">
-              <span>ORIGINAL SOURCE VALUES</span>
-              <dl>
-                {Object.entries(editing.source).map(([key, value]) => (
-                  <div key={key}>
-                    <dt>{key}</dt>
-                    <dd>{value || "—"}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-            {actionError && <p className="form-error">{actionError}</p>}
-            <div className="modal-actions">
-              <button onClick={() => setEditing(null)} type="button">
-                Cancel
-              </button>
-              <button className="add-button" disabled={editMutation.isPending} onClick={saveEdit} type="button">
-                {editMutation.isPending ? "Saving..." : "Save review"}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
+                {editDirection === "debit" && (
+                  <label className="wide">
+                    Expense category
+                    <select onChange={(event) => setEditCategoryId(event.target.value)} value={editCategoryId}>
+                      <option value="">Choose category</option>
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+              <div className="source-evidence">
+                <span>ORIGINAL SOURCE VALUES</span>
+                <dl>
+                  {Object.entries(editing.source).map(([key, value]) => (
+                    <div key={key}>
+                      <dt>{key}</dt>
+                      <dd>{value || "—"}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+              {actionError && <p className="form-error">{actionError}</p>}
+              <div className="modal-actions">
+                <button onClick={() => setEditing(null)} type="button">
+                  Cancel
+                </button>
+                <button className="add-button" disabled={editMutation.isPending} onClick={saveEdit} type="button">
+                  {editMutation.isPending ? "Saving..." : "Save review"}
+                </button>
+              </div>
+            </section>
+          </div>,
+          document.body,
+        )}
+      {rejectRequest &&
+        createPortal(
+          <div className="modal-backdrop" role="presentation">
+            <section
+              aria-labelledby="candidate-reject-title"
+              aria-modal="true"
+              className="wealth-modal reject-editor"
+              role="dialog"
+            >
+              <div className="modal-title">
+                <div>
+                  <p className="eyebrow">REJECT IMPORT CANDIDATE</p>
+                  <h2 id="candidate-reject-title">Confirm rejection</h2>
+                </div>
+                <button onClick={() => setRejectRequest(null)} type="button">
+                  Close
+                </button>
+              </div>
+              <p className="reject-target">{rejectRequest.label}</p>
+              <label className="reject-reason-field">
+                Reason
+                <textarea onChange={(event) => setRejectReason(event.target.value)} rows={4} value={rejectReason} />
+              </label>
+              {actionError && <p className="form-error">{actionError}</p>}
+              <div className="modal-actions">
+                <button onClick={() => setRejectRequest(null)} type="button">
+                  Cancel
+                </button>
+                <button
+                  className="danger-button"
+                  disabled={rejectMutation.isPending}
+                  onClick={submitReject}
+                  type="button"
+                >
+                  {rejectMutation.isPending ? "Rejecting..." : "Reject transaction"}
+                </button>
+              </div>
+            </section>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
