@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { BudgetRepository } from "./budget-repository";
 import type { FinanceHeroDatabase } from "./encrypted-database";
 
 export interface FinancialAccountRecord {
@@ -39,6 +40,13 @@ export class AccountRepository {
   constructor(private readonly database: FinanceHeroDatabase) {}
 
   getAccounts(): FinancialAccountsRecord {
+    const currentMonth = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      timeZone: "Asia/Kolkata",
+    }).format(new Date());
+    const salaryAccountBalance = new BudgetRepository(this.database).getMonth(currentMonth).cashBridge
+      .closingBalancePaise;
     const accounts = this.database.connection
       .prepare(`
         SELECT
@@ -88,7 +96,12 @@ export class AccountRepository {
           isActive: number;
           restricted: number;
         };
-        return { ...item, isActive: item.isActive === 1, restricted: item.restricted === 1 };
+        return {
+          ...item,
+          balancePaise: item.id === "account-primary-bank" ? salaryAccountBalance : item.balancePaise,
+          isActive: item.isActive === 1,
+          restricted: item.restricted === 1,
+        };
       });
 
     return {

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AccountRepository } from "./account-repository";
+import { BudgetRepository } from "./budget-repository";
 import { initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
 import { seedAcceptedOpeningSnapshot } from "./opening-seed";
 
@@ -39,6 +40,16 @@ describe("account repository", () => {
     expect(accounts.accounts.find((account) => account.id === "account-debt-home")).toMatchObject({
       balancePaise: 398021000,
       managedBy: "liability",
+    });
+    const currentMonth = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      timeZone: "Asia/Kolkata",
+    }).format(new Date());
+    const currentClosingBalance = new BudgetRepository(database).getMonth(currentMonth).cashBridge.closingBalancePaise;
+    expect(accounts.accounts.find((account) => account.id === "account-primary-bank")).toMatchObject({
+      balancePaise: currentClosingBalance,
+      managedBy: "ledger",
     });
     database.close();
   });

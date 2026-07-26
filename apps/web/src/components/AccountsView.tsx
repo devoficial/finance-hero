@@ -301,7 +301,11 @@ export function AccountsView({ data, loading, money, onOpenExpenses, onOpenLiabi
               <div>
                 <span className={`account-class ${account.accountClass}`}>{account.accountClass}</span>
                 <small>
-                  {account.managedBy === "ledger" ? "Calculated from transactions" : `Managed in ${account.managedBy}`}
+                  {account.id === "account-primary-bank"
+                    ? "Matches current month closing balance"
+                    : account.managedBy === "ledger"
+                      ? "Calculated from transactions"
+                      : `Managed in ${account.managedBy}`}
                 </small>
               </div>
               <span>{account.institution || "Independent"}</span>
