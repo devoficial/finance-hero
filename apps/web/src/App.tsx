@@ -7,7 +7,6 @@ import { ExpensesView } from "./components/ExpensesView";
 import { ForecastsView } from "./components/ForecastsView";
 import { GoalsView } from "./components/GoalsView";
 import { ImportsView } from "./components/ImportsView";
-import { LedgerView } from "./components/LedgerView";
 import { LiabilitiesView } from "./components/LiabilitiesView";
 import { ProjectsView } from "./components/ProjectsView";
 import {
@@ -18,23 +17,12 @@ import {
   getHealth,
   getHomeConstruction,
   getImports,
-  getLedger,
   getLiabilities,
   getReferenceData,
   getWealth,
 } from "./lib/api";
 
-const navItems = [
-  "Home",
-  "Ledger",
-  "Accounts",
-  "Expenses",
-  "Imports",
-  "Liabilities",
-  "Goals",
-  "Forecasts",
-  "Projects",
-] as const;
+const navItems = ["Home", "Accounts", "Expenses", "Imports", "Liabilities", "Goals", "Forecasts", "Projects"] as const;
 type NavItem = (typeof navItems)[number];
 const ACTIVE_MONTH = "2026-07";
 
@@ -49,7 +37,6 @@ interface StandaloneNavigator extends Navigator {
 
 const navSlugs: Record<NavItem, string> = {
   Home: "home",
-  Ledger: "ledger",
   Accounts: "accounts",
   Expenses: "expenses",
   Imports: "imports",
@@ -69,7 +56,7 @@ function normalizeRoutePeriod(nav: NavItem, month: string, year: string) {
 
 export function parseRouteHash(hash: string): { nav: NavItem; month: string; year: string } {
   const [path = "home", search = ""] = hash.replace(/^#\/?/, "").split("?");
-  const nav = navItems.find((item) => navSlugs[item] === path) ?? "Home";
+  const nav = path === "ledger" ? "Expenses" : (navItems.find((item) => navSlugs[item] === path) ?? "Home");
   const params = new URLSearchParams(search);
   const routeMonth = params.get("month");
   const month = routeMonth && /^\d{4}-\d{2}$/.test(routeMonth) ? routeMonth : ACTIVE_MONTH;
@@ -103,10 +90,6 @@ export function App() {
   const budget = useQuery({
     queryKey: ["budget", selectedMonth],
     queryFn: ({ signal }) => getBudget(selectedMonth, signal),
-  });
-  const ledger = useQuery({
-    queryKey: ["ledger", selectedMonth],
-    queryFn: ({ signal }) => getLedger(selectedMonth, signal),
   });
   const expenseYear = useQuery({
     queryKey: ["expenses", "year", year],
@@ -190,7 +173,6 @@ export function App() {
     .toUpperCase();
   const hasViewError =
     (activeNav === "Home" && (dashboard.isError || liabilities.isError || wealth.isError)) ||
-    (activeNav === "Ledger" && (ledger.isError || referenceData.isError)) ||
     (activeNav === "Accounts" && accounts.isError) ||
     (activeNav === "Expenses" && (expenseYear.isError || dashboard.isError || budget.isError)) ||
     (activeNav === "Imports" && (imports.isError || referenceData.isError)) ||
@@ -211,8 +193,8 @@ export function App() {
     setYear(period.year);
   }
 
-  function openCurrentLedger() {
-    navigate("Ledger");
+  function openExpenses() {
+    navigate("Expenses");
   }
 
   function changeExpenseYear(nextYear: string) {
@@ -283,8 +265,8 @@ export function App() {
                 Install app
               </button>
             )}
-            <button className="add-button" onClick={openCurrentLedger} type="button">
-              + Add transaction
+            <button className="add-button" onClick={openExpenses} type="button">
+              + Add expense
             </button>
             <button className="ghost-button" onClick={() => setPrivacy((value) => !value)} type="button">
               {privacy ? "Show amounts" : "Privacy mode"}
@@ -317,7 +299,7 @@ export function App() {
           <section className="alert-strip" aria-label="Local database error">
             <span className="alert-code">DATA</span>
             <p>
-              <strong>The encrypted ledger could not be loaded.</strong> Check that the local API is running.
+              <strong>The encrypted financial data could not be loaded.</strong> Check that the local API is running.
             </p>
           </section>
         ) : activeNav === "Home" ? (
@@ -328,7 +310,6 @@ export function App() {
             liabilities={liabilities.data}
             loading={dashboard.isLoading || liabilities.isLoading || wealth.isLoading}
             money={money}
-            onOpenLedger={openCurrentLedger}
             onOpenExpenses={() => navigate("Expenses")}
             onOpenLiabilities={() => navigate("Liabilities")}
             onOpenGoals={() => navigate("Goals")}
@@ -341,23 +322,12 @@ export function App() {
             dataCutoffMonth={ACTIVE_MONTH}
             loading={expenseYear.isLoading || dashboard.isLoading}
             money={money}
-            onOpenStatement={(month) => {
-              navigate("Ledger", month, month.slice(0, 4));
-            }}
             onSelectMonth={(month) => navigate("Expenses", month, month.slice(0, 4))}
             onYearChange={changeExpenseYear}
             selectedDashboard={dashboard.data}
             selectedMonth={selectedMonth}
             year={year}
             yearData={expenseYear.data}
-          />
-        ) : activeNav === "Ledger" ? (
-          <LedgerView
-            ledger={ledger.data}
-            loading={ledger.isLoading || referenceData.isLoading}
-            money={money}
-            month={selectedMonth}
-            referenceData={referenceData.data}
           />
         ) : activeNav === "Imports" ? (
           <ImportsView
@@ -371,7 +341,7 @@ export function App() {
             data={accounts.data}
             loading={accounts.isLoading}
             money={money}
-            onOpenLedger={() => navigate("Ledger")}
+            onOpenExpenses={() => navigate("Expenses")}
             onOpenLiabilities={() => navigate("Liabilities")}
           />
         ) : activeNav === "Liabilities" ? (
@@ -411,9 +381,7 @@ export function App() {
           <section className="panel feature-placeholder">
             <p className="eyebrow">MODULE BOUNDARY READY</p>
             <h2>{activeNav} is the next vertical slice.</h2>
-            <p>
-              The unified ledger and opening snapshot are live. This tracker will now be built over the same database.
-            </p>
+            <p>The accounting engine and opening snapshot are live. This tracker uses the same encrypted database.</p>
           </section>
         )}
 
@@ -427,28 +395,18 @@ export function App() {
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {(
-          [
-            "Home",
-            "Ledger",
-            "Accounts",
-            "Expenses",
-            "Imports",
-            "Liabilities",
-            "Goals",
-            "Forecasts",
-            "Projects",
-          ] as const
-        ).map((item) => (
-          <button
-            className={activeNav === item ? "active" : ""}
-            key={item}
-            onClick={() => navigate(item)}
-            type="button"
-          >
-            {item}
-          </button>
-        ))}
+        {(["Home", "Accounts", "Expenses", "Imports", "Liabilities", "Goals", "Forecasts", "Projects"] as const).map(
+          (item) => (
+            <button
+              className={activeNav === item ? "active" : ""}
+              key={item}
+              onClick={() => navigate(item)}
+              type="button"
+            >
+              {item}
+            </button>
+          ),
+        )}
       </nav>
     </div>
   );

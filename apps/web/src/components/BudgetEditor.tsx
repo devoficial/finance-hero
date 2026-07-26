@@ -189,7 +189,6 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         queryClient.invalidateQueries({ queryKey: ["budget"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard", saved.month] }),
         queryClient.invalidateQueries({ queryKey: ["expenses", "year", saved.month.slice(0, 4)] }),
-        queryClient.invalidateQueries({ queryKey: ["ledger", saved.month] }),
         queryClient.invalidateQueries({ queryKey: ["imports"] }),
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["wealth"] }),
@@ -544,8 +543,8 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
       <div className="expense-sheet-note">
         <strong>One source of truth.</strong>
         <span>
-          Money cells accept additions and subtractions such as 16433+500-200. Cost updates the ledger; limits update
-          alerts, forecasts and emergency-fund needs.
+          Money cells accept additions and subtractions such as 16433+500-200. Cost updates recorded spending; limits
+          update alerts, forecasts and emergency-fund needs.
         </span>
       </div>
 

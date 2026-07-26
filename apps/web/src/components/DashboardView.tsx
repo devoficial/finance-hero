@@ -13,7 +13,6 @@ interface DashboardViewProps {
   wealth?: WealthResponse;
   loading: boolean;
   money: (paise: number) => string;
-  onOpenLedger: () => void;
   onOpenExpenses: () => void;
   onOpenGoals: () => void;
   onOpenLiabilities: () => void;
@@ -47,7 +46,6 @@ export function DashboardView({
   wealth,
   loading,
   money,
-  onOpenLedger,
   onOpenExpenses,
   onOpenGoals,
   onOpenLiabilities,
@@ -121,8 +119,8 @@ export function DashboardView({
             ? `${dashboard.budgetUsedPercentage}% of the regular budget is already consumed before day 20.`
             : `${dashboard.budgetUsedPercentage}% of the regular budget is used with ${money(available)} still available.`}
         </p>
-        <button onClick={onOpenLedger} type="button">
-          Inspect ledger
+        <button onClick={onOpenExpenses} type="button">
+          Open expense register
         </button>
       </section>
 
@@ -276,8 +274,8 @@ export function DashboardView({
               </div>
             ))}
           </div>
-          <button className="dashboard-ledger-button" onClick={onOpenLedger} type="button">
-            Review category transactions
+          <button className="dashboard-expenses-button" onClick={onOpenExpenses} type="button">
+            Review expense categories
           </button>
         </article>
 

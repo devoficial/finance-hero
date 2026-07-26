@@ -380,7 +380,7 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
           <p className="eyebrow">SAVINGS / INVESTMENTS / SPENDING WALLETS / GOALS</p>
           <h2>Build assets with a job to do.</h2>
           <p>
-            Valuations are editable snapshots. Ledger transfers after the valuation date update the position
+            Valuations are editable snapshots. Recorded transfers after the valuation date update the position
             automatically, while goal allocations only earmark money and never duplicate it.
           </p>
         </div>

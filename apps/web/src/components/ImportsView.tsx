@@ -84,7 +84,6 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["imports"] }),
-      queryClient.invalidateQueries({ queryKey: ["ledger"] }),
       queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
       queryClient.invalidateQueries({ queryKey: ["expenses"] }),
       queryClient.invalidateQueries({ queryKey: ["accounts"] }),
@@ -281,11 +280,11 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     <div className="imports-view">
       <section className="imports-hero">
         <div>
-          <p className="eyebrow">STATEMENT INBOX / APPROVAL GATE / UNIFIED LEDGER</p>
+          <p className="eyebrow">STATEMENT INBOX / APPROVAL GATE / FINANCIAL RECORDS</p>
           <h2>Nothing posts without your approval.</h2>
           <p>
             Upload bank or card statements, review every detected row, correct the account or category, then approve
-            selected transactions into the balanced ledger.
+            selected transactions into your balanced financial records.
           </p>
         </div>
         <div className="import-safety">
@@ -299,7 +298,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
         <article>
           <span>Pending review</span>
           <strong>{data?.pendingCount ?? 0}</strong>
-          <small>Not in the ledger</small>
+          <small>Not recorded yet</small>
         </article>
         <article>
           <span>Approved</span>
@@ -659,7 +658,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                             onClick={() => approveMutation.mutate([candidate.id])}
                             title={
                               candidateIsReady(candidate)
-                                ? "Approve and post this transaction to the ledger"
+                                ? "Approve and add this transaction to your records"
                                 : "Choose the required account and expense category first"
                             }
                             type="button"
@@ -870,7 +869,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
               <p className="reject-target">{resetRequest.payee}</p>
               <p>
                 {resetRequest.status === "approved"
-                  ? "The linked ledger entry will be reversed. You can then edit and approve this transaction again."
+                  ? "The linked financial entry will be reversed. You can then edit and approve this transaction again."
                   : "The rejection will be cleared so this transaction can be reviewed again."}
               </p>
               {actionError && <p className="form-error">{actionError}</p>}

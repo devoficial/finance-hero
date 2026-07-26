@@ -26,6 +26,14 @@ describe("dashboard routes", () => {
     expect(parseRouteHash("#/forecasts?month=2026-07&year=2026").nav).toBe("Forecasts");
   });
 
+  it("redirects the retired ledger route to the expense register", () => {
+    expect(parseRouteHash("#/ledger?month=2026-06&year=2026")).toEqual({
+      nav: "Expenses",
+      month: "2026-06",
+      year: "2026",
+    });
+  });
+
   it("keeps Home on the latest populated month while preserving future planning periods", () => {
     expect(parseRouteHash("#/home?month=2026-08&year=2026")).toEqual({
       nav: "Home",

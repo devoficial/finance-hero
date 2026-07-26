@@ -418,7 +418,7 @@ export function ForecastsView({
         <div className="panel-heading">
           <div>
             <p className="eyebrow">MONTH-BY-MONTH MODEL</p>
-            <h2>Forecast ledger</h2>
+            <h2>Forecast schedule</h2>
           </div>
           <span className="live-pill">INR / NOMINAL</span>
         </div>

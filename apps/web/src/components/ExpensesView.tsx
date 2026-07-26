@@ -13,7 +13,6 @@ interface ExpensesViewProps {
   money: (paise: number) => string;
   onYearChange: (year: string) => void;
   onSelectMonth: (month: string) => void;
-  onOpenStatement: (month: string) => void;
 }
 
 const pieColors = ["#173f35", "#f4b942", "#d64b35", "#32765e", "#8f6a3d", "#8ca99c", "#d49a75"];
@@ -57,7 +56,6 @@ export function ExpensesView({
   money,
   onYearChange,
   onSelectMonth,
-  onOpenStatement,
 }: ExpensesViewProps) {
   const currentMonth = new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -164,9 +162,6 @@ export function ExpensesView({
             <p className="eyebrow">SELECTED MONTH / {selectedMonth}</p>
             <h2>{monthName(selectedMonth)} cash-flow breakdown</h2>
           </div>
-          <button className="statement-button" onClick={() => onOpenStatement(selectedMonth)} type="button">
-            Open detailed statement
-          </button>
         </div>
 
         {selectedDashboard.expenseCategories.length > 0 ? (
@@ -214,7 +209,7 @@ export function ExpensesView({
           </>
         ) : (
           <div className="empty-month-state">
-            <strong>No ledger entries for {monthName(selectedMonth)}.</strong>
+            <strong>No expense entries for {monthName(selectedMonth)}.</strong>
             <span>The card remains available so transactions and a budget can be added later.</span>
           </div>
         )}

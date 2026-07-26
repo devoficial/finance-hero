@@ -12,7 +12,7 @@ interface AccountsViewProps {
   data?: FinancialAccountsResponse;
   loading: boolean;
   money: (paise: number) => string;
-  onOpenLedger: () => void;
+  onOpenExpenses: () => void;
   onOpenLiabilities: () => void;
 }
 
@@ -34,7 +34,7 @@ function accountTypeLabel(account: FinancialAccount): string {
   return account.accountType.replaceAll("_", " ");
 }
 
-export function AccountsView({ data, loading, money, onOpenLedger, onOpenLiabilities }: AccountsViewProps) {
+export function AccountsView({ data, loading, money, onOpenExpenses, onOpenLiabilities }: AccountsViewProps) {
   const queryClient = useQueryClient();
   const formRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
@@ -181,8 +181,8 @@ export function AccountsView({ data, loading, money, onOpenLedger, onOpenLiabili
           <p className="eyebrow">ACCOUNT CONTROL / ONE SOURCE OF TRUTH</p>
           <h2>Every balance has an owner.</h2>
           <p>
-            Edit savings and wallet valuations here. Transaction accounts follow the ledger; loans follow the liability
-            register.
+            Edit savings and wallet valuations here. Transaction accounts follow recorded activity; loans follow the
+            liability register.
           </p>
         </div>
         <div className="accounts-brief-actions">
@@ -231,11 +231,11 @@ export function AccountsView({ data, loading, money, onOpenLedger, onOpenLiabili
           <small>Edit the current balance here; it becomes a dated valuation.</small>
         </article>
         <article>
-          <span>LEDGER CALCULATED</span>
+          <span>TRANSACTION CALCULATED</span>
           <strong>Bank and cash transaction accounts</strong>
           <small>Post or reconcile transactions so the audit trail remains intact.</small>
-          <button onClick={onOpenLedger} type="button">
-            Open ledger
+          <button onClick={onOpenExpenses} type="button">
+            Open expenses
           </button>
         </article>
         <article>
@@ -300,7 +300,9 @@ export function AccountsView({ data, loading, money, onOpenLedger, onOpenLiabili
               </div>
               <div>
                 <span className={`account-class ${account.accountClass}`}>{account.accountClass}</span>
-                <small>{account.managedBy === "ledger" ? "Unified ledger" : `Managed in ${account.managedBy}`}</small>
+                <small>
+                  {account.managedBy === "ledger" ? "Calculated from transactions" : `Managed in ${account.managedBy}`}
+                </small>
               </div>
               <span>{account.institution || "Independent"}</span>
               <strong
@@ -332,9 +334,9 @@ export function AccountsView({ data, loading, money, onOpenLedger, onOpenLiabili
               {editing?.managedBy === "liability"
                 ? "The name is shared with the liability register. Clear active debt there before archiving it."
                 : editing?.managedBy === "ledger"
-                  ? "This balance is calculated from the unified ledger. Use transactions or reconciliation to change it."
+                  ? "This balance is calculated from recorded transactions. Use expenses or reconciliation to change it."
                   : editing
-                    ? "Saving the balance creates a fresh dated valuation while preserving prior ledger history."
+                    ? "Saving the balance creates a fresh dated valuation while preserving prior transaction history."
                     : "Opening balance becomes the starting valuation; later transactions update it automatically."}
             </p>
           </div>
@@ -404,9 +406,9 @@ export function AccountsView({ data, loading, money, onOpenLedger, onOpenLiabili
                 ) : (
                   <div className="account-balance-owner">
                     <span>BALANCE SOURCE</span>
-                    <strong>{editing.managedBy === "liability" ? "Liability register" : "Unified ledger"}</strong>
+                    <strong>{editing.managedBy === "liability" ? "Liability register" : "Financial records"}</strong>
                     <button
-                      onClick={editing.managedBy === "liability" ? onOpenLiabilities : onOpenLedger}
+                      onClick={editing.managedBy === "liability" ? onOpenLiabilities : onOpenExpenses}
                       type="button"
                     >
                       Edit at source

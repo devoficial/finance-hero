@@ -4,7 +4,6 @@ import {
   type CreateFinancialAccountRequest,
   type CreateFinancialGoalRequest,
   type CreateLiabilityRequest,
-  type CreateManualTransactionRequest,
   type CreatePersonalBalanceRequest,
   type CreateProjectCommitmentRequest,
   type CreateProjectExpenseRequest,
@@ -27,12 +26,8 @@ import {
   importArtifactSchema,
   importCandidateSchema,
   importQueueResponseSchema,
-  type LedgerResponse,
-  type LedgerTransaction,
   type LiabilitiesResponse,
   type Liability,
-  ledgerResponseSchema,
-  ledgerTransactionSchema,
   liabilitiesResponseSchema,
   liabilitySchema,
   type PersonalBalance,
@@ -45,7 +40,6 @@ import {
   projectSummaryResponseSchema,
   type ReferenceDataResponse,
   type RejectImportCandidatesRequest,
-  type ReverseTransactionRequest,
   referenceDataResponseSchema,
   type StatementParseRequest,
   type StatementUploadResponse,
@@ -82,10 +76,6 @@ export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
 
 export async function getDashboard(month: string, signal?: AbortSignal): Promise<DashboardResponse> {
   return dashboardResponseSchema.parse(await getJson(`/api/v1/dashboard?month=${encodeURIComponent(month)}`, signal));
-}
-
-export async function getLedger(month: string, signal?: AbortSignal): Promise<LedgerResponse> {
-  return ledgerResponseSchema.parse(await getJson(`/api/v1/ledger?month=${encodeURIComponent(month)}`, signal));
 }
 
 export async function getExpenseYear(year: string, signal?: AbortSignal): Promise<ExpenseYearResponse> {
@@ -430,50 +420,4 @@ export async function updateGoalAllocations(id: string, input: UpdateGoalAllocat
     throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
   }
   return financialGoalSchema.parse(await response.json());
-}
-
-export async function createManualTransaction(input: CreateManualTransactionRequest): Promise<LedgerTransaction> {
-  const response = await fetch("/api/v1/transactions/manual", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    const body = (await response.json()) as { error?: { message?: string } };
-    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
-  }
-
-  return ledgerTransactionSchema.parse(await response.json());
-}
-
-export async function reverseTransaction(id: string, input: ReverseTransactionRequest): Promise<LedgerTransaction> {
-  const response = await fetch(`/api/v1/transactions/${encodeURIComponent(id)}/reverse`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    const body = (await response.json()) as { error?: { message?: string } };
-    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
-  }
-  return ledgerTransactionSchema.parse(await response.json());
-}
-
-export async function replaceTransaction(
-  id: string,
-  input: CreateManualTransactionRequest,
-): Promise<LedgerTransaction> {
-  const response = await fetch(`/api/v1/transactions/${encodeURIComponent(id)}/replace`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    const body = (await response.json()) as { error?: { message?: string } };
-    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
-  }
-  return ledgerTransactionSchema.parse(await response.json());
 }

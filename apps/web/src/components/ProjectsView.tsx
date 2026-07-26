@@ -79,7 +79,6 @@ export function ProjectsView({ data, referenceData, loading, money }: ProjectsVi
       const month = expense.occurredOn.slice(0, 7);
       await Promise.all([
         refreshProjects(),
-        queryClient.invalidateQueries({ queryKey: ["ledger", month] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard", month] }),
         queryClient.invalidateQueries({ queryKey: ["expenses", "year", month.slice(0, 4)] }),
       ]);
@@ -194,7 +193,7 @@ export function ProjectsView({ data, referenceData, loading, money }: ProjectsVi
         <div>
           <p className="eyebrow">PROJECT CONTROL / MIGRATED SOURCE SNAPSHOT</p>
           <h2>{data.name}</h2>
-          <p>Construction is active. The old sheet is preserved as-is; new entries post to the unified ledger.</p>
+          <p>Construction is active. The old sheet is preserved as-is; new entries update your financial records.</p>
         </div>
         <div className="project-status-stack">
           <span className="project-status active">ACTIVE PROJECT</span>

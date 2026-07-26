@@ -1091,7 +1091,7 @@ h2 {
   font-size: 9px;
   line-height: 1.45;
 }
-.dashboard-ledger-button,
+.dashboard-expenses-button,
 .statement-button {
   border: 1px solid var(--green);
   background: var(--green);
