@@ -169,4 +169,38 @@ describe("statement import API", () => {
     });
     await app.close();
   });
+
+  it("uses category IDs that exist in the live foundation schema", async () => {
+    const dataDirectory = mkdtempSync(join(tmpdir(), "finance-hero-import-api-"));
+    temporaryDirectories.push(dataDirectory);
+    const app = await buildApp({
+      config: {
+        host: "127.0.0.1",
+        port: 4317,
+        dataDirectory,
+        databaseKey: "server-import-test-key-with-at-least-32-characters",
+      },
+    });
+    const csv = [
+      "Transaction Date,Narration,Debit Amount,Credit Amount",
+      "20/07/2026,AIRTEL BROADBAND,1250,",
+      "21/07/2026,AMAZON SHOPPING,750,",
+      "22/07/2026,NETFLIX SUBSCRIPTION,499,",
+    ].join("\n");
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/v1/statement-uploads?filename=category-rules.csv&accountId=account-primary-bank",
+      headers: { "content-type": "application/octet-stream" },
+      payload: Buffer.from(csv),
+    });
+
+    expect(upload.statusCode).toBe(201);
+    const queue = importQueueResponseSchema.parse((await app.inject({ method: "GET", url: "/api/v1/imports" })).json());
+    expect(Object.fromEntries(queue.candidates.map((candidate) => [candidate.payee, candidate.categoryId]))).toEqual({
+      "AIRTEL BROADBAND": "category-utilities",
+      "AMAZON SHOPPING": "category-personal",
+      "NETFLIX SUBSCRIPTION": "category-learning",
+    });
+    await app.close();
+  });
 });

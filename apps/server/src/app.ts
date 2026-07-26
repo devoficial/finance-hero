@@ -88,11 +88,11 @@ const CATEGORY_RULES: Array<{ categoryId: string; terms: string[] }> = [
     terms: ["uber", "ola", "rapido", "petrol", "fuel", "irctc", "airlines", "metro"],
   },
   {
-    categoryId: "category-shopping",
+    categoryId: "category-personal",
     terms: ["amazon", "flipkart", "myntra", "ajio", "shopping", "decathlon"],
   },
   {
-    categoryId: "category-entertainment",
+    categoryId: "category-learning",
     terms: ["netflix", "spotify", "hotstar", "prime video", "bookmyshow", "subscription"],
   },
   {
@@ -100,7 +100,7 @@ const CATEGORY_RULES: Array<{ categoryId: string; terms: string[] }> = [
     terms: ["pharmacy", "apollo", "hospital", "clinic", "medical", "diagnostic"],
   },
   {
-    categoryId: "category-broadband",
+    categoryId: "category-utilities",
     terms: ["airtel", "jio", "broadband", "electricity", "bescom"],
   },
 ];

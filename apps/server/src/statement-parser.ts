@@ -35,7 +35,7 @@ const MAXIMUM_PDF_PAGES = 200;
 const MAXIMUM_PDF_TEXT_ITEMS = 500_000;
 const MAXIMUM_XLSX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
 const MAXIMUM_XLSX_ENTRIES = 5_000;
-const DATE_HEADERS = ["date", "transactiondate", "txndate", "valuedate", "posteddate"];
+const DATE_HEADERS = ["date", "trandate", "transactiondate", "txndate", "valuedate", "posteddate"];
 const DESCRIPTION_HEADERS = ["description", "narration", "particulars", "merchant", "transactiondetails", "remarks"];
 const DEBIT_HEADERS = ["debit", "debitamount", "withdrawal", "withdrawals"];
 const CREDIT_HEADERS = ["credit", "creditamount", "deposit", "deposits"];
@@ -361,12 +361,17 @@ function findPdfHeader(tokens: PdfToken[]): Array<{ name: string; x: number }> |
   return valid ? columns.sort((left, right) => left.x - right.x) : null;
 }
 
-function pdfLinesToTable(lines: PdfToken[][]): string[][] {
+interface PdfTable {
+  columns: Array<{ name: string; x: number }>;
+  table: string[][];
+}
+
+function pdfLinesToTable(lines: PdfToken[][], inheritedColumns?: Array<{ name: string; x: number }>): PdfTable {
   const headerIndex = lines.findIndex((line) => findPdfHeader(line) != null);
-  if (headerIndex < 0) {
+  if (headerIndex < 0 && !inheritedColumns) {
     throw new Error("No recognizable transaction table was found. If this is a scanned PDF, OCR is required.");
   }
-  const columns = findPdfHeader(lines[headerIndex] ?? []);
+  const columns = headerIndex >= 0 ? findPdfHeader(lines[headerIndex] ?? []) : inheritedColumns;
   if (!columns) {
     throw new Error("The PDF transaction columns could not be reconstructed.");
   }
@@ -375,16 +380,48 @@ function pdfLinesToTable(lines: PdfToken[][]): string[][] {
     return next ? (column.x + next.x) / 2 : Number.POSITIVE_INFINITY;
   });
   const table = [columns.map((column) => column.name)];
-  for (const line of lines.slice(headerIndex + 1)) {
+  const dateIndex = findColumn(table[0] ?? [], DATE_HEADERS);
+  const descriptionIndex = findColumn(table[0] ?? [], DESCRIPTION_HEADERS);
+  const amountIndexes = [
+    findColumn(table[0] ?? [], DEBIT_HEADERS),
+    findColumn(table[0] ?? [], CREDIT_HEADERS),
+    findColumn(table[0] ?? [], AMOUNT_HEADERS),
+  ].filter((index) => index >= 0);
+  const balanceIndex = findColumn(table[0] ?? [], BALANCE_HEADERS);
+  const firstAmountX = Math.min(...amountIndexes.map((index) => columns[index]?.x ?? Number.POSITIVE_INFINITY));
+  const descriptionStart = boundaries[Math.max(0, dateIndex)] ?? 0;
+  let pendingDescription: string[] = [];
+
+  for (const line of lines.slice(headerIndex >= 0 ? headerIndex + 1 : 0)) {
     const cells = columns.map(() => "");
     for (const token of line) {
       let column = boundaries.findIndex((boundary) => token.x < boundary);
       if (column < 0) column = columns.length - 1;
       cells[column] = `${cells[column]} ${token.text}`.trim();
     }
-    if (cells.some(Boolean)) table.push(cells);
+    const occurredOn = parseDate(cells[dateIndex] ?? "");
+    const hasTransactionAmount = amountIndexes.some((index) => parseAmount(cells[index] ?? "") != null);
+    const description = line
+      .filter((token) => token.x >= descriptionStart && token.x < firstAmountX - 5)
+      .map((token) => token.text)
+      .join(" ")
+      .trim();
+
+    if (occurredOn && hasTransactionAmount) {
+      cells[descriptionIndex] = [...pendingDescription, description].filter(Boolean).join(" ");
+      table.push(cells);
+      pendingDescription = [];
+      continue;
+    }
+
+    const hasBalance = balanceIndex >= 0 && parseAmount(cells[balanceIndex] ?? "") != null;
+    if (!occurredOn && !hasTransactionAmount && !hasBalance && description) {
+      pendingDescription.push(description);
+    } else {
+      pendingDescription = [];
+    }
   }
-  return table;
+  return { columns, table };
 }
 
 export async function parseStatementPdfFile(content: Buffer, password?: string): Promise<ParsedStatement> {
@@ -406,6 +443,7 @@ export async function parseStatementPdfFile(content: Buffer, password?: string):
 
     const rows: ParsedStatementRow[] = [];
     let extractedTextItems = 0;
+    let inheritedColumns: Array<{ name: string; x: number }> | undefined;
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
       const text = await page.getTextContent();
@@ -422,7 +460,9 @@ export async function parseStatementPdfFile(content: Buffer, password?: string):
         }))
         .filter((item) => item.text.length > 0);
       try {
-        const parsed = parseStatementTable(pdfLinesToTable(groupPdfLines(tokens)), `PDF page ${pageNumber}`);
+        const reconstructed = pdfLinesToTable(groupPdfLines(tokens), inheritedColumns);
+        inheritedColumns = reconstructed.columns;
+        const parsed = parseStatementTable(reconstructed.table, `PDF page ${pageNumber}`);
         for (const row of parsed.rows) {
           rows.push({ ...row, sourceRow: rows.length + 1 });
         }

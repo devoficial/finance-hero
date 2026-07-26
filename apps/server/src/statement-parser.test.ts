@@ -2,22 +2,31 @@ import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import { parseStatementDelimitedFile, parseStatementExcelFile, parseStatementPdfFile } from "./statement-parser";
 
-function createTextPdf(lines: Array<Array<{ text: string; x: number }>>): Buffer {
+function createTextPdfPages(pages: Array<Array<Array<{ text: string; x: number }>>>): Buffer {
   const escapePdfText = (value: string) => value.replace(/([\\()])/g, "\\$1");
-  const text = lines
-    .flatMap((line, lineIndex) =>
-      line.map(
-        ({ text: value, x }) => `BT /F1 11 Tf 1 0 0 1 ${x} ${760 - lineIndex * 24} Tm (${escapePdfText(value)}) Tj ET`,
-      ),
-    )
-    .join("\n");
-  const objects = [
+  const pageObjectIds = pages.map((_, index) => 4 + index);
+  const contentObjectIds = pages.map((_, index) => 4 + pages.length + index);
+  const objects: string[] = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${Buffer.byteLength(text)} >>\nstream\n${text}\nendstream`,
   ];
+  for (let index = 0; index < pages.length; index += 1) {
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObjectIds[index]} 0 R >>`,
+    );
+  }
+  for (const lines of pages) {
+    const text = lines
+      .flatMap((line, lineIndex) =>
+        line.map(
+          ({ text: value, x }) =>
+            `BT /F1 11 Tf 1 0 0 1 ${x} ${760 - lineIndex * 24} Tm (${escapePdfText(value)}) Tj ET`,
+        ),
+      )
+      .join("\n");
+    objects.push(`<< /Length ${Buffer.byteLength(text)} >>\nstream\n${text}\nendstream`);
+  }
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
   for (let index = 0; index < objects.length; index += 1) {
@@ -32,6 +41,10 @@ function createTextPdf(lines: Array<Array<{ text: string; x: number }>>): Buffer
   }
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
   return Buffer.from(pdf);
+}
+
+function createTextPdf(lines: Array<Array<{ text: string; x: number }>>): Buffer {
+  return createTextPdfPages([lines]);
 }
 
 function createStatementWorkbook(bookType: "xls" | "xlsx"): Buffer {
@@ -150,6 +163,56 @@ describe("statement PDF parser", () => {
     });
     expect(parsed.rows[1]).toMatchObject({
       occurredOn: "2026-07-19",
+      direction: "credit",
+    });
+  });
+
+  it("parses Axis-style Tran Date rows and headerless continuation pages", async () => {
+    const pdf = createTextPdfPages([
+      [
+        [
+          { text: "Tran Date", x: 40 },
+          { text: "Particulars", x: 130 },
+          { text: "Debit", x: 340 },
+          { text: "Credit", x: 420 },
+          { text: "Balance", x: 500 },
+        ],
+        [
+          { text: "OPENING BALANCE", x: 130 },
+          { text: "500000.00", x: 500 },
+        ],
+        [{ text: "EMI PAYMENT", x: 130 }],
+        [
+          { text: "10-07-2026", x: 40 },
+          { text: "DEBASIS NATH", x: 130 },
+          { text: "40582.00", x: 340 },
+          { text: "459418.00", x: 500 },
+        ],
+      ],
+      [
+        [{ text: "UPI REVERSAL", x: 130 }],
+        [
+          { text: "13-07-2026", x: 40 },
+          { text: "REFERENCE 123", x: 130 },
+          { text: "153.00", x: 420 },
+          { text: "459571.00", x: 500 },
+        ],
+      ],
+    ]);
+
+    const parsed = await parseStatementPdfFile(pdf);
+
+    expect(parsed.rows).toHaveLength(2);
+    expect(parsed.rows[0]).toMatchObject({
+      occurredOn: "2026-07-10",
+      payee: "EMI PAYMENT DEBASIS NATH",
+      amountPaise: 4058200,
+      direction: "debit",
+    });
+    expect(parsed.rows[1]).toMatchObject({
+      occurredOn: "2026-07-13",
+      payee: "UPI REVERSAL REFERENCE 123",
+      amountPaise: 15300,
       direction: "credit",
     });
   });

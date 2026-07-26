@@ -298,9 +298,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                 </div>
                 <div className="artifact-parser">
                   <small>{artifact.parserMessage}</small>
-                  {(artifact.status === "failed" ||
-                    (artifact.status === "needs_parser" &&
-                      artifact.parserMessage?.toLowerCase().includes("password"))) && (
+                  {(artifact.status === "failed" || artifact.status === "needs_parser") && (
                     <button
                       className="artifact-parse-button"
                       disabled={parseMutation.isPending}
@@ -309,9 +307,9 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                     >
                       {parseMutation.isPending
                         ? "Extracting..."
-                        : artifact.status === "failed"
-                          ? "Retry"
-                          : "Unlock PDF"}
+                        : artifact.parserMessage?.toLowerCase().includes("password")
+                          ? "Unlock PDF"
+                          : "Retry extraction"}
                     </button>
                   )}
                 </div>
