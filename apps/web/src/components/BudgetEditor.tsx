@@ -28,6 +28,8 @@ interface CashAdjustmentDraft {
   occurredOn: string;
   label: string;
   amount: string;
+  source: "manual" | "imported_credit";
+  transactionId: string | null;
 }
 
 interface SheetSnapshot {
@@ -97,6 +99,8 @@ function cashDraftFor(adjustment: MonthlyCashAdjustment): CashAdjustmentDraft {
     occurredOn: adjustment.occurredOn,
     label: adjustment.label,
     amount: rupeeInput(adjustment.amountPaise),
+    source: adjustment.source,
+    transactionId: adjustment.transactionId,
   };
 }
 
@@ -186,6 +190,8 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         queryClient.invalidateQueries({ queryKey: ["dashboard", saved.month] }),
         queryClient.invalidateQueries({ queryKey: ["expenses", "year", saved.month.slice(0, 4)] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", saved.month] }),
+        queryClient.invalidateQueries({ queryKey: ["imports"] }),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["wealth"] }),
       ]);
     },
@@ -267,7 +273,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
     setSavedMessage(null);
   }
 
-  function updateCashAdjustment(index: number, field: keyof CashAdjustmentDraft, value: string) {
+  function updateCashAdjustment(index: number, field: "occurredOn" | "label" | "amount", value: string) {
     checkpoint();
     setCashAdjustments((current) =>
       current.map((adjustment, adjustmentIndex) =>
@@ -287,6 +293,8 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         occurredOn: `${currentBudget.month}-01`,
         label: "",
         amount: "",
+        source: "manual",
+        transactionId: null,
       },
     ]);
     setDirty(true);
@@ -347,6 +355,8 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         occurredOn: adjustment.occurredOn,
         label: adjustment.label.trim(),
         amountPaise,
+        source: adjustment.source,
+        transactionId: adjustment.transactionId,
       });
     }
     const currentAdjustments = currentBudget.cashBridge.adjustments.map((adjustment) => ({
@@ -354,6 +364,8 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
       occurredOn: adjustment.occurredOn,
       label: adjustment.label,
       amountPaise: adjustment.amountPaise,
+      source: adjustment.source,
+      transactionId: adjustment.transactionId,
     }));
     const changedAdjustments = JSON.stringify(normalizedAdjustments) !== JSON.stringify(currentAdjustments);
     const changedIncome = plannedIncomePaise !== currentBudget.plannedIncomePaise;
@@ -478,10 +490,16 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               </div>
               <button
                 aria-label={`Remove cash entry ${index + 1}`}
+                disabled={adjustment.source === "imported_credit"}
                 onClick={() => removeCashAdjustment(index)}
+                title={
+                  adjustment.source === "imported_credit"
+                    ? "Move this transaction back to pending from Imports to remove it."
+                    : undefined
+                }
                 type="button"
               >
-                Remove
+                {adjustment.source === "imported_credit" ? "Imported credit" : "Remove"}
               </button>
             </div>
           ))}

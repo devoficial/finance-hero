@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BudgetRepository } from "./budget-repository";
 import { initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
+import { ImportRepository } from "./import-repository";
 import { LedgerRepository } from "./ledger-repository";
 import { seedAcceptedOpeningSnapshot } from "./opening-seed";
 import { WealthRepository } from "./wealth-repository";
@@ -25,9 +26,11 @@ function createRepository() {
   );
   initializeFoundationSchema(database);
   seedAcceptedOpeningSnapshot(database);
+  const ledger = new LedgerRepository(database);
   return {
     database,
-    ledger: new LedgerRepository(database),
+    imports: new ImportRepository(database, ledger),
+    ledger,
     repository: new BudgetRepository(database),
     wealth: new WealthRepository(database),
   };
@@ -137,6 +140,69 @@ describe("budget repository", () => {
     expect(repository.getMonth("2026-06").cashBridge.closingBalancePaise).toBe(24935000);
     expect(repository.getMonth("2026-07").cashBridge.carryoverPaise).toBe(24935000);
     expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(4516600);
+    database.close();
+  });
+
+  it("shows approved imported credits as editable extra income without duplicating cash", () => {
+    const { database, imports, ledger, repository } = createRepository();
+    imports.createArtifact({
+      filename: "salary-account.csv",
+      contentHash: "imported-credit-cash-bridge",
+      mimeType: "text/csv",
+      sizeBytes: 120,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-13",
+          payee: "UPI credit",
+          amountPaise: 15300,
+          direction: "credit",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    const candidate = imports.getQueue().candidates[0];
+    if (!candidate) throw new Error("Expected imported credit.");
+    const approved = imports.approveCandidates([candidate.id]);
+    const transactionId = approved.candidates[0]?.transactionId;
+    if (!transactionId) throw new Error("Expected approved credit transaction.");
+
+    const july = repository.getMonth("2026-07");
+    expect(july.cashBridge.adjustmentTotalPaise).toBe(56100);
+    expect(july.cashBridge.adjustments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          occurredOn: "2026-07-13",
+          label: "UPI credit",
+          amountPaise: 15300,
+          source: "imported_credit",
+          transactionId,
+        }),
+      ]),
+    );
+
+    repository.updateMonth("2026-07", {
+      cashAdjustments: july.cashBridge.adjustments.map((adjustment) =>
+        adjustment.transactionId === transactionId
+          ? { ...adjustment, label: "Refund received", amountPaise: 20000 }
+          : adjustment,
+      ),
+    });
+    expect(repository.getMonth("2026-07").cashBridge.adjustmentTotalPaise).toBe(60800);
+    expect(ledger.listTransactions("2026-07").find((transaction) => transaction.id === transactionId)).toMatchObject({
+      payee: "Refund received",
+      amountPaise: 20000,
+    });
+    expect(imports.getQueue().candidates[0]).toMatchObject({
+      payee: "Refund received",
+      amountPaise: 20000,
+    });
+    imports.resetCandidatesToPending([candidate.id]);
+    expect(repository.getMonth("2026-07").cashBridge.adjustmentTotalPaise).toBe(40800);
     database.close();
   });
 

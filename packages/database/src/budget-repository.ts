@@ -19,6 +19,8 @@ export interface MonthlyCashAdjustmentRecord {
   occurredOn: string;
   label: string;
   amountPaise: number;
+  source: "manual" | "imported_credit";
+  transactionId: string | null;
 }
 
 export interface MonthlyCashBridgeRecord {
@@ -48,6 +50,8 @@ export interface UpdateBudgetMonthInput {
     occurredOn: string;
     label: string;
     amountPaise: number;
+    source?: "manual" | "imported_credit";
+    transactionId?: string | null;
   }>;
   lines?: Array<{
     categoryId: string;
@@ -208,6 +212,9 @@ export class BudgetRepository {
       if (adjustment.amountPaise === 0) {
         throw new Error("Cash adjustment cannot be zero.");
       }
+      if (adjustment.transactionId && adjustment.amountPaise < 0) {
+        throw new Error("An imported credit must remain a positive cash entry.");
+      }
     }
 
     const now = new Date().toISOString();
@@ -253,23 +260,28 @@ export class BudgetRepository {
         upsertSheetRow.run(month, line.categoryId, line.comment ?? existing?.comment ?? null, now);
       }
       if (input.cashAdjustments !== undefined) {
+        for (const adjustment of input.cashAdjustments.filter((item) => item.transactionId)) {
+          this.updateImportedCredit(adjustment, now);
+        }
         this.database.connection.prepare("DELETE FROM monthly_cash_adjustments WHERE month = ?").run(month);
         const insertAdjustment = this.database.connection.prepare(`
           INSERT INTO monthly_cash_adjustments
             (id, month, occurred_on, label, amount_paise, sort_order, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `);
-        input.cashAdjustments.forEach((adjustment, index) => {
-          insertAdjustment.run(
-            adjustment.id ?? randomUUID(),
-            month,
-            adjustment.occurredOn,
-            adjustment.label,
-            adjustment.amountPaise,
-            index,
-            now,
-          );
-        });
+        input.cashAdjustments
+          .filter((adjustment) => !adjustment.transactionId)
+          .forEach((adjustment, index) => {
+            insertAdjustment.run(
+              adjustment.id ?? randomUUID(),
+              month,
+              adjustment.occurredOn,
+              adjustment.label,
+              adjustment.amountPaise,
+              index,
+              now,
+            );
+          });
       }
 
       const total = this.database.connection
@@ -295,34 +307,135 @@ export class BudgetRepository {
     return this.getMonth(month);
   }
 
-  private getCashBridge(month: string): MonthlyCashBridgeRecord {
-    const adjustments = this.database.connection
+  private updateImportedCredit(
+    adjustment: NonNullable<UpdateBudgetMonthInput["cashAdjustments"]>[number],
+    now: string,
+  ) {
+    if (!adjustment.transactionId) return;
+    const imported = this.database.connection
       .prepare(`
+        SELECT c.id AS candidateId, c.transaction_id AS transactionId
+        FROM import_candidates c
+        JOIN journal_transactions t ON t.id = c.transaction_id
+        WHERE c.transaction_id = ? AND c.status = 'approved' AND c.direction = 'credit'
+          AND t.status = 'posted'
+      `)
+      .get(adjustment.transactionId) as { candidateId: string; transactionId: string } | undefined;
+    if (!imported) {
+      throw new Error("The linked imported credit is no longer available for editing.");
+    }
+    const postings = this.database.connection
+      .prepare(`
+        SELECT p.id, a.account_class AS accountClass
+        FROM postings p
+        JOIN accounts a ON a.id = p.account_id
+        WHERE p.transaction_id = ?
+      `)
+      .all(imported.transactionId) as Array<{ id: string; accountClass: string }>;
+    const incomePosting = postings.find((posting) => posting.accountClass === "income");
+    const cashPosting = postings.find((posting) => posting.accountClass !== "income");
+    if (!incomePosting || !cashPosting || postings.length !== 2) {
+      throw new Error("The linked imported credit is not a balanced income transaction.");
+    }
+    this.database.connection
+      .prepare(`
+        UPDATE journal_transactions
+        SET occurred_on = ?, effective_month = ?, payee = ?
+        WHERE id = ?
+      `)
+      .run(adjustment.occurredOn, adjustment.occurredOn.slice(0, 7), adjustment.label.trim(), imported.transactionId);
+    this.database.connection
+      .prepare("UPDATE postings SET amount_paise = ? WHERE id = ?")
+      .run(-adjustment.amountPaise, incomePosting.id);
+    this.database.connection
+      .prepare("UPDATE postings SET amount_paise = ? WHERE id = ?")
+      .run(adjustment.amountPaise, cashPosting.id);
+    this.database.connection
+      .prepare(`
+        UPDATE import_candidates
+        SET occurred_on = ?, payee = ?, amount_paise = ?, version = version + 1, updated_at = ?
+        WHERE id = ?
+      `)
+      .run(adjustment.occurredOn, adjustment.label.trim(), adjustment.amountPaise, now, imported.candidateId);
+    this.database.connection
+      .prepare(`
+        INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+        VALUES (?, 'import.credit_edited_from_expense_sheet', 'import_candidate', ?, ?, ?)
+      `)
+      .run(
+        randomUUID(),
+        imported.candidateId,
+        JSON.stringify({
+          transactionId: imported.transactionId,
+          occurredOn: adjustment.occurredOn,
+          label: adjustment.label.trim(),
+          amountPaise: adjustment.amountPaise,
+        }),
+        now,
+      );
+  }
+
+  private getCashBridge(month: string): MonthlyCashBridgeRecord {
+    const manualAdjustments = (
+      this.database.connection
+        .prepare(`
         SELECT id, occurred_on AS occurredOn, label, amount_paise AS amountPaise
         FROM monthly_cash_adjustments
         WHERE month = ?
         ORDER BY occurred_on, sort_order, rowid
       `)
-      .all(month) as MonthlyCashAdjustmentRecord[];
+        .all(month) as Array<Omit<MonthlyCashAdjustmentRecord, "source" | "transactionId">>
+    ).map((adjustment) => ({ ...adjustment, source: "manual" as const, transactionId: null }));
+    const importedCredits = (
+      this.database.connection
+        .prepare(`
+          SELECT 'import-credit:' || c.id AS id, c.occurred_on AS occurredOn,
+                 c.payee AS label, c.amount_paise AS amountPaise,
+                 c.transaction_id AS transactionId
+          FROM import_candidates c
+          JOIN journal_transactions t ON t.id = c.transaction_id
+          WHERE c.status = 'approved' AND c.direction = 'credit'
+            AND t.status = 'posted' AND t.effective_month = ?
+        `)
+        .all(month) as Array<Omit<MonthlyCashAdjustmentRecord, "source">>
+    ).map((adjustment) => ({ ...adjustment, source: "imported_credit" as const }));
+    const adjustments = [...manualAdjustments, ...importedCredits].sort(
+      (left, right) => left.occurredOn.localeCompare(right.occurredOn) || left.id.localeCompare(right.id),
+    );
     const months = this.database.connection
       .prepare(`
         SELECT month
         FROM budget_periods
         WHERE month <= ?
+        UNION
+        SELECT t.effective_month
+        FROM import_candidates c
+        JOIN journal_transactions t ON t.id = c.transaction_id
+        WHERE c.status = 'approved' AND c.direction = 'credit'
+          AND t.status = 'posted' AND t.effective_month <= ?
         UNION SELECT ?
         ORDER BY month
       `)
-      .all(month, month) as Array<{ month: string }>;
+      .all(month, month, month) as Array<{ month: string }>;
     const adjustmentTotals = new Map(
       (
         this.database.connection
           .prepare(`
             SELECT month, SUM(amount_paise) AS amountPaise
-            FROM monthly_cash_adjustments
-            WHERE month <= ?
+            FROM (
+              SELECT month, amount_paise
+              FROM monthly_cash_adjustments
+              WHERE month <= ?
+              UNION ALL
+              SELECT t.effective_month AS month, c.amount_paise
+              FROM import_candidates c
+              JOIN journal_transactions t ON t.id = c.transaction_id
+              WHERE c.status = 'approved' AND c.direction = 'credit'
+                AND t.status = 'posted' AND t.effective_month <= ?
+            )
             GROUP BY month
           `)
-          .all(month) as Array<{ month: string; amountPaise: number }>
+          .all(month, month) as Array<{ month: string; amountPaise: number }>
       ).map((row) => [row.month, row.amountPaise]),
     );
     const overrides = new Map(

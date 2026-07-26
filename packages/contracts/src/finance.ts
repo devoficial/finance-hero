@@ -234,6 +234,8 @@ export const monthlyCashAdjustmentSchema = z.object({
   occurredOn: localDateSchema,
   label: z.string(),
   amountPaise: paiseSchema,
+  source: z.enum(["manual", "imported_credit"]),
+  transactionId: z.string().nullable(),
 });
 
 export const monthlyCashBridgeSchema = z.object({
@@ -266,6 +268,8 @@ export const updateBudgetMonthRequestSchema = z
           occurredOn: localDateSchema,
           label: z.string().trim().min(1).max(120),
           amountPaise: paiseSchema.refine((value) => value !== 0, { message: "Cash adjustment cannot be zero." }),
+          source: z.enum(["manual", "imported_credit"]).optional(),
+          transactionId: z.string().min(1).nullable().optional(),
         }),
       )
       .max(100)
