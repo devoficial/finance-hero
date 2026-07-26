@@ -39,7 +39,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const [file, setFile] = useState<File | null>(null);
   const [uploadAccountId, setUploadAccountId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState<"pending" | "all">("pending");
+  const [filter, setFilter] = useState<"pending" | "approved" | "all">("pending");
   const [editing, setEditing] = useState<ImportCandidate | null>(null);
   const [editDate, setEditDate] = useState("");
   const [editPayee, setEditPayee] = useState("");
@@ -135,7 +135,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   });
 
   const candidates = useMemo(
-    () => (data?.candidates ?? []).filter((candidate) => filter === "all" || candidate.status === "pending"),
+    () => (data?.candidates ?? []).filter((candidate) => filter === "all" || candidate.status === filter),
     [data, filter],
   );
   const pendingVisible = candidates.filter((candidate) => candidate.status === "pending");
@@ -150,6 +150,11 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const allReadySelected =
     readyPendingVisible.length > 0 && readyPendingVisible.every((candidate) => selected.has(candidate.id));
   const assignmentIsPending = (id: string) => assignmentMutation.isPending && assignmentMutation.variables?.id === id;
+
+  function changeFilter(nextFilter: "pending" | "approved" | "all") {
+    setFilter(nextFilter);
+    setSelected(new Set());
+  }
 
   function beginEdit(candidate: ImportCandidate) {
     setEditing(candidate);
@@ -373,45 +378,58 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
             <h2>Transaction candidates</h2>
           </div>
           <div className="import-filter">
-            <button className={filter === "pending" ? "active" : ""} onClick={() => setFilter("pending")} type="button">
-              Pending
+            <button
+              className={filter === "pending" ? "active" : ""}
+              onClick={() => changeFilter("pending")}
+              type="button"
+            >
+              Pending <span>{data?.pendingCount ?? 0}</span>
             </button>
-            <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")} type="button">
-              All
+            <button
+              className={filter === "approved" ? "active" : ""}
+              onClick={() => changeFilter("approved")}
+              type="button"
+            >
+              Approved <span>{data?.approvedCount ?? 0}</span>
+            </button>
+            <button className={filter === "all" ? "active" : ""} onClick={() => changeFilter("all")} type="button">
+              All <span>{(data?.pendingCount ?? 0) + (data?.approvedCount ?? 0) + (data?.rejectedCount ?? 0)}</span>
             </button>
           </div>
         </div>
 
-        <div className="import-bulk-bar">
-          <label>
-            <input
-              checked={allReadySelected}
-              onChange={() =>
-                setSelected(
-                  allReadySelected ? new Set() : new Set(readyPendingVisible.map((candidate) => candidate.id)),
-                )
-              }
-              type="checkbox"
-            />
-            Select all ready
-          </label>
-          <span>{selected.size} selected</span>
-          <button
-            disabled={selected.size === 0 || approveMutation.isPending}
-            onClick={() => approveMutation.mutate([...selected])}
-            type="button"
-          >
-            Approve selected
-          </button>
-          <button
-            className="danger-outline"
-            disabled={selected.size === 0 || rejectMutation.isPending}
-            onClick={() => beginReject([...selected], `${selected.size} selected transactions`)}
-            type="button"
-          >
-            Reject
-          </button>
-        </div>
+        {filter !== "approved" && (
+          <div className="import-bulk-bar">
+            <label>
+              <input
+                checked={allReadySelected}
+                onChange={() =>
+                  setSelected(
+                    allReadySelected ? new Set() : new Set(readyPendingVisible.map((candidate) => candidate.id)),
+                  )
+                }
+                type="checkbox"
+              />
+              Select all ready
+            </label>
+            <span>{selected.size} selected</span>
+            <button
+              disabled={selected.size === 0 || approveMutation.isPending}
+              onClick={() => approveMutation.mutate([...selected])}
+              type="button"
+            >
+              Approve selected
+            </button>
+            <button
+              className="danger-outline"
+              disabled={selected.size === 0 || rejectMutation.isPending}
+              onClick={() => beginReject([...selected], `${selected.size} selected transactions`)}
+              type="button"
+            >
+              Reject
+            </button>
+          </div>
+        )}
         {actionError && <p className="form-error import-review-error">{actionError}</p>}
 
         <div className="import-table-wrap">
@@ -440,7 +458,11 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
               {candidates.length === 0 ? (
                 <tr>
                   <td className="empty-state" colSpan={7}>
-                    {filter === "pending" ? "No transactions are waiting for approval." : "No candidates available."}
+                    {filter === "pending"
+                      ? "No transactions are waiting for approval."
+                      : filter === "approved"
+                        ? "No transactions have been approved yet."
+                        : "No candidates available."}
                   </td>
                 </tr>
               ) : (

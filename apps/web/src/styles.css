@@ -6004,14 +6004,33 @@ h2 {
 }
 
 .import-filter button {
+  align-items: center;
   background: transparent;
   border: 0;
+  display: inline-flex;
+  gap: 8px;
   min-height: 42px;
   padding: 0 18px;
 }
 
+.import-filter button span {
+  background: var(--cream);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  min-width: 24px;
+  padding: 3px 6px;
+  text-align: center;
+}
+
 .import-filter button.active {
   background: var(--green);
+  color: white;
+}
+
+.import-filter button.active span {
+  background: rgb(255 255 255 / 16%);
   color: white;
 }
 
