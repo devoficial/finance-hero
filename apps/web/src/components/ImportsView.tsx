@@ -50,6 +50,11 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const [rejectRequest, setRejectRequest] = useState<{ ids: string[]; label: string } | null>(null);
   const [rejectReason, setRejectReason] = useState("Not a valid transaction");
   const [actionError, setActionError] = useState<string | null>(null);
+  const accounts = referenceData?.accounts ?? [];
+  const categories = referenceData?.categories ?? [];
+  const primarySalaryAccount = accounts.find(
+    (account) => account.accountClass === "asset" && account.name.toLowerCase() === "primary salary account",
+  );
 
   useEffect(() => {
     if (!editing && !rejectRequest) return;
@@ -66,6 +71,12 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [editing, rejectRequest]);
+
+  useEffect(() => {
+    if (!uploadAccountId && primarySalaryAccount) {
+      setUploadAccountId(primarySalaryAccount.id);
+    }
+  }, [primarySalaryAccount, uploadAccountId]);
 
   const refresh = async () => {
     await Promise.all([
@@ -115,7 +126,22 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     onError: (error) => setActionError(error instanceof Error ? error.message : "Candidate update failed."),
   });
   const approveMutation = useMutation({
-    mutationFn: (ids: string[]) => approveImportCandidates({ ids }),
+    mutationFn: async (ids: string[]) => {
+      if (primarySalaryAccount) {
+        const selectedIds = new Set(ids);
+        const unassigned = (data?.candidates ?? []).filter(
+          (candidate) => selectedIds.has(candidate.id) && candidate.accountId == null,
+        );
+        await Promise.all(
+          unassigned.map((candidate) =>
+            updateImportCandidate(candidate.id, {
+              accountId: primarySalaryAccount.id,
+            }),
+          ),
+        );
+      }
+      return approveImportCandidates({ ids });
+    },
     onSuccess: async () => {
       setSelected(new Set());
       setActionError(null);
@@ -139,12 +165,11 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     [data, filter],
   );
   const pendingVisible = candidates.filter((candidate) => candidate.status === "pending");
-  const accounts = referenceData?.accounts ?? [];
-  const categories = referenceData?.categories ?? [];
+  const candidateAccountId = (candidate: ImportCandidate) => candidate.accountId ?? primarySalaryAccount?.id ?? null;
   const candidateIsReady = (candidate: ImportCandidate) =>
     candidate.status === "pending" &&
     candidate.occurredOn != null &&
-    candidate.accountId != null &&
+    candidateAccountId(candidate) != null &&
     (candidate.direction === "credit" || candidate.categoryId != null);
   const readyPendingVisible = pendingVisible.filter(candidateIsReady);
   const allReadySelected =
@@ -162,7 +187,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     setEditPayee(candidate.payee);
     setEditAmount(String(candidate.amountPaise / 100));
     setEditDirection(candidate.direction);
-    setEditAccountId(candidate.accountId ?? "");
+    setEditAccountId(candidateAccountId(candidate) ?? "");
     setEditCategoryId(candidate.categoryId ?? "");
     setActionError(null);
   }
@@ -505,7 +530,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                             <span>Account</span>
                             <select
                               aria-label={`Account for ${candidate.payee}`}
-                              defaultValue={candidate.accountId ?? ""}
+                              defaultValue={candidateAccountId(candidate) ?? ""}
                               disabled={assignmentIsPending(candidate.id)}
                               key={`account-${candidate.id}-${candidate.version}`}
                               onChange={(event) =>
