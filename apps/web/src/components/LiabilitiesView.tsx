@@ -9,7 +9,7 @@ import type {
 } from "@finance-hero/contracts";
 import { type DebtPlanStrategy, simulateDebtPlan } from "@finance-hero/domain";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createLiability,
   createPersonalBalance,
@@ -42,6 +42,12 @@ interface PersonalBalanceForm {
   amount: string;
   note: string;
   status: "open" | "settled";
+}
+
+interface PlannerDebtDraft {
+  currentPrincipal: string;
+  emi: string;
+  annualRate: string;
 }
 
 function productName(productType: string) {
@@ -86,6 +92,10 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
   const [personalValidationError, setPersonalValidationError] = useState<string | null>(null);
   const [debtStrategy, setDebtStrategy] = useState<DebtPlanStrategy>("snowball");
   const [extraPayment, setExtraPayment] = useState("0");
+  const [plannerEditing, setPlannerEditing] = useState(false);
+  const [plannerDrafts, setPlannerDrafts] = useState<Record<string, PlannerDebtDraft>>({});
+  const [plannerValidationError, setPlannerValidationError] = useState<string | null>(null);
+  const [plannerMessage, setPlannerMessage] = useState<string | null>(null);
   const mutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateLiabilityRequest }) => updateLiability(id, input),
     onSuccess: async () => {
@@ -164,19 +174,61 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
       ]);
     },
   });
+  const plannerMutation = useMutation({
+    mutationFn: (changes: Array<{ id: string; input: UpdateLiabilityRequest }>) =>
+      Promise.all(changes.map((change) => updateLiability(change.id, change.input))),
+    onSuccess: async () => {
+      setPlannerEditing(false);
+      setPlannerValidationError(null);
+      setPlannerMessage("Planner assumptions saved to your liability records.");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["liabilities"] }),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["wealth"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+    },
+  });
+
+  useEffect(() => {
+    const drafts = Object.fromEntries(
+      (data?.liabilities ?? [])
+        .filter((liability) => liability.status === "active" && liability.currentPrincipalPaise > 0)
+        .map((liability) => [
+          liability.id,
+          {
+            currentPrincipal: String(liability.currentPrincipalPaise / 100),
+            emi: String(liability.emiPaise / 100),
+            annualRate: liability.annualRateBps == null ? "" : String(liability.annualRateBps / 100),
+          },
+        ]),
+    );
+    setPlannerDrafts(drafts);
+  }, [data]);
 
   const plannerDebts = useMemo(
     () =>
       (data?.liabilities ?? [])
         .filter((liability) => liability.status === "active" && liability.currentPrincipalPaise > 0)
-        .map((liability) => ({
-          id: liability.id,
-          name: liability.name,
-          principalPaise: liability.currentPrincipalPaise,
-          emiPaise: liability.emiPaise,
-          annualRateBps: liability.annualRateBps,
-        })),
-    [data],
+        .map((liability) => {
+          const draft = plannerDrafts[liability.id];
+          const principalPaise = rupeesToPaise(draft?.currentPrincipal ?? "") ?? liability.currentPrincipalPaise;
+          const emiPaise = rupeesToPaise(draft?.emi ?? "") ?? liability.emiPaise;
+          const annualRateBps =
+            draft?.annualRate.trim() === ""
+              ? null
+              : Number.isFinite(Number(draft?.annualRate))
+                ? Math.round(Number(draft?.annualRate) * 100)
+                : liability.annualRateBps;
+          return {
+            id: liability.id,
+            name: liability.name,
+            principalPaise,
+            emiPaise,
+            annualRateBps,
+          };
+        }),
+    [data, plannerDrafts],
   );
   const extraPaymentPaise = rupeesToPaise(extraPayment) ?? 0;
   const baselinePlan = useMemo(() => simulateDebtPlan(plannerDebts, "snowball", 0, month), [month, plannerDebts]);
@@ -196,6 +248,92 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
   const interestSaved = Math.max(0, baselinePlan.totalInterestPaise - selectedPlan.totalInterestPaise);
   const avalancheInterestAdvantage = Math.max(0, snowballPlan.totalInterestPaise - avalanchePlan.totalInterestPaise);
   const unknownRateCount = plannerDebts.filter((debt) => debt.annualRateBps == null).length;
+  const totalPlannerPrincipal = plannerDebts.reduce((sum, debt) => sum + debt.principalPaise, 0);
+  const minimumMonthlyEmi = plannerDebts.reduce((sum, debt) => sum + debt.emiPaise, 0);
+  const firstTarget = selectedPlan.payoffOrder[0];
+  const principalReduction = Math.max(
+    0,
+    totalPlannerPrincipal - (selectedPlan.months[11]?.remainingPrincipalPaise ?? 0),
+  );
+  const trajectoryCheckpoints = [0, 11, 23, 35, selectedPlan.months.length - 1]
+    .filter((index, position, values) => index >= 0 && values.indexOf(index) === position)
+    .map((index) => selectedPlan.months[index])
+    .filter((checkpoint): checkpoint is NonNullable<typeof checkpoint> => checkpoint != null);
+  const plannerHasChanges = (data?.liabilities ?? []).some((liability) => {
+    const draft = plannerDrafts[liability.id];
+    if (!draft || liability.status !== "active") return false;
+    const rate = draft.annualRate.trim() === "" ? null : Math.round(Number(draft.annualRate) * 100);
+    return (
+      rupeesToPaise(draft.currentPrincipal) !== liability.currentPrincipalPaise ||
+      rupeesToPaise(draft.emi) !== liability.emiPaise ||
+      rate !== liability.annualRateBps
+    );
+  });
+
+  function updatePlannerDraft(id: string, field: keyof PlannerDebtDraft, value: string) {
+    setPlannerDrafts((current) => ({
+      ...current,
+      [id]: {
+        ...(current[id] ?? { currentPrincipal: "", emi: "", annualRate: "" }),
+        [field]: value,
+      },
+    }));
+    setPlannerValidationError(null);
+    setPlannerMessage(null);
+  }
+
+  function resetPlannerDrafts() {
+    setPlannerDrafts(
+      Object.fromEntries(
+        (data?.liabilities ?? [])
+          .filter((liability) => liability.status === "active" && liability.currentPrincipalPaise > 0)
+          .map((liability) => [
+            liability.id,
+            {
+              currentPrincipal: String(liability.currentPrincipalPaise / 100),
+              emi: String(liability.emiPaise / 100),
+              annualRate: liability.annualRateBps == null ? "" : String(liability.annualRateBps / 100),
+            },
+          ]),
+      ),
+    );
+    setPlannerEditing(false);
+    setPlannerValidationError(null);
+    setPlannerMessage(null);
+  }
+
+  function savePlannerAssumptions() {
+    const changes: Array<{ id: string; input: UpdateLiabilityRequest }> = [];
+    for (const liability of data?.liabilities ?? []) {
+      if (liability.status !== "active") continue;
+      const draft = plannerDrafts[liability.id];
+      if (!draft) continue;
+      const currentPrincipalPaise = rupeesToPaise(draft.currentPrincipal);
+      const emiPaise = rupeesToPaise(draft.emi);
+      const annualRateBps = draft.annualRate.trim() === "" ? null : Math.round(Number(draft.annualRate.trim()) * 100);
+      if (
+        currentPrincipalPaise == null ||
+        emiPaise == null ||
+        (annualRateBps != null && (!Number.isSafeInteger(annualRateBps) || annualRateBps < 0))
+      ) {
+        setPlannerValidationError(`Check the balance, EMI, and interest rate for ${liability.name}.`);
+        return;
+      }
+      const input: UpdateLiabilityRequest = {};
+      if (currentPrincipalPaise !== liability.currentPrincipalPaise)
+        input.currentPrincipalPaise = currentPrincipalPaise;
+      if (emiPaise !== liability.emiPaise) input.emiPaise = emiPaise;
+      if (annualRateBps !== liability.annualRateBps) input.annualRateBps = annualRateBps;
+      if (Object.keys(input).length > 0) changes.push({ id: liability.id, input });
+    }
+    if (changes.length === 0) {
+      setPlannerEditing(false);
+      setPlannerMessage("No assumption changes to save.");
+      return;
+    }
+    setPlannerValidationError(null);
+    plannerMutation.mutate(changes);
+  }
 
   if (loading || !data) {
     return <section className="panel loading-panel">Reading the liability register...</section>;
@@ -406,33 +544,172 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
       </section>
 
       <section className="panel debt-planner">
-        <div className="panel-heading">
+        <div className="panel-heading debt-planner-heading">
           <div>
-            <p className="eyebrow">ADVANCED DEBT PLANNER / ROLLOVER METHOD</p>
-            <h2>Test your debt-free path</h2>
+            <p className="eyebrow">DEBT PAYOFF LAB / LIVE LIABILITY DATA</p>
+            <h2>Build a debt-free plan you can explain</h2>
+            <p className="debt-planner-lede">
+              Change balances, EMIs, rates, strategy, or extra payment and see exactly what happens. Nothing changes
+              your records until you save the assumptions.
+            </p>
           </div>
-          <fieldset className="debt-strategy-toggle">
-            <legend>Debt strategy</legend>
+          <div className="debt-planner-heading-actions">
+            <span>{plannerDebts.length} active accounts</span>
             <button
-              className={debtStrategy === "snowball" ? "active" : ""}
-              onClick={() => setDebtStrategy("snowball")}
+              className={plannerEditing ? "active" : ""}
+              disabled={plannerEditing}
+              onClick={() => {
+                setPlannerEditing(true);
+                setPlannerMessage(null);
+              }}
               type="button"
             >
-              Snowball
+              {plannerEditing ? "Editing assumptions" : "Edit assumptions"}
             </button>
-            <button
-              className={debtStrategy === "avalanche" ? "active" : ""}
-              onClick={() => setDebtStrategy("avalanche")}
-              type="button"
-            >
-              Avalanche
-            </button>
-          </fieldset>
+          </div>
         </div>
-        <div className="debt-planner-grid">
+
+        <div className="debt-method-explainer">
+          <article>
+            <b>01</b>
+            <span>Pay every minimum EMI</span>
+            <small>{money(minimumMonthlyEmi)} stays committed each month.</small>
+          </article>
+          <article>
+            <b>02</b>
+            <span>Direct the extra payment</span>
+            <small>
+              {debtStrategy === "snowball"
+                ? "Snowball targets the smallest outstanding balance."
+                : "Avalanche targets the highest known interest rate."}
+            </small>
+          </article>
+          <article>
+            <b>03</b>
+            <span>Roll freed EMIs forward</span>
+            <small>When one account closes, its EMI attacks the next target automatically.</small>
+          </article>
+        </div>
+
+        <section className="debt-assumptions" aria-label="Debt planner assumptions">
+          <div className="debt-assumptions-heading">
+            <div>
+              <span>CALCULATION INPUTS</span>
+              <strong>{money(totalPlannerPrincipal)} outstanding</strong>
+              <small>
+                {unknownRateCount > 0
+                  ? `${unknownRateCount} missing rate${unknownRateCount === 1 ? "" : "s"} currently treated as 0%.`
+                  : "Every active account has an interest rate."}
+              </small>
+            </div>
+            {plannerEditing && (
+              <div>
+                <button disabled={plannerMutation.isPending} onClick={resetPlannerDrafts} type="button">
+                  Cancel
+                </button>
+                <button
+                  className="save-assumptions"
+                  disabled={!plannerHasChanges || plannerMutation.isPending}
+                  onClick={savePlannerAssumptions}
+                  type="button"
+                >
+                  {plannerMutation.isPending ? "Saving..." : "Save to liabilities"}
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="debt-assumption-table">
+            <div className="debt-assumption-header">
+              <span>ACCOUNT</span>
+              <span>CURRENT BALANCE</span>
+              <span>MINIMUM EMI</span>
+              <span>ANNUAL RATE</span>
+              <span>PLANNER ROLE</span>
+            </div>
+            {data.liabilities
+              .filter((liability) => liability.status === "active" && liability.currentPrincipalPaise > 0)
+              .map((liability) => {
+                const draft = plannerDrafts[liability.id] ?? {
+                  currentPrincipal: String(liability.currentPrincipalPaise / 100),
+                  emi: String(liability.emiPaise / 100),
+                  annualRate: liability.annualRateBps == null ? "" : String(liability.annualRateBps / 100),
+                };
+                const snowballPosition = snowballPlan.payoffOrder.findIndex((payoff) => payoff.id === liability.id) + 1;
+                const avalanchePosition =
+                  avalanchePlan.payoffOrder.findIndex((payoff) => payoff.id === liability.id) + 1;
+                return (
+                  <article key={liability.id}>
+                    <div>
+                      <strong>{liability.name}</strong>
+                      <small>{productName(liability.productType)}</small>
+                    </div>
+                    {plannerEditing ? (
+                      <>
+                        <label>
+                          <span>Balance in INR</span>
+                          <input
+                            inputMode="decimal"
+                            min="0"
+                            onChange={(event) =>
+                              updatePlannerDraft(liability.id, "currentPrincipal", event.target.value)
+                            }
+                            type="number"
+                            value={draft.currentPrincipal}
+                          />
+                        </label>
+                        <label>
+                          <span>EMI in INR</span>
+                          <input
+                            inputMode="decimal"
+                            min="0"
+                            onChange={(event) => updatePlannerDraft(liability.id, "emi", event.target.value)}
+                            type="number"
+                            value={draft.emi}
+                          />
+                        </label>
+                        <label>
+                          <span>Rate percent</span>
+                          <input
+                            inputMode="decimal"
+                            min="0"
+                            onChange={(event) => updatePlannerDraft(liability.id, "annualRate", event.target.value)}
+                            placeholder="Missing"
+                            step="0.01"
+                            type="number"
+                            value={draft.annualRate}
+                          />
+                        </label>
+                      </>
+                    ) : (
+                      <>
+                        <strong>{money(liability.currentPrincipalPaise)}</strong>
+                        <strong>{money(liability.emiPaise)}</strong>
+                        <strong className={liability.annualRateBps == null ? "missing-rate" : ""}>
+                          {liability.annualRateBps == null
+                            ? "Rate missing"
+                            : `${(liability.annualRateBps / 100).toFixed(2)}%`}
+                        </strong>
+                      </>
+                    )}
+                    <div className="debt-assumption-role">
+                      <span>Snowball #{snowballPosition || "—"}</span>
+                      <span>Avalanche #{avalanchePosition || "—"}</span>
+                    </div>
+                  </article>
+                );
+              })}
+          </div>
+          {(plannerValidationError || plannerMutation.error || plannerMessage) && (
+            <p className={plannerValidationError || plannerMutation.error ? "form-error" : "planner-success"}>
+              {plannerValidationError ?? plannerMutation.error?.message ?? plannerMessage}
+            </p>
+          )}
+        </section>
+
+        <div className="debt-scenario-bar">
           <div className="debt-extra-control">
             <label>
-              <span>Extra payment each month</span>
+              <span>Extra amount you can pay every month</span>
               <div>
                 <b>Rs</b>
                 <input
@@ -446,46 +723,96 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
               </div>
             </label>
             <div className="debt-extra-presets">
-              {[5_000, 10_000, 25_000].map((rupees) => (
-                <button key={rupees} onClick={() => setExtraPayment(String(rupees))} type="button">
-                  + Rs {rupees.toLocaleString("en-IN")}
+              {[0, 5_000, 10_000, 25_000].map((rupees) => (
+                <button
+                  className={extraPaymentPaise === rupees * 100 ? "active" : ""}
+                  key={rupees}
+                  onClick={() => setExtraPayment(String(rupees))}
+                  type="button"
+                >
+                  {rupees === 0 ? "Minimum only" : `+ Rs ${rupees.toLocaleString("en-IN")}`}
                 </button>
               ))}
             </div>
-            <small>
-              The model keeps your total EMI budget constant and rolls every cleared EMI into the next account.
-            </small>
           </div>
-          <div className="debt-plan-result">
+          <fieldset className="debt-strategy-toggle">
+            <legend>Debt strategy</legend>
+            <button
+              className={debtStrategy === "snowball" ? "active" : ""}
+              onClick={() => setDebtStrategy("snowball")}
+              type="button"
+            >
+              Snowball · smallest first
+            </button>
+            <button
+              className={debtStrategy === "avalanche" ? "active" : ""}
+              onClick={() => setDebtStrategy("avalanche")}
+              type="button"
+            >
+              Avalanche · highest rate first
+            </button>
+          </fieldset>
+        </div>
+
+        <div className="debt-outcome-summary">
+          <article>
+            <span>TOTAL MONTHLY DEBT BUDGET</span>
+            <strong>{money(selectedPlan.monthlyBudgetPaise)}</strong>
+            <small>
+              {money(minimumMonthlyEmi)} minimum EMIs + {money(extraPaymentPaise)} extra
+            </small>
+          </article>
+          <article className="primary-outcome">
             <span>ESTIMATED DEBT-FREE DATE</span>
             <strong>{monthLabel(selectedPlan.debtFreeMonth)}</strong>
             <small>
               {selectedPlan.payoffMonths == null
-                ? "At least one balance cannot amortize with the current payment."
-                : `${selectedPlan.payoffMonths} months · ${monthsSaved} months sooner than minimum payments`}
+                ? "The current assumptions cannot fully repay every balance."
+                : `${selectedPlan.payoffMonths} months from now · ${monthsSaved} months gained`}
             </small>
-          </div>
-          <div className="debt-plan-result">
-            <span>PROJECTED INTEREST</span>
+          </article>
+          <article>
+            <span>PROJECTED INTEREST FROM TODAY</span>
             <strong>{money(selectedPlan.totalInterestPaise)}</strong>
-            <small>{money(interestSaved)} saved versus the current snowball payment plan</small>
-          </div>
+            <small>{money(interestSaved)} less than the no-extra rollover plan</small>
+          </article>
+          <article>
+            <span>FIRST ACCOUNT TO FINISH</span>
+            <strong>{firstTarget?.name ?? "No target"}</strong>
+            <small>{firstTarget ? monthLabel(firstTarget.month) : "Add an EMI or reduce the balance"}</small>
+          </article>
         </div>
+
+        <div className="debt-plan-narrative">
+          <strong>
+            Your {debtStrategy} plan starts with {firstTarget?.name ?? "the first eligible account"}.
+          </strong>
+          <span>
+            After 12 months, projected principal falls by {money(principalReduction)}. Keep the monthly debt budget at{" "}
+            {money(selectedPlan.monthlyBudgetPaise)} even after an account clears; that rollover is what accelerates the
+            finish date.
+          </span>
+        </div>
+
         <div className="debt-strategy-comparison">
           <article className={debtStrategy === "snowball" ? "selected" : ""}>
             <span>SNOWBALL</span>
             <strong>{monthLabel(snowballPlan.debtFreeMonth)}</strong>
-            <small>Smallest balance first · stronger momentum</small>
-            <b>{money(snowballPlan.totalInterestPaise)} interest</b>
+            <small>Smallest balance first · easiest visible wins</small>
+            <b>
+              {snowballPlan.payoffMonths ?? "—"} months · {money(snowballPlan.totalInterestPaise)} interest
+            </b>
           </article>
           <article className={debtStrategy === "avalanche" ? "selected" : ""}>
             <span>AVALANCHE</span>
             <strong>{monthLabel(avalanchePlan.debtFreeMonth)}</strong>
             <small>Highest known rate first · mathematical minimum</small>
-            <b>{money(avalanchePlan.totalInterestPaise)} interest</b>
+            <b>
+              {avalanchePlan.payoffMonths ?? "—"} months · {money(avalanchePlan.totalInterestPaise)} interest
+            </b>
           </article>
           <div className="debt-strategy-note">
-            <span>TRADE-OFF</span>
+            <span>DECISION SIGNAL</span>
             <strong>
               {avalancheInterestAdvantage > 0
                 ? `Avalanche saves ${money(avalancheInterestAdvantage)}`
@@ -498,10 +825,41 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
             </small>
           </div>
         </div>
-        <div className="debt-payoff-roadmap">
-          <span>PAYOFF ORDER</span>
+
+        <div className="debt-balance-trajectory">
           <div>
-            {selectedPlan.payoffOrder.slice(0, 6).map((payoff, index) => (
+            <span>PROJECTED BALANCE PATH</span>
+            <small>Outstanding principal after interest and planned payments</small>
+          </div>
+          <div className="debt-trajectory-bars">
+            {trajectoryCheckpoints.map((checkpoint) => {
+              const remainingPercent =
+                totalPlannerPrincipal > 0
+                  ? Math.max(0, Math.round((checkpoint.remainingPrincipalPaise / totalPlannerPrincipal) * 100))
+                  : 0;
+              return (
+                <article key={checkpoint.month}>
+                  <div>
+                    <span>{monthLabel(checkpoint.month)}</span>
+                    <strong>{money(checkpoint.remainingPrincipalPaise)}</strong>
+                  </div>
+                  <div className="debt-trajectory-track">
+                    <i style={{ width: `${remainingPercent}%` }} />
+                  </div>
+                  <small>{remainingPercent}% remaining</small>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="debt-payoff-roadmap">
+          <div className="debt-roadmap-heading">
+            <span>PAYOFF ORDER</span>
+            <small>Each completed EMI rolls into the next account.</small>
+          </div>
+          <div>
+            {selectedPlan.payoffOrder.slice(0, 8).map((payoff, index) => (
               <article key={payoff.id}>
                 <b>{String(index + 1).padStart(2, "0")}</b>
                 <span>{payoff.name}</span>

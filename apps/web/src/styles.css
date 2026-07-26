@@ -1679,6 +1679,296 @@ h2 {
   margin-bottom: 16px;
   border-top: 5px solid var(--yellow);
 }
+.debt-planner-heading {
+  align-items: flex-start;
+}
+.debt-planner-lede {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+.debt-planner-heading-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+.debt-planner-heading-actions span {
+  color: var(--muted);
+  font:
+    8px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.debt-planner-heading-actions button,
+.debt-assumptions-heading button {
+  min-height: 36px;
+  border: 1px solid var(--green);
+  background: transparent;
+  color: var(--green);
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+.debt-planner-heading-actions button.active,
+.debt-assumptions-heading .save-assumptions {
+  background: var(--green);
+  color: white;
+}
+.debt-planner-heading-actions button:disabled,
+.debt-assumptions-heading button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.debt-method-explainer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #eaf0e9;
+}
+.debt-method-explainer article {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  min-width: 0;
+  padding: 15px 20px;
+  border-right: 1px solid var(--line);
+}
+.debt-method-explainer article:last-child {
+  border-right: 0;
+}
+.debt-method-explainer b {
+  grid-row: 1 / span 2;
+  color: var(--green-bright);
+  font:
+    500 14px "DM Mono",
+    monospace;
+}
+.debt-method-explainer span {
+  font-size: 10px;
+  font-weight: 800;
+}
+.debt-method-explainer small {
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.45;
+}
+.debt-assumptions {
+  margin: 18px 22px;
+  border: 1px solid var(--line);
+  background: #fbf8ef;
+}
+.debt-assumptions-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.debt-assumptions-heading > div:first-child {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+}
+.debt-assumptions-heading > div:last-child {
+  display: flex;
+  gap: 7px;
+}
+.debt-assumptions-heading span {
+  color: var(--muted);
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.debt-assumptions-heading strong {
+  font:
+    600 18px "Newsreader",
+    serif;
+}
+.debt-assumptions-heading small {
+  width: 100%;
+  color: var(--muted);
+  font-size: 8px;
+}
+.debt-assumption-table {
+  min-width: 760px;
+}
+.debt-assumptions {
+  overflow-x: auto;
+}
+.debt-assumption-header,
+.debt-assumption-table article {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(180px, 1.25fr) repeat(3, minmax(120px, 0.75fr)) minmax(150px, 0.8fr);
+  gap: 12px;
+  padding: 11px 14px;
+}
+.debt-assumption-header {
+  background: #deddd5;
+  color: #607068;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.debt-assumption-table article {
+  min-height: 62px;
+  border-top: 1px solid var(--line);
+}
+.debt-assumption-header + article {
+  border-top: 0;
+}
+.debt-assumption-table article > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+.debt-assumption-table article strong {
+  font-size: 9px;
+}
+.debt-assumption-table article > div:first-child strong {
+  font-size: 10px;
+}
+.debt-assumption-table article small,
+.debt-assumption-role {
+  color: var(--muted);
+  font-size: 8px;
+}
+.debt-assumption-table label {
+  display: grid;
+  gap: 3px;
+}
+.debt-assumption-table label span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.debt-assumption-table input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #b7beb8;
+  background: #fffdf7;
+  color: var(--ink);
+  padding: 7px 9px;
+  font:
+    500 10px "DM Mono",
+    monospace;
+}
+.debt-assumption-table .missing-rate {
+  width: fit-content;
+  background: #f7e6b5;
+  color: #8a5a00;
+  padding: 5px 7px;
+}
+.debt-assumption-role {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.debt-assumption-role span {
+  border: 1px solid var(--line);
+  padding: 4px 6px;
+}
+.debt-assumptions > .form-error,
+.debt-assumptions > .planner-success {
+  margin: 0;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+.planner-success {
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 700;
+}
+.debt-scenario-bar {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
+  align-items: end;
+  gap: 20px;
+  padding: 17px 22px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #f0ede4;
+}
+.debt-scenario-bar .debt-extra-control {
+  gap: 8px;
+}
+.debt-scenario-bar .debt-strategy-toggle {
+  min-height: 42px;
+}
+.debt-scenario-bar .debt-strategy-toggle button {
+  flex: 1;
+  min-height: 42px;
+  font-size: 9px;
+}
+.debt-extra-presets button.active {
+  border-color: var(--green);
+  background: var(--yellow);
+}
+.debt-outcome-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+.debt-outcome-summary article {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+  min-height: 135px;
+  padding: 17px 18px;
+  border-right: 1px solid var(--line);
+}
+.debt-outcome-summary article:last-child {
+  border-right: 0;
+}
+.debt-outcome-summary .primary-outcome {
+  background: #e4eee7;
+  box-shadow: inset 0 4px var(--green-bright);
+}
+.debt-outcome-summary span {
+  color: var(--muted);
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.debt-outcome-summary strong {
+  overflow-wrap: anywhere;
+  font:
+    600 clamp(21px, 2.4vw, 32px) "Newsreader",
+    serif;
+}
+.debt-outcome-summary small {
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.5;
+}
+.debt-plan-narrative {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1fr);
+  gap: 18px;
+  margin: 18px 22px;
+  padding: 15px 18px;
+  border-left: 5px solid var(--yellow);
+  background: #143f35;
+  color: white;
+}
+.debt-plan-narrative strong {
+  font:
+    600 18px "Newsreader",
+    serif;
+}
+.debt-plan-narrative span {
+  color: #d4e3db;
+  font-size: 9px;
+  line-height: 1.65;
+}
 .debt-strategy-toggle {
   display: flex;
   margin: 0;
@@ -1845,18 +2135,87 @@ h2 {
 .debt-strategy-note strong {
   font-size: 11px;
 }
+.debt-balance-trajectory {
+  margin: 18px 22px 0;
+  border: 1px solid var(--line);
+}
+.debt-balance-trajectory > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.debt-balance-trajectory > div:first-child span {
+  color: var(--muted);
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.debt-balance-trajectory > div:first-child small {
+  color: var(--muted);
+  font-size: 8px;
+}
+.debt-trajectory-bars {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+}
+.debt-trajectory-bars article {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-right: 1px solid var(--line);
+}
+.debt-trajectory-bars article:last-child {
+  border-right: 0;
+}
+.debt-trajectory-bars article > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+.debt-trajectory-bars span,
+.debt-trajectory-bars small {
+  color: var(--muted);
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.debt-trajectory-bars strong {
+  font-size: 10px;
+}
+.debt-trajectory-track {
+  height: 7px;
+  background: #dbddd6;
+}
+.debt-trajectory-track i {
+  display: block;
+  height: 100%;
+  background: var(--green-bright);
+}
 .debt-payoff-roadmap {
   padding: 18px 22px 22px;
 }
-.debt-payoff-roadmap > span {
+.debt-roadmap-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.debt-roadmap-heading > span {
   color: #5e7068;
   font:
     8px "DM Mono",
     monospace;
 }
+.debt-roadmap-heading small {
+  color: var(--muted);
+  font-size: 8px;
+}
 .debt-payoff-roadmap > div {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(105px, 1fr));
   margin-top: 9px;
   border: 1px solid var(--line);
 }
@@ -4856,6 +5215,21 @@ h2 {
   .liability-metrics {
     grid-template-columns: repeat(2, 1fr);
   }
+  .debt-scenario-bar {
+    grid-template-columns: 1fr;
+  }
+  .debt-outcome-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .debt-outcome-summary article:nth-child(2) {
+    border-right: 0;
+  }
+  .debt-outcome-summary article:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+  .debt-plan-narrative {
+    grid-template-columns: 1fr;
+  }
   .debt-planner-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -5078,6 +5452,76 @@ h2 {
   }
   h1 {
     font-size: 35px;
+  }
+  .debt-planner-heading {
+    display: grid;
+    gap: 14px;
+  }
+  .debt-planner-heading-actions {
+    width: 100%;
+    justify-items: stretch;
+  }
+  .debt-method-explainer {
+    grid-template-columns: 1fr;
+  }
+  .debt-method-explainer article {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .debt-method-explainer article:last-child {
+    border-bottom: 0;
+  }
+  .debt-assumptions {
+    margin: 14px;
+  }
+  .debt-assumptions-heading {
+    min-width: 760px;
+  }
+  .debt-scenario-bar {
+    grid-template-columns: 1fr;
+    padding: 15px 14px;
+  }
+  .debt-scenario-bar .debt-strategy-toggle {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .debt-scenario-bar .debt-strategy-toggle button {
+    border-right: 0;
+    border-bottom: 1px solid var(--green);
+  }
+  .debt-scenario-bar .debt-strategy-toggle button:last-child {
+    border-bottom: 0;
+  }
+  .debt-outcome-summary {
+    grid-template-columns: 1fr;
+  }
+  .debt-outcome-summary article,
+  .debt-outcome-summary article:nth-child(2) {
+    min-height: 115px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .debt-plan-narrative {
+    grid-template-columns: 1fr;
+    margin: 14px;
+  }
+  .debt-balance-trajectory {
+    margin: 14px 14px 0;
+    overflow-x: auto;
+  }
+  .debt-balance-trajectory > div:first-child {
+    display: grid;
+    min-width: 620px;
+  }
+  .debt-trajectory-bars {
+    min-width: 620px;
+  }
+  .debt-roadmap-heading {
+    display: grid;
+  }
+  .debt-payoff-roadmap > div {
+    min-width: 760px;
+    grid-template-columns: repeat(8, minmax(90px, 1fr));
   }
   .ghost-button {
     display: none;
