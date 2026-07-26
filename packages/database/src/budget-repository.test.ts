@@ -65,7 +65,9 @@ describe("budget repository", () => {
     const may = repository.getMonth("2026-05");
 
     expect(may.updatedAt).toBeNull();
+    expect(may.plannedIncomePaise).toBe(30089300);
     expect(may.regularBudgetPaise).toBe(6004800);
+    expect(may.unallocatedIncomePaise).toBe(24084500);
     expect(may.lines.find((line) => line.categoryId === "category-rent")).toMatchObject({
       plannedPaise: 2050000,
       spentPaise: 2050000,

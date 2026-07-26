@@ -4,7 +4,8 @@ import type { FinanceHeroDatabase } from "./encrypted-database";
 
 const SOURCE = "Finance tracker 2025:accepted opening snapshot";
 const SEEDED_AT = "2026-07-18T12:00:00.000Z";
-const EXPENSE_HISTORY_SEED = "2026-07-v6";
+const EXPENSE_HISTORY_SEED = "2026-07-v7";
+const ACCEPTED_MONTHLY_INCOME_PLAN_PAISE = 30089300;
 const CREDIT_CARD_BILLS_CATEGORY = [
   "category-credit-card-bills",
   "Credit card bills (unreconciled)",
@@ -438,6 +439,10 @@ function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
         (month, planned_income_paise, regular_budget_paise, state, source_ref, updated_at)
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(month) DO UPDATE SET
+        planned_income_paise = CASE
+          WHEN budget_periods.planned_income_paise = 0 THEN excluded.planned_income_paise
+          ELSE budget_periods.planned_income_paise
+        END,
         regular_budget_paise = excluded.regular_budget_paise,
         state = excluded.state,
         source_ref = excluded.source_ref,
@@ -462,7 +467,7 @@ function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
       const sourceRef = `Finance tracker 2025:${monthData.sourceSheet}`;
       upsertBudgetPeriod.run(
         monthData.month,
-        monthData.month === "2026-07" ? 30089300 : 0,
+        ACCEPTED_MONTHLY_INCOME_PLAN_PAISE,
         monthData.regularBudgetRupees * 100,
         monthData.month === "2026-07" ? "open" : "closed",
         sourceRef,
