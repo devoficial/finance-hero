@@ -2038,9 +2038,23 @@ h2 {
   border-color: var(--red);
   background: var(--red);
 }
+.liability-editor-overlay {
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  display: grid;
+  align-items: center;
+  overflow-y: auto;
+  background: rgba(10, 38, 31, 0.72);
+  padding: 24px;
+}
 .liability-editor-panel {
-  margin-bottom: 16px;
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 48px);
+  margin: auto;
+  overflow-y: auto;
   border-left: 5px solid var(--yellow);
+  box-shadow: 0 24px 80px rgba(8, 29, 24, 0.32);
 }
 .liability-editor-form {
   display: grid;
@@ -5304,6 +5318,13 @@ h2 {
   }
   .liability-editor-form {
     grid-template-columns: 1fr;
+  }
+  .liability-editor-overlay {
+    align-items: start;
+    padding: 12px;
+  }
+  .liability-editor-panel {
+    max-height: calc(100vh - 24px);
   }
   .personal-balance-grid,
   .personal-balance-form {

@@ -601,120 +601,129 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
       </section>
 
       {(editingId || creatingLiability) && form && (
-        <article className="panel liability-editor-panel">
-          <div className="panel-heading compact">
-            <div>
-              <p className="eyebrow">
-                {creatingLiability ? "ADD ENCRYPTED LIABILITY RECORD" : "UPDATE ENCRYPTED LIABILITY RECORD"}
-              </p>
-              <h2>{creatingLiability ? "Add loan or credit card" : `Edit ${form.name}`}</h2>
+        <div className="liability-editor-overlay">
+          <article
+            aria-labelledby="liability-editor-title"
+            aria-modal="true"
+            className="panel liability-editor-panel"
+            role="dialog"
+          >
+            <div className="panel-heading compact">
+              <div>
+                <p className="eyebrow">
+                  {creatingLiability ? "ADD ENCRYPTED LIABILITY RECORD" : "UPDATE ENCRYPTED LIABILITY RECORD"}
+                </p>
+                <h2 id="liability-editor-title">
+                  {creatingLiability ? "Add loan or credit card" : `Edit ${form.name}`}
+                </h2>
+              </div>
+              <button className="editor-close-button" onClick={cancelEdit} type="button">
+                Cancel
+              </button>
             </div>
-            <button className="editor-close-button" onClick={cancelEdit} type="button">
-              Cancel
-            </button>
-          </div>
-          <form className="liability-editor-form" onSubmit={submitEdit}>
-            <label>
-              <span>Liability name</span>
-              <input
-                maxLength={160}
-                required
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>Type</span>
-              <select
-                value={form.productType}
-                onChange={(event) => setForm({ ...form, productType: event.target.value })}
+            <form className="liability-editor-form" onSubmit={submitEdit}>
+              <label>
+                <span>Liability name</span>
+                <input
+                  maxLength={160}
+                  required
+                  value={form.name}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Type</span>
+                <select
+                  value={form.productType}
+                  onChange={(event) => setForm({ ...form, productType: event.target.value })}
+                >
+                  <option value="personal_loan">Personal loan</option>
+                  <option value="home_loan">Home loan</option>
+                  <option value="credit_card">Credit card</option>
+                  <option value="vehicle_loan">Vehicle loan</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label>
+                <span>Original amount (INR)</span>
+                <input
+                  inputMode="decimal"
+                  min="0"
+                  required
+                  step="0.01"
+                  type="number"
+                  value={form.originalAmount}
+                  onChange={(event) => setForm({ ...form, originalAmount: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Current principal (INR)</span>
+                <input
+                  inputMode="decimal"
+                  min="0"
+                  required
+                  step="0.01"
+                  type="number"
+                  value={form.currentPrincipal}
+                  onChange={(event) => setForm({ ...form, currentPrincipal: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>EMI (INR)</span>
+                <input
+                  inputMode="decimal"
+                  min="0"
+                  required
+                  step="0.01"
+                  type="number"
+                  value={form.emi}
+                  onChange={(event) => setForm({ ...form, emi: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Interest rate (%)</span>
+                <input
+                  inputMode="decimal"
+                  min="0"
+                  placeholder="Optional"
+                  step="0.01"
+                  type="number"
+                  value={form.annualRate}
+                  onChange={(event) => setForm({ ...form, annualRate: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Status</span>
+                <select
+                  value={form.status}
+                  onChange={(event) => setForm({ ...form, status: event.target.value as "active" | "cleared" })}
+                >
+                  <option value="active">Active</option>
+                  <option value="cleared">Cleared</option>
+                </select>
+              </label>
+              <button
+                className="save-liability-button"
+                disabled={mutation.isPending || createLiabilityMutation.isPending}
+                type="submit"
               >
-                <option value="personal_loan">Personal loan</option>
-                <option value="home_loan">Home loan</option>
-                <option value="credit_card">Credit card</option>
-                <option value="vehicle_loan">Vehicle loan</option>
-                <option value="other">Other</option>
-              </select>
-            </label>
-            <label>
-              <span>Original amount (INR)</span>
-              <input
-                inputMode="decimal"
-                min="0"
-                required
-                step="0.01"
-                type="number"
-                value={form.originalAmount}
-                onChange={(event) => setForm({ ...form, originalAmount: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>Current principal (INR)</span>
-              <input
-                inputMode="decimal"
-                min="0"
-                required
-                step="0.01"
-                type="number"
-                value={form.currentPrincipal}
-                onChange={(event) => setForm({ ...form, currentPrincipal: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>EMI (INR)</span>
-              <input
-                inputMode="decimal"
-                min="0"
-                required
-                step="0.01"
-                type="number"
-                value={form.emi}
-                onChange={(event) => setForm({ ...form, emi: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>Interest rate (%)</span>
-              <input
-                inputMode="decimal"
-                min="0"
-                placeholder="Optional"
-                step="0.01"
-                type="number"
-                value={form.annualRate}
-                onChange={(event) => setForm({ ...form, annualRate: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>Status</span>
-              <select
-                value={form.status}
-                onChange={(event) => setForm({ ...form, status: event.target.value as "active" | "cleared" })}
-              >
-                <option value="active">Active</option>
-                <option value="cleared">Cleared</option>
-              </select>
-            </label>
-            <button
-              className="save-liability-button"
-              disabled={mutation.isPending || createLiabilityMutation.isPending}
-              type="submit"
-            >
-              {mutation.isPending || createLiabilityMutation.isPending
-                ? "Saving..."
-                : creatingLiability
-                  ? "Add liability"
-                  : "Save changes"}
-            </button>
-            {(validationError || mutation.error || createLiabilityMutation.error) && (
-              <p className="form-error liability-editor-error">
-                {validationError ??
-                  mutation.error?.message ??
-                  createLiabilityMutation.error?.message ??
-                  "Update failed."}
-              </p>
-            )}
-          </form>
-        </article>
+                {mutation.isPending || createLiabilityMutation.isPending
+                  ? "Saving..."
+                  : creatingLiability
+                    ? "Add liability"
+                    : "Save changes"}
+              </button>
+              {(validationError || mutation.error || createLiabilityMutation.error) && (
+                <p className="form-error liability-editor-error">
+                  {validationError ??
+                    mutation.error?.message ??
+                    createLiabilityMutation.error?.message ??
+                    "Update failed."}
+                </p>
+              )}
+            </form>
+          </article>
+        </div>
       )}
 
       <article className="panel liabilities-panel">
