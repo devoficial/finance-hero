@@ -5,7 +5,7 @@ import type {
   UpdateBudgetMonthRequest,
 } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { updateBudget } from "../lib/api";
 import { parseRupeeExpression, rupeeInput } from "../lib/money-expression";
 
@@ -28,6 +28,28 @@ interface CashAdjustmentDraft {
   occurredOn: string;
   label: string;
   amount: string;
+}
+
+interface SheetSnapshot {
+  income: string;
+  lineValues: Record<string, ExpenseSheetDraft>;
+  cashAdjustments: CashAdjustmentDraft[];
+}
+
+const HISTORY_LIMIT = 100;
+
+function snapshotSignature(snapshot: SheetSnapshot): string {
+  return JSON.stringify(snapshot);
+}
+
+function copySnapshot(snapshot: SheetSnapshot): SheetSnapshot {
+  return {
+    income: snapshot.income,
+    lineValues: Object.fromEntries(
+      Object.entries(snapshot.lineValues).map(([categoryId, line]) => [categoryId, { ...line }]),
+    ),
+    cashAdjustments: snapshot.cashAdjustments.map((adjustment) => ({ ...adjustment })),
+  };
 }
 
 function monthLabel(month: string): string {
@@ -91,22 +113,33 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const [income, setIncome] = useState("");
   const [lineValues, setLineValues] = useState<Record<string, ExpenseSheetDraft>>({});
   const [cashAdjustments, setCashAdjustments] = useState<CashAdjustmentDraft[]>([]);
+  const [undoStack, setUndoStack] = useState<SheetSnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<SheetSnapshot[]>([]);
+  const [savedSignature, setSavedSignature] = useState("");
   const [dirty, setDirty] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const loadDraft = useCallback((currentBudget: BudgetMonthResponse) => {
-    setIncome(rupeeInput(currentBudget.plannedIncomePaise));
-    setLineValues(Object.fromEntries(currentBudget.lines.map((line) => [line.categoryId, draftFor(line)])));
-    setCashAdjustments(currentBudget.cashBridge.adjustments.map(cashDraftFor));
+    const snapshot = {
+      income: rupeeInput(currentBudget.plannedIncomePaise),
+      lineValues: Object.fromEntries(currentBudget.lines.map((line) => [line.categoryId, draftFor(line)])),
+      cashAdjustments: currentBudget.cashBridge.adjustments.map(cashDraftFor),
+    };
+    setIncome(snapshot.income);
+    setLineValues(snapshot.lineValues);
+    setCashAdjustments(snapshot.cashAdjustments);
+    setSavedSignature(snapshotSignature(snapshot));
+    setUndoStack([]);
+    setRedoStack([]);
     setDirty(false);
   }, []);
 
   useEffect(() => {
-    if (budget && !dirty) {
+    if (budget) {
       loadDraft(budget);
     }
-  }, [budget, dirty, loadDraft]);
+  }, [budget, loadDraft]);
 
   const draftTotals = useMemo(() => {
     if (!budget) {
@@ -163,7 +196,59 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   }
   const currentBudget = budget;
 
+  function currentSnapshot(): SheetSnapshot {
+    return copySnapshot({ income, lineValues, cashAdjustments });
+  }
+
+  function applySnapshot(snapshot: SheetSnapshot) {
+    const copy = copySnapshot(snapshot);
+    setIncome(copy.income);
+    setLineValues(copy.lineValues);
+    setCashAdjustments(copy.cashAdjustments);
+    setDirty(snapshotSignature(copy) !== savedSignature);
+    setSavedMessage(null);
+    setValidationError(null);
+  }
+
+  function checkpoint() {
+    const snapshot = currentSnapshot();
+    setUndoStack((current) => [...current.slice(-(HISTORY_LIMIT - 1)), snapshot]);
+    setRedoStack([]);
+  }
+
+  function undo() {
+    const previous = undoStack.at(-1);
+    if (!previous || mutation.isPending) return;
+    const current = currentSnapshot();
+    setUndoStack((stack) => stack.slice(0, -1));
+    setRedoStack((stack) => [...stack.slice(-(HISTORY_LIMIT - 1)), current]);
+    applySnapshot(previous);
+  }
+
+  function redo() {
+    const next = redoStack.at(-1);
+    if (!next || mutation.isPending) return;
+    const current = currentSnapshot();
+    setRedoStack((stack) => stack.slice(0, -1));
+    setUndoStack((stack) => [...stack.slice(-(HISTORY_LIMIT - 1)), current]);
+    applySnapshot(next);
+  }
+
+  function handleSheetKeyDown(event: KeyboardEvent<HTMLFormElement>) {
+    const command = event.metaKey || event.ctrlKey;
+    if (!command) return;
+    if (event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      if (event.shiftKey) redo();
+      else undo();
+    } else if (event.key.toLowerCase() === "y") {
+      event.preventDefault();
+      redo();
+    }
+  }
+
   function updateDraft(categoryId: string, field: keyof ExpenseSheetDraft, value: string) {
+    checkpoint();
     setLineValues((current) => ({
       ...current,
       [categoryId]: {
@@ -183,6 +268,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   }
 
   function updateCashAdjustment(index: number, field: keyof CashAdjustmentDraft, value: string) {
+    checkpoint();
     setCashAdjustments((current) =>
       current.map((adjustment, adjustmentIndex) =>
         adjustmentIndex === index ? { ...adjustment, [field]: value } : adjustment,
@@ -194,6 +280,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   }
 
   function addCashAdjustment() {
+    checkpoint();
     setCashAdjustments((current) => [
       ...current,
       {
@@ -207,6 +294,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   }
 
   function removeCashAdjustment(index: number) {
+    checkpoint();
     setCashAdjustments((current) => current.filter((_, adjustmentIndex) => adjustmentIndex !== index));
     setDirty(true);
     setSavedMessage(null);
@@ -237,7 +325,6 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         changedLines.push({
           categoryId: line.categoryId,
           ...(changedActual ? { actualPaise } : {}),
-          ...(changedLimit ? { plannedPaise: plannedPaise ?? 0 } : {}),
           ...(changedComment ? { comment } : {}),
         });
       }
@@ -284,7 +371,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   }
 
   return (
-    <form className="panel expense-sheet" onSubmit={submit}>
+    <form className="panel expense-sheet" onKeyDown={handleSheetKeyDown} onSubmit={submit}>
       <div className="expense-sheet-heading">
         <div>
           <p className="eyebrow">MONTHLY EXPENSE SHEET / {budget.month}</p>
@@ -295,7 +382,27 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
           <span className={dirty ? "dirty" : ""}>
             {dirty ? "Unsaved changes" : (savedMessage ?? "All changes saved")}
           </span>
-          <button disabled={!dirty || mutation.isPending} type="submit">
+          <button
+            aria-label="Undo last sheet edit"
+            className="history-button"
+            disabled={undoStack.length === 0 || mutation.isPending}
+            onClick={undo}
+            title="Undo (Cmd/Ctrl+Z)"
+            type="button"
+          >
+            Undo
+          </button>
+          <button
+            aria-label="Redo last sheet edit"
+            className="history-button"
+            disabled={redoStack.length === 0 || mutation.isPending}
+            onClick={redo}
+            title="Redo (Shift+Cmd/Ctrl+Z)"
+            type="button"
+          >
+            Redo
+          </button>
+          <button className="save-button" disabled={!dirty || mutation.isPending} type="submit">
             {mutation.isPending ? "Saving..." : "Save sheet"}
           </button>
           <button disabled={!dirty || mutation.isPending} onClick={reset} type="button">
@@ -391,6 +498,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               aria-label="Monthly income plan in INR"
               inputMode="decimal"
               onChange={(event) => {
+                checkpoint();
                 setIncome(event.target.value);
                 setDirty(true);
                 setSavedMessage(null);

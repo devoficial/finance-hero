@@ -110,6 +110,12 @@ describe("budget repository", () => {
       cashOutflowPaise: 20459200,
       closingBalancePaise: 4566600,
     });
+    expect(repository.getMonth("2026-08").cashBridge).toMatchObject({
+      carryoverPaise: 4566600,
+      adjustmentTotalPaise: 0,
+      cashOutflowPaise: 0,
+      closingBalancePaise: 4566600,
+    });
     database.close();
   });
 
@@ -130,6 +136,7 @@ describe("budget repository", () => {
 
     expect(repository.getMonth("2026-06").cashBridge.closingBalancePaise).toBe(24935000);
     expect(repository.getMonth("2026-07").cashBridge.carryoverPaise).toBe(24935000);
+    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(4516600);
     database.close();
   });
 

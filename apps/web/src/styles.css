@@ -2521,16 +2521,19 @@ h2 {
 .expense-sheet-actions button {
   min-height: 38px;
   border: 1px solid var(--green);
-  background: var(--green);
-  color: white;
+  background: transparent;
+  color: var(--green);
   padding: 8px 13px;
   cursor: pointer;
   font-size: 9px;
   font-weight: 800;
 }
-.expense-sheet-actions button + button {
-  background: transparent;
-  color: var(--green);
+.expense-sheet-actions .save-button {
+  background: var(--green);
+  color: white;
+}
+.expense-sheet-actions .history-button {
+  border-color: #9ba8a2;
 }
 .expense-sheet-actions button:disabled {
   cursor: not-allowed;
