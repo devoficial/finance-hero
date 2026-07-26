@@ -486,6 +486,19 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
   });
 
+  app.post("/api/v1/candidate-actions/reset-pending", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const input = importCandidateActionRequestSchema.parse(request.body);
+      return reply.send(importQueueResponseSchema.parse(imports.resetCandidatesToPending(input.ids)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Import candidates could not be reset.";
+      return reply.code(400).send({ error: { code: "INVALID_IMPORT_RESET", message } });
+    }
+  });
+
   app.get("/api/v1/accounts", async (_request, reply) => {
     if (!accounts) {
       return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });

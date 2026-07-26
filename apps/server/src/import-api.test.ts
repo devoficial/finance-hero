@@ -66,6 +66,17 @@ describe("statement import API", () => {
     expect(approve.statusCode).toBe(200);
     expect(importQueueResponseSchema.parse(approve.json()).approvedCount).toBe(2);
 
+    const reset = await app.inject({
+      method: "POST",
+      url: "/api/v1/candidate-actions/reset-pending",
+      payload: { ids: [queue.candidates[0]?.id] },
+    });
+    expect(reset.statusCode).toBe(200);
+    expect(importQueueResponseSchema.parse(reset.json())).toMatchObject({
+      pendingCount: 1,
+      approvedCount: 1,
+    });
+
     const duplicate = await app.inject({
       method: "POST",
       url: "/api/v1/statement-uploads?filename=renamed.csv&accountId=account-primary-bank",

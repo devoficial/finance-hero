@@ -6180,7 +6180,11 @@ h2 {
 
 .candidate-approved,
 .candidate-rejected {
-  opacity: 0.68;
+  background: color-mix(in srgb, var(--mint) 22%, transparent);
+}
+
+.candidate-rejected {
+  background: color-mix(in srgb, var(--red-soft) 28%, transparent);
 }
 
 .import-table td .debit-label {
@@ -6257,6 +6261,11 @@ h2 {
 .import-table .candidate-action-group .candidate-reject {
   border-color: var(--red);
   color: var(--red);
+}
+
+.import-table .candidate-action-group .candidate-reset {
+  border-color: var(--line-strong);
+  color: var(--green);
 }
 
 .candidate-action-group button:disabled {

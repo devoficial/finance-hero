@@ -545,4 +545,58 @@ export class ImportRepository {
     write.immediate();
     return this.getQueue();
   }
+
+  resetCandidatesToPending(ids: string[]): ImportQueueRecord {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) {
+      throw new Error("Select at least one import candidate.");
+    }
+    for (const id of uniqueIds) {
+      const candidate = this.getCandidateRow(id);
+      if (candidate.status === "pending") {
+        throw new Error("This import candidate is already pending.");
+      }
+      let reversedTransactionId: string | null = null;
+      if (candidate.status === "approved") {
+        if (!candidate.transactionId) {
+          throw new Error("The approved candidate has no linked ledger transaction.");
+        }
+        const linked = this.database.connection
+          .prepare("SELECT status FROM journal_transactions WHERE id = ?")
+          .get(candidate.transactionId) as { status: string } | undefined;
+        if (!linked) {
+          throw new Error("The approved candidate's ledger transaction does not exist.");
+        }
+        if (linked.status === "posted") {
+          this.ledger.reverseTransaction(candidate.transactionId, {
+            reason: "Import approval moved back to pending",
+            idempotencyKey: `import-candidate-reset:${candidate.id}:v${candidate.version}`,
+          });
+          reversedTransactionId = candidate.transactionId;
+        } else if (linked.status !== "reversed") {
+          throw new Error("The linked ledger transaction cannot be moved back to pending.");
+        }
+      }
+      const now = new Date().toISOString();
+      const write = this.database.connection.transaction(() => {
+        this.database.connection
+          .prepare(`
+            UPDATE import_candidates
+            SET status = 'pending', transaction_id = NULL, rejection_reason = NULL,
+                version = version + 1, updated_at = ?
+            WHERE id = ?
+          `)
+          .run(now, candidate.id);
+        this.audit(
+          "import.candidate_reset_pending",
+          "import_candidate",
+          candidate.id,
+          { previousStatus: candidate.status, reversedTransactionId },
+          now,
+        );
+      });
+      write.immediate();
+    }
+    return this.getQueue();
+  }
 }

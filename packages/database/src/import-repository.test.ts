@@ -160,6 +160,85 @@ describe("import repository", () => {
     database.close();
   });
 
+  it("moves approved and rejected candidates back to pending without duplicating ledger totals", () => {
+    const { database, repository } = createRepository();
+    repository.createArtifact({
+      filename: "reset.csv",
+      contentHash: "reset-hash",
+      mimeType: "text/csv",
+      sizeBytes: 120,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-22",
+          payee: "Approved purchase",
+          amountPaise: 50000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+        {
+          sourceRow: 3,
+          occurredOn: "2026-07-23",
+          payee: "Rejected purchase",
+          amountPaise: 25000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    const [approvedCandidate, rejectedCandidate] = repository.getQueue().candidates;
+    if (!approvedCandidate || !rejectedCandidate) throw new Error("Expected reset candidates.");
+
+    const approved = repository.approveCandidates([approvedCandidate.id]);
+    const linkedTransactionId = approved.candidates.find(
+      (candidate) => candidate.id === approvedCandidate.id,
+    )?.transactionId;
+    if (!linkedTransactionId) throw new Error("Expected linked transaction.");
+    repository.rejectCandidates([rejectedCandidate.id], "Duplicate statement row");
+
+    const reset = repository.resetCandidatesToPending([approvedCandidate.id, rejectedCandidate.id]);
+    expect(reset).toMatchObject({ pendingCount: 2, approvedCount: 0, rejectedCount: 0 });
+    expect(reset.candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: approvedCandidate.id,
+          status: "pending",
+          transactionId: null,
+          rejectionReason: null,
+          version: 2,
+        }),
+        expect.objectContaining({
+          id: rejectedCandidate.id,
+          status: "pending",
+          transactionId: null,
+          rejectionReason: null,
+          version: 2,
+        }),
+      ]),
+    );
+    expect(
+      database.connection.prepare("SELECT status FROM journal_transactions WHERE id = ?").get(linkedTransactionId),
+    ).toEqual({ status: "reversed" });
+
+    const reapproved = repository.approveCandidates([approvedCandidate.id]);
+    const replacementTransactionId = reapproved.candidates.find(
+      (candidate) => candidate.id === approvedCandidate.id,
+    )?.transactionId;
+    expect(replacementTransactionId).not.toBe(linkedTransactionId);
+    expect(
+      database.connection.prepare("SELECT status FROM journal_transactions WHERE id = ?").get(replacementTransactionId),
+    ).toEqual({ status: "posted" });
+    database.close();
+  });
+
   it("adds an approved expense to the month determined by its transaction date", () => {
     const { database, ledger, repository } = createRepository();
     const juneBefore = ledger.getDashboard("2026-06", 30);

@@ -11,6 +11,7 @@ import {
   approveImportCandidates,
   parseStatementArtifact,
   rejectImportCandidates,
+  resetImportCandidatesToPending,
   updateImportCandidate,
   uploadStatement,
 } from "../lib/api";
@@ -39,7 +40,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const [file, setFile] = useState<File | null>(null);
   const [uploadAccountId, setUploadAccountId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState<"pending" | "approved" | "all">("pending");
+  const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
   const [editing, setEditing] = useState<ImportCandidate | null>(null);
   const [editDate, setEditDate] = useState("");
   const [editPayee, setEditPayee] = useState("");
@@ -49,6 +50,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const [editCategoryId, setEditCategoryId] = useState("");
   const [rejectRequest, setRejectRequest] = useState<{ ids: string[]; label: string } | null>(null);
   const [rejectReason, setRejectReason] = useState("Not a valid transaction");
+  const [resetRequest, setResetRequest] = useState<ImportCandidate | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const accounts = referenceData?.accounts ?? [];
   const categories = referenceData?.categories ?? [];
@@ -57,20 +59,21 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   );
 
   useEffect(() => {
-    if (!editing && !rejectRequest) return;
+    if (!editing && !rejectRequest && !resetRequest) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setEditing(null);
       setRejectRequest(null);
+      setResetRequest(null);
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [editing, rejectRequest]);
+  }, [editing, rejectRequest, resetRequest]);
 
   useEffect(() => {
     if (!uploadAccountId && primarySalaryAccount) {
@@ -159,6 +162,15 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : "Rejection failed."),
   });
+  const resetMutation = useMutation({
+    mutationFn: (id: string) => resetImportCandidatesToPending({ ids: [id] }),
+    onSuccess: async () => {
+      setResetRequest(null);
+      setActionError(null);
+      await refresh();
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : "Candidate reset failed."),
+  });
 
   const candidates = useMemo(
     () => (data?.candidates ?? []).filter((candidate) => filter === "all" || candidate.status === filter),
@@ -176,7 +188,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     readyPendingVisible.length > 0 && readyPendingVisible.every((candidate) => selected.has(candidate.id));
   const assignmentIsPending = (id: string) => assignmentMutation.isPending && assignmentMutation.variables?.id === id;
 
-  function changeFilter(nextFilter: "pending" | "approved" | "all") {
+  function changeFilter(nextFilter: "pending" | "approved" | "rejected" | "all") {
     setFilter(nextFilter);
     setSelected(new Set());
   }
@@ -417,13 +429,20 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
             >
               Approved <span>{data?.approvedCount ?? 0}</span>
             </button>
+            <button
+              className={filter === "rejected" ? "active" : ""}
+              onClick={() => changeFilter("rejected")}
+              type="button"
+            >
+              Rejected <span>{data?.rejectedCount ?? 0}</span>
+            </button>
             <button className={filter === "all" ? "active" : ""} onClick={() => changeFilter("all")} type="button">
               All <span>{(data?.pendingCount ?? 0) + (data?.approvedCount ?? 0) + (data?.rejectedCount ?? 0)}</span>
             </button>
           </div>
         </div>
 
-        {filter !== "approved" && (
+        {(filter === "pending" || filter === "all") && (
           <div className="import-bulk-bar">
             <label>
               <input
@@ -487,7 +506,9 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                       ? "No transactions are waiting for approval."
                       : filter === "approved"
                         ? "No transactions have been approved yet."
-                        : "No candidates available."}
+                        : filter === "rejected"
+                          ? "No transactions have been rejected."
+                          : "No candidates available."}
                   </td>
                 </tr>
               ) : (
@@ -653,7 +674,22 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                           </button>
                         </div>
                       ) : (
-                        <span className={`candidate-status ${candidate.status}`}>{candidate.status}</span>
+                        <div className="candidate-action-group">
+                          <span className={`candidate-status ${candidate.status}`}>{candidate.status}</span>
+                          <button
+                            className="candidate-reset"
+                            disabled={resetMutation.isPending}
+                            onClick={() => {
+                              setActionError(null);
+                              setResetRequest(candidate);
+                            }}
+                            type="button"
+                          >
+                            {resetMutation.isPending && resetMutation.variables === candidate.id
+                              ? "Restoring..."
+                              : "Move to pending"}
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -793,6 +829,48 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                   type="button"
                 >
                   {rejectMutation.isPending ? "Rejecting..." : "Reject transaction"}
+                </button>
+              </div>
+            </section>
+          </div>,
+          document.body,
+        )}
+      {resetRequest &&
+        createPortal(
+          <div className="modal-backdrop" role="presentation">
+            <section
+              aria-labelledby="candidate-reset-title"
+              aria-modal="true"
+              className="wealth-modal reject-editor"
+              role="dialog"
+            >
+              <div className="modal-title">
+                <div>
+                  <p className="eyebrow">RESTORE IMPORT CANDIDATE</p>
+                  <h2 id="candidate-reset-title">Move back to pending?</h2>
+                </div>
+                <button onClick={() => setResetRequest(null)} type="button">
+                  Close
+                </button>
+              </div>
+              <p className="reject-target">{resetRequest.payee}</p>
+              <p>
+                {resetRequest.status === "approved"
+                  ? "The linked ledger entry will be reversed. You can then edit and approve this transaction again."
+                  : "The rejection will be cleared so this transaction can be reviewed again."}
+              </p>
+              {actionError && <p className="form-error">{actionError}</p>}
+              <div className="modal-actions">
+                <button onClick={() => setResetRequest(null)} type="button">
+                  Cancel
+                </button>
+                <button
+                  className="add-button"
+                  disabled={resetMutation.isPending}
+                  onClick={() => resetMutation.mutate(resetRequest.id)}
+                  type="button"
+                >
+                  {resetMutation.isPending ? "Restoring..." : "Move to pending"}
                 </button>
               </div>
             </section>

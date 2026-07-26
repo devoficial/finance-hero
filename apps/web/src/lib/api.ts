@@ -272,6 +272,21 @@ export async function rejectImportCandidates(input: RejectImportCandidatesReques
   return importQueueResponseSchema.parse(await response.json());
 }
 
+export async function resetImportCandidatesToPending(
+  input: ImportCandidateActionRequest,
+): Promise<ImportQueueResponse> {
+  const response = await fetch("/api/v1/candidate-actions/reset-pending", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return importQueueResponseSchema.parse(await response.json());
+}
+
 export async function getBudget(month: string, signal?: AbortSignal): Promise<BudgetMonthResponse> {
   return budgetMonthResponseSchema.parse(await getJson(`/api/v1/budgets/${encodeURIComponent(month)}`, signal));
 }
