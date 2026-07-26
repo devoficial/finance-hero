@@ -78,6 +78,13 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : "Statement extraction failed."),
   });
+  const assignmentMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateImportCandidateRequest }) =>
+      updateImportCandidate(id, input),
+    onMutate: () => setActionError(null),
+    onSuccess: refresh,
+    onError: (error) => setActionError(error instanceof Error ? error.message : "Assignment update failed."),
+  });
   const editMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateImportCandidateRequest }) =>
       updateImportCandidate(id, input),
@@ -112,10 +119,17 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     [data, filter],
   );
   const pendingVisible = candidates.filter((candidate) => candidate.status === "pending");
-  const allPendingSelected =
-    pendingVisible.length > 0 && pendingVisible.every((candidate) => selected.has(candidate.id));
   const accounts = referenceData?.accounts ?? [];
   const categories = referenceData?.categories ?? [];
+  const candidateIsReady = (candidate: ImportCandidate) =>
+    candidate.status === "pending" &&
+    candidate.occurredOn != null &&
+    candidate.accountId != null &&
+    (candidate.direction === "credit" || candidate.categoryId != null);
+  const readyPendingVisible = pendingVisible.filter(candidateIsReady);
+  const allReadySelected =
+    readyPendingVisible.length > 0 && readyPendingVisible.every((candidate) => selected.has(candidate.id));
+  const assignmentIsPending = (id: string) => assignmentMutation.isPending && assignmentMutation.variables?.id === id;
 
   function beginEdit(candidate: ImportCandidate) {
     setEditing(candidate);
@@ -338,13 +352,15 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
         <div className="import-bulk-bar">
           <label>
             <input
-              checked={allPendingSelected}
+              checked={allReadySelected}
               onChange={() =>
-                setSelected(allPendingSelected ? new Set() : new Set(pendingVisible.map((candidate) => candidate.id)))
+                setSelected(
+                  allReadySelected ? new Set() : new Set(readyPendingVisible.map((candidate) => candidate.id)),
+                )
               }
               type="checkbox"
             />
-            Select all pending
+            Select all ready
           </label>
           <span>{selected.size} selected</span>
           <button
@@ -394,7 +410,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                       <input
                         aria-label={`Select ${candidate.payee}`}
                         checked={selected.has(candidate.id)}
-                        disabled={candidate.status !== "pending"}
+                        disabled={!candidateIsReady(candidate)}
                         onChange={() => toggleCandidate(candidate.id)}
                         type="checkbox"
                       />
@@ -417,11 +433,88 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                         {money(candidate.amountPaise)}
                       </strong>
                     </td>
-                    <td>
-                      <strong>{candidate.accountName ?? "Account required"}</strong>
-                      <small>
-                        {candidate.direction === "debit" ? (candidate.categoryName ?? "Category required") : "Income"}
-                      </small>
+                    <td className="candidate-assignment">
+                      {candidate.status === "pending" ? (
+                        <>
+                          <label>
+                            <span>Account</span>
+                            <select
+                              aria-label={`Account for ${candidate.payee}`}
+                              defaultValue={candidate.accountId ?? ""}
+                              disabled={assignmentIsPending(candidate.id)}
+                              key={`account-${candidate.id}-${candidate.version}`}
+                              onChange={(event) =>
+                                assignmentMutation.mutate({
+                                  id: candidate.id,
+                                  input: { accountId: event.target.value || null },
+                                })
+                              }
+                            >
+                              <option value="">Choose account</option>
+                              <optgroup label="Bank accounts and wallets">
+                                {accounts
+                                  .filter((account) => account.accountClass === "asset")
+                                  .map((account) => (
+                                    <option key={account.id} value={account.id}>
+                                      {account.name}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                              {candidate.direction === "debit" && (
+                                <optgroup label="Credit cards and liabilities">
+                                  {accounts
+                                    .filter((account) => account.accountClass === "liability")
+                                    .map((account) => (
+                                      <option key={account.id} value={account.id}>
+                                        {account.name}
+                                      </option>
+                                    ))}
+                                </optgroup>
+                              )}
+                            </select>
+                          </label>
+                          {candidate.direction === "debit" ? (
+                            <label>
+                              <span>Expense category</span>
+                              <select
+                                aria-label={`Expense category for ${candidate.payee}`}
+                                defaultValue={candidate.categoryId ?? ""}
+                                disabled={assignmentIsPending(candidate.id)}
+                                key={`category-${candidate.id}-${candidate.version}`}
+                                onChange={(event) =>
+                                  assignmentMutation.mutate({
+                                    id: candidate.id,
+                                    input: { categoryId: event.target.value || null },
+                                  })
+                                }
+                              >
+                                <option value="">Choose category</option>
+                                {categories.map((category) => (
+                                  <option key={category.id} value={category.id}>
+                                    {category.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : (
+                            <small>Credit / income</small>
+                          )}
+                          <small>
+                            {assignmentIsPending(candidate.id)
+                              ? "Saving selection..."
+                              : candidateIsReady(candidate)
+                                ? "Ready to approve"
+                                : "Choose required fields"}
+                          </small>
+                        </>
+                      ) : (
+                        <>
+                          <strong>{candidate.accountName ?? "Account not assigned"}</strong>
+                          <small>
+                            {candidate.direction === "debit" ? (candidate.categoryName ?? "Uncategorised") : "Income"}
+                          </small>
+                        </>
+                      )}
                     </td>
                     <td>
                       <span className={`confidence ${candidate.confidence >= 75 ? "high" : "review"}`}>

@@ -160,6 +160,54 @@ describe("import repository", () => {
     database.close();
   });
 
+  it("adds an approved expense to the month determined by its transaction date", () => {
+    const { database, ledger, repository } = createRepository();
+    const juneBefore = ledger.getDashboard("2026-06", 30);
+    const julyBefore = ledger.getDashboard("2026-07", 31);
+    repository.createArtifact({
+      filename: "dated-statement.csv",
+      contentHash: "dated-approval-hash",
+      mimeType: "text/csv",
+      sizeBytes: 120,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-06-15",
+          payee: "June grocery",
+          amountPaise: 12345,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    const candidate = repository.getQueue().candidates[0];
+    if (!candidate) throw new Error("Expected dated candidate.");
+
+    repository.approveCandidates([candidate.id]);
+
+    const juneAfter = ledger.getDashboard("2026-06", 30);
+    const julyAfter = ledger.getDashboard("2026-07", 31);
+    expect(juneAfter.regularExpensePaise).toBe(juneBefore.regularExpensePaise + 12345);
+    expect(juneAfter.totalExpensePaise).toBe(juneBefore.totalExpensePaise + 12345);
+    expect(julyAfter.totalExpensePaise).toBe(julyBefore.totalExpensePaise);
+    expect(ledger.listTransactions("2026-06")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          occurredOn: "2026-06-15",
+          payee: "June grocery",
+          kind: "expense",
+          amountPaise: 12345,
+        }),
+      ]),
+    );
+    database.close();
+  });
+
   it("replaces unposted parser candidates but protects posted ledger entries", () => {
     const { database, repository } = createRepository();
     const created = repository.createArtifact({

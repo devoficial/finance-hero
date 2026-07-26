@@ -6117,6 +6117,40 @@ h2 {
   text-transform: uppercase;
 }
 
+.import-table .candidate-assignment {
+  min-width: 250px;
+}
+
+.candidate-assignment label {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.candidate-assignment label > span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.candidate-assignment select {
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  font-size: 0.88rem;
+  min-height: 42px;
+  padding: 7px 30px 7px 9px;
+  width: 100%;
+}
+
+.candidate-assignment select:focus {
+  border-color: var(--green);
+  outline: 2px solid color-mix(in srgb, var(--green) 20%, transparent);
+  outline-offset: 1px;
+}
+
 .import-editor {
   max-width: 820px;
 }
