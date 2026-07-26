@@ -6,7 +6,7 @@ import type {
 } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { updateBudget } from "../lib/api";
+import { resetImportCandidatesToPending, updateBudget } from "../lib/api";
 import { parseRupeeExpression, rupeeInput } from "../lib/money-expression";
 
 interface BudgetEditorProps {
@@ -123,6 +123,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const [dirty, setDirty] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [creditToRemove, setCreditToRemove] = useState<CashAdjustmentDraft | null>(null);
 
   const loadDraft = useCallback((currentBudget: BudgetMonthResponse) => {
     const snapshot = {
@@ -189,6 +190,22 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         queryClient.invalidateQueries({ queryKey: ["budget"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard", saved.month] }),
         queryClient.invalidateQueries({ queryKey: ["expenses", "year", saved.month.slice(0, 4)] }),
+        queryClient.invalidateQueries({ queryKey: ["imports"] }),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["wealth"] }),
+      ]);
+    },
+  });
+  const removeImportedCreditMutation = useMutation({
+    mutationFn: (candidateId: string) => resetImportCandidatesToPending({ ids: [candidateId] }),
+    onSuccess: async () => {
+      setCreditToRemove(null);
+      setValidationError(null);
+      setSavedMessage("Imported credit removed and returned to Imports");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["budget"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["expenses"] }),
         queryClient.invalidateQueries({ queryKey: ["imports"] }),
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["wealth"] }),
@@ -305,6 +322,25 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
     setCashAdjustments((current) => current.filter((_, adjustmentIndex) => adjustmentIndex !== index));
     setDirty(true);
     setSavedMessage(null);
+  }
+
+  function requestImportedCreditRemoval(adjustment: CashAdjustmentDraft) {
+    if (dirty) {
+      setValidationError("Save or reset your other sheet changes before removing an imported credit.");
+      return;
+    }
+    setValidationError(null);
+    setCreditToRemove(adjustment);
+  }
+
+  function confirmImportedCreditRemoval() {
+    const candidateId = creditToRemove?.id?.replace(/^import-credit:/, "");
+    if (!candidateId || candidateId === creditToRemove?.id) {
+      setValidationError("This imported credit is missing its source reference and cannot be removed.");
+      setCreditToRemove(null);
+      return;
+    }
+    removeImportedCreditMutation.mutate(candidateId);
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -489,16 +525,18 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               </div>
               <button
                 aria-label={`Remove cash entry ${index + 1}`}
-                disabled={adjustment.source === "imported_credit"}
-                onClick={() => removeCashAdjustment(index)}
-                title={
+                disabled={removeImportedCreditMutation.isPending}
+                onClick={() =>
                   adjustment.source === "imported_credit"
-                    ? "Move this transaction back to pending from Imports to remove it."
-                    : undefined
+                    ? requestImportedCreditRemoval(adjustment)
+                    : removeCashAdjustment(index)
+                }
+                title={
+                  adjustment.source === "imported_credit" ? "Remove this credit and return it to Imports" : undefined
                 }
                 type="button"
               >
-                {adjustment.source === "imported_credit" ? "Imported credit" : "Remove"}
+                {adjustment.source === "imported_credit" ? "Remove credit" : "Remove"}
               </button>
             </div>
           ))}
@@ -659,8 +697,58 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         </div>
       </div>
 
-      {(validationError || mutation.error) && (
-        <p className="form-error expense-sheet-error">{validationError ?? mutation.error?.message}</p>
+      {(validationError || mutation.error || removeImportedCreditMutation.error) && (
+        <p className="form-error expense-sheet-error">
+          {validationError ?? mutation.error?.message ?? removeImportedCreditMutation.error?.message}
+        </p>
+      )}
+      {creditToRemove && (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="remove-imported-credit-title"
+            aria-modal="true"
+            className="wealth-modal remove-credit-modal"
+            role="dialog"
+          >
+            <div className="modal-title">
+              <div>
+                <p className="eyebrow">REMOVE IMPORTED CREDIT</p>
+                <h2 id="remove-imported-credit-title">Return this credit to Imports?</h2>
+              </div>
+              <button
+                aria-label="Close remove imported credit dialog"
+                disabled={removeImportedCreditMutation.isPending}
+                onClick={() => setCreditToRemove(null)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <p>
+              <strong>{creditToRemove.label}</strong> for{" "}
+              <strong>{money(parseRupeeExpression(creditToRemove.amount, true) ?? 0)}</strong> will be removed from this
+              month’s cash bridge.
+            </p>
+            <p>The source statement row will be preserved and moved back to Pending in Imports.</p>
+            <div className="modal-actions">
+              <button
+                disabled={removeImportedCreditMutation.isPending}
+                onClick={() => setCreditToRemove(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                disabled={removeImportedCreditMutation.isPending}
+                onClick={confirmImportedCreditRemoval}
+                type="button"
+              >
+                {removeImportedCreditMutation.isPending ? "Removing..." : "Remove credit"}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </form>
   );
