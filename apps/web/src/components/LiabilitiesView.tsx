@@ -251,6 +251,11 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
   const totalPlannerPrincipal = plannerDebts.reduce((sum, debt) => sum + debt.principalPaise, 0);
   const minimumMonthlyEmi = plannerDebts.reduce((sum, debt) => sum + debt.emiPaise, 0);
   const firstTarget = selectedPlan.payoffOrder[0];
+  const projectedPayoffIds = new Set(selectedPlan.payoffOrder.map((payoff) => payoff.id));
+  const unresolvedPlannerDebts = plannerDebts.filter((debt) => !projectedPayoffIds.has(debt.id));
+  const zeroBalanceActiveAccounts = (data?.liabilities ?? []).filter(
+    (liability) => liability.status === "active" && liability.currentPrincipalPaise === 0,
+  );
   const principalReduction = Math.max(
     0,
     totalPlannerPrincipal - (selectedPlan.months[11]?.remainingPrincipalPaise ?? 0),
@@ -855,11 +860,14 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
 
         <div className="debt-payoff-roadmap">
           <div className="debt-roadmap-heading">
-            <span>PAYOFF ORDER</span>
-            <small>Each completed EMI rolls into the next account.</small>
+            <span>COMPLETE PAYOFF ORDER</span>
+            <small>
+              {selectedPlan.payoffOrder.length} of {plannerDebts.length} funded accounts have a projected finish date.
+              Each completed EMI rolls into the next account.
+            </small>
           </div>
-          <div>
-            {selectedPlan.payoffOrder.slice(0, 8).map((payoff, index) => (
+          <div className="debt-roadmap-grid">
+            {selectedPlan.payoffOrder.map((payoff, index) => (
               <article key={payoff.id}>
                 <b>{String(index + 1).padStart(2, "0")}</b>
                 <span>{payoff.name}</span>
@@ -867,6 +875,27 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
               </article>
             ))}
           </div>
+          {(unresolvedPlannerDebts.length > 0 || zeroBalanceActiveAccounts.length > 0) && (
+            <div className="debt-roadmap-exceptions">
+              {unresolvedPlannerDebts.map((debt) => (
+                <article key={debt.id}>
+                  <span>NO FINISH DATE</span>
+                  <strong>{debt.name}</strong>
+                  <small>
+                    This account cannot be fully repaid within the 50-year model using the current EMI and extra
+                    payment.
+                  </small>
+                </article>
+              ))}
+              {zeroBalanceActiveAccounts.map((liability) => (
+                <article key={liability.id}>
+                  <span>ZERO BALANCE</span>
+                  <strong>{liability.name}</strong>
+                  <small>This account is not debt to repay. Mark it cleared in the liability register.</small>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

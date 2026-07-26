@@ -2213,9 +2213,9 @@ h2 {
   color: var(--muted);
   font-size: 8px;
 }
-.debt-payoff-roadmap > div {
+.debt-roadmap-grid {
   display: grid;
-  grid-template-columns: repeat(8, minmax(105px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
   margin-top: 9px;
   border: 1px solid var(--line);
 }
@@ -2243,6 +2243,29 @@ h2 {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.debt-roadmap-exceptions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px;
+  margin-top: 9px;
+}
+.debt-roadmap-exceptions article {
+  min-height: 90px;
+  border: 1px solid #d9ad61;
+  background: #f7e8c5;
+}
+.debt-roadmap-exceptions article > span {
+  color: #8a5a00;
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.debt-roadmap-exceptions article > strong {
+  font-size: 10px;
+}
+.debt-roadmap-exceptions article > small {
+  line-height: 1.45;
 }
 .liabilities-panel {
   min-width: 0;
@@ -5245,7 +5268,7 @@ h2 {
     border-top: 1px solid var(--line);
     border-left: 4px solid var(--red);
   }
-  .debt-payoff-roadmap > div {
+  .debt-roadmap-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .liability-metrics .metric-card:nth-child(2) {
@@ -5318,7 +5341,7 @@ h2 {
     padding: 16px 14px 18px;
     overflow-x: auto;
   }
-  .debt-payoff-roadmap > div {
+  .debt-roadmap-grid {
     min-width: 540px;
     grid-template-columns: repeat(6, minmax(80px, 1fr));
   }
@@ -5519,7 +5542,7 @@ h2 {
   .debt-roadmap-heading {
     display: grid;
   }
-  .debt-payoff-roadmap > div {
+  .debt-roadmap-grid {
     min-width: 760px;
     grid-template-columns: repeat(8, minmax(90px, 1fr));
   }
