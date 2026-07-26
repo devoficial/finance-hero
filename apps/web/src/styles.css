@@ -2802,6 +2802,10 @@ h2 {
   background: #f1d7cf;
   color: var(--red);
 }
+.expense-sheet-strip .unknown {
+  background: #e7e5dd;
+  color: #68756f;
+}
 .expense-sheet-summary .overall {
   background: #d8e5dc;
   color: var(--green);

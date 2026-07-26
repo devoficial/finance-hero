@@ -27,6 +27,14 @@ function monthLabel(month: string, style: "short" | "long" = "short") {
   return new Intl.DateTimeFormat("en-IN", { month: style, timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
 }
 
+function currentMonth(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date());
+}
+
 function productName(productType: string) {
   return productType.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -49,8 +57,12 @@ export function DashboardView({
   }
 
   const income = dashboard.plannedIncomePaise;
+  const historical = dashboard.month < currentMonth();
+  const displayedEmiPaise = historical
+    ? (dashboard.expenseCategories.find((category) => category.id === "category-emi-payments")?.amountPaise ?? 0)
+    : dashboard.totalEmiPaise;
   const available = Math.max(0, dashboard.availableAfterPlanPaise);
-  const emiBurden = percentage(dashboard.totalEmiPaise, income);
+  const emiBurden = percentage(displayedEmiPaise, income);
   const expenseShare = percentage(dashboard.totalExpensePaise, income);
   const debtPaymentShare = percentage(dashboard.debtPaymentPaise, income);
   const assetBuildingShare = percentage(dashboard.assetBuildingPaise, income);
@@ -124,10 +136,10 @@ export function DashboardView({
           </div>
         </article>
         <article className={`finance-kpi ${emiBurden >= 40 ? "critical" : ""}`}>
-          <span>Scheduled EMI burden</span>
+          <span>{historical ? "Recorded EMI payments" : "Scheduled EMI burden"}</span>
           <strong>{emiBurden}%</strong>
           <div>
-            <b>{money(dashboard.totalEmiPaise)}</b>
+            <b>{money(displayedEmiPaise)}</b>
             <small>{emiBurden >= 40 ? "High fixed commitment" : "of monthly income"}</small>
           </div>
         </article>

@@ -4,7 +4,7 @@ import type { FinanceHeroDatabase } from "./encrypted-database";
 
 const SOURCE = "Finance tracker 2025:accepted opening snapshot";
 const SEEDED_AT = "2026-07-18T12:00:00.000Z";
-const EXPENSE_HISTORY_SEED = "2026-07-v5";
+const EXPENSE_HISTORY_SEED = "2026-07-v6";
 const CREDIT_CARD_BILLS_CATEGORY = [
   "category-credit-card-bills",
   "Credit card bills (unreconciled)",
@@ -443,6 +443,10 @@ function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
         source_ref = excluded.source_ref,
         updated_at = excluded.updated_at
     `);
+    const insertHistoricalBudgetLine = database.connection.prepare(`
+      INSERT OR IGNORE INTO budget_lines (month, category_id, planned_paise)
+      VALUES (?, ?, ?)
+    `);
     const insertTransaction = database.connection.prepare(`
       INSERT OR IGNORE INTO journal_transactions
         (id, occurred_on, effective_month, payee, memo, status, origin, source_ref, created_at)
@@ -464,6 +468,11 @@ function seedAcceptedExpenseHistory(database: FinanceHeroDatabase): void {
         sourceRef,
         SEEDED_AT,
       );
+      if (monthData.regularBudgetRupees > 0) {
+        for (const [categoryId, , , rupees] of categories) {
+          insertHistoricalBudgetLine.run(monthData.month, categoryId, rupees * 100);
+        }
+      }
 
       for (const [categoryId, rupees] of monthData.expenses) {
         const transactionId = `migration-expense-history-${monthData.month}-${categoryId}`;

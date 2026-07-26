@@ -59,6 +59,13 @@ export function ExpensesView({
   onSelectMonth,
   onOpenStatement,
 }: ExpensesViewProps) {
+  const currentMonth = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date());
+  const historical = selectedMonth < currentMonth;
+  const recordedEmiPaise = budget?.lines.find((line) => line.categoryId === "category-emi-payments")?.spentPaise ?? 0;
   if (loading || !yearData || !selectedDashboard) {
     return <section className="panel loading-panel">Building the monthly expense register...</section>;
   }
@@ -143,7 +150,13 @@ export function ExpensesView({
         </div>
       </article>
 
-      <BudgetEditor budget={budget} emiPaise={selectedDashboard.totalEmiPaise} loading={budgetLoading} money={money} />
+      <BudgetEditor
+        budget={budget}
+        emiPaise={historical ? recordedEmiPaise : selectedDashboard.totalEmiPaise}
+        historical={historical}
+        loading={budgetLoading}
+        money={money}
+      />
 
       <article className="panel selected-expense-panel">
         <div className="panel-heading">

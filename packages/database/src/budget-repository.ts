@@ -84,7 +84,13 @@ export class BudgetRepository {
       .prepare(`
         SELECT planned_income_paise AS plannedIncomePaise,
                regular_budget_paise AS regularBudgetPaise, state,
-               updated_at AS updatedAt
+               (
+                 SELECT MAX(audit.created_at)
+                 FROM audit_events audit
+                 WHERE audit.action = 'expense_sheet.updated'
+                   AND audit.entity_type = 'budget_period'
+                   AND audit.entity_id = budget_periods.month
+               ) AS updatedAt
         FROM budget_periods
         WHERE month = ?
       `)

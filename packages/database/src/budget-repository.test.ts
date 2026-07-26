@@ -60,6 +60,23 @@ describe("budget repository", () => {
     database.close();
   });
 
+  it("restores historical limits without treating the source import as a page edit", () => {
+    const { database, repository } = createRepository();
+    const may = repository.getMonth("2026-05");
+
+    expect(may.updatedAt).toBeNull();
+    expect(may.regularBudgetPaise).toBe(6004800);
+    expect(may.lines.find((line) => line.categoryId === "category-rent")).toMatchObject({
+      plannedPaise: 2050000,
+      spentPaise: 2050000,
+    });
+    expect(may.lines.find((line) => line.categoryId === "category-emi-payments")).toMatchObject({
+      plannedPaise: 0,
+      spentPaise: 11273100,
+    });
+    database.close();
+  });
+
   it("edits a sheet row and updates the ledger, dashboard, monthly cards, and emergency-cover target", () => {
     const { database, ledger, repository, wealth } = createRepository();
     const dashboardBefore = ledger.getDashboard("2026-07", 18);

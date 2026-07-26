@@ -6,6 +6,7 @@ import { updateBudget } from "../lib/api";
 interface BudgetEditorProps {
   budget?: BudgetMonthResponse;
   emiPaise: number;
+  historical: boolean;
   loading: boolean;
   money: (paise: number) => string;
 }
@@ -72,7 +73,7 @@ function lineType(line: BudgetLine): string {
   return "Regular";
 }
 
-export function BudgetEditor({ budget, emiPaise, loading, money }: BudgetEditorProps) {
+export function BudgetEditor({ budget, emiPaise, historical, loading, money }: BudgetEditorProps) {
   const queryClient = useQueryClient();
   const [income, setIncome] = useState("");
   const [lineValues, setLineValues] = useState<Record<string, ExpenseSheetDraft>>({});
@@ -114,6 +115,7 @@ export function BudgetEditor({ budget, emiPaise, loading, money }: BudgetEditorP
     );
   }, [budget, lineValues]);
   const plannedIncome = toPaise(income) ?? 0;
+  const hasIncomePlan = plannedIncome > 0;
   const freeAfterPlan = plannedIncome - emiPaise - draftTotals.planned;
 
   const mutation = useMutation({
@@ -246,12 +248,12 @@ export function BudgetEditor({ budget, emiPaise, loading, money }: BudgetEditorP
           <strong>{money(draftTotals.planned)}</strong>
         </div>
         <div>
-          <span>Scheduled monthly EMIs</span>
+          <span>{historical ? "Recorded EMI payments" : "Scheduled monthly EMIs"}</span>
           <strong>{money(emiPaise)}</strong>
         </div>
-        <div className={freeAfterPlan < 0 ? "negative" : ""}>
+        <div className={!hasIncomePlan ? "unknown" : freeAfterPlan < 0 ? "negative" : ""}>
           <span>Free after limits + EMIs</span>
-          <strong>{money(freeAfterPlan)}</strong>
+          <strong>{hasIncomePlan ? money(freeAfterPlan) : "Not available"}</strong>
         </div>
       </div>
 
