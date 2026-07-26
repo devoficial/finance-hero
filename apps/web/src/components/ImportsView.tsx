@@ -6,7 +6,13 @@ import type {
 } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
-import { approveImportCandidates, rejectImportCandidates, updateImportCandidate, uploadStatement } from "../lib/api";
+import {
+  approveImportCandidates,
+  parseStatementArtifact,
+  rejectImportCandidates,
+  updateImportCandidate,
+  uploadStatement,
+} from "../lib/api";
 
 interface ImportsViewProps {
   data?: ImportQueueResponse;
@@ -63,6 +69,14 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
       await refresh();
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : "Statement upload failed."),
+  });
+  const parseMutation = useMutation({
+    mutationFn: ({ id, password }: { id: string; password?: string }) => parseStatementArtifact(id, { password }),
+    onSuccess: async () => {
+      setActionError(null);
+      await refresh();
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : "Statement extraction failed."),
   });
   const editMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateImportCandidateRequest }) =>
@@ -154,6 +168,18 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     }
   }
 
+  function retryExtraction(id: string, parserMessage: string | null) {
+    const requiresPassword = parserMessage?.toLowerCase().includes("password") ?? false;
+    if (!requiresPassword) {
+      parseMutation.mutate({ id });
+      return;
+    }
+    const password = window.prompt("Enter this PDF's password. It is used once in memory and is never saved.");
+    if (password != null) {
+      parseMutation.mutate({ id, password });
+    }
+  }
+
   if (loading && !data) {
     return <section className="panel loading-panel">Loading the local review queue...</section>;
   }
@@ -172,7 +198,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
         <div className="import-safety">
           <span>LOCAL-ONLY EVIDENCE</span>
           <strong>Files stay on this Mac</strong>
-          <small>CSV and TSV extract now. PDF and Excel are safely quarantined for the next parser plug-in.</small>
+          <small>CSV, TSV, text PDFs, XLS and XLSX extract locally. Scanned PDFs are held for OCR.</small>
         </div>
       </section>
 
@@ -270,7 +296,25 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                   <b>{artifact.pendingCount} pending</b>
                   <span>{artifact.approvedCount} posted</span>
                 </div>
-                <small>{artifact.parserMessage}</small>
+                <div className="artifact-parser">
+                  <small>{artifact.parserMessage}</small>
+                  {(artifact.status === "failed" ||
+                    (artifact.status === "needs_parser" &&
+                      artifact.parserMessage?.toLowerCase().includes("password"))) && (
+                    <button
+                      className="artifact-parse-button"
+                      disabled={parseMutation.isPending}
+                      onClick={() => retryExtraction(artifact.id, artifact.parserMessage)}
+                      type="button"
+                    >
+                      {parseMutation.isPending
+                        ? "Extracting..."
+                        : artifact.status === "failed"
+                          ? "Retry"
+                          : "Unlock PDF"}
+                    </button>
+                  )}
+                </div>
               </article>
             ))
           )}

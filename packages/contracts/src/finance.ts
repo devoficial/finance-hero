@@ -140,6 +140,10 @@ export const statementUploadResponseSchema = z.object({
   artifact: importArtifactSchema,
 });
 
+export const statementParseRequestSchema = z.object({
+  password: z.string().max(256).optional(),
+});
+
 export const updateImportCandidateRequestSchema = z
   .object({
     occurredOn: localDateSchema.nullable().optional(),
@@ -216,10 +220,13 @@ export const budgetLineSchema = z.object({
   categoryId: z.string(),
   categoryName: z.string(),
   broadBucket: z.string(),
+  budgetEligible: z.boolean(),
   alertEligible: z.boolean(),
   plannedPaise: paiseSchema.nonnegative(),
   spentPaise: paiseSchema,
   remainingPaise: paiseSchema,
+  comment: z.string(),
+  updatedAt: z.string().datetime().nullable(),
 });
 
 export const budgetMonthResponseSchema = z.object({
@@ -228,6 +235,7 @@ export const budgetMonthResponseSchema = z.object({
   plannedIncomePaise: paiseSchema.nonnegative(),
   regularBudgetPaise: paiseSchema.nonnegative(),
   unallocatedIncomePaise: paiseSchema,
+  updatedAt: z.string().datetime().nullable(),
   lines: z.array(budgetLineSchema),
 });
 
@@ -236,10 +244,18 @@ export const updateBudgetMonthRequestSchema = z
     plannedIncomePaise: paiseSchema.nonnegative().optional(),
     lines: z
       .array(
-        z.object({
-          categoryId: z.string().min(1),
-          plannedPaise: paiseSchema.nonnegative(),
-        }),
+        z
+          .object({
+            categoryId: z.string().min(1),
+            plannedPaise: paiseSchema.nonnegative().optional(),
+            actualPaise: paiseSchema.nonnegative().optional(),
+            comment: z.string().trim().max(500).optional(),
+          })
+          .refine(
+            (value) =>
+              value.plannedPaise !== undefined || value.actualPaise !== undefined || value.comment !== undefined,
+            { message: "At least one expense sheet row field is required." },
+          ),
       )
       .min(1)
       .optional(),
@@ -559,6 +575,7 @@ export type ImportArtifact = z.infer<typeof importArtifactSchema>;
 export type ImportCandidate = z.infer<typeof importCandidateSchema>;
 export type ImportQueueResponse = z.infer<typeof importQueueResponseSchema>;
 export type StatementUploadResponse = z.infer<typeof statementUploadResponseSchema>;
+export type StatementParseRequest = z.infer<typeof statementParseRequestSchema>;
 export type UpdateImportCandidateRequest = z.infer<typeof updateImportCandidateRequestSchema>;
 export type ImportCandidateActionRequest = z.infer<typeof importCandidateActionRequestSchema>;
 export type RejectImportCandidatesRequest = z.infer<typeof rejectImportCandidatesRequestSchema>;

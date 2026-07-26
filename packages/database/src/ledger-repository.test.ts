@@ -144,7 +144,7 @@ describe("ledger repository", () => {
     });
 
     expect(transaction.splits).toEqual([
-      { categoryId: "category-groceries", categoryName: "Groceries and food", amountPaise: 70000 },
+      { categoryId: "category-groceries", categoryName: "Groceries, food and eating out", amountPaise: 70000 },
       { categoryId: "category-household", categoryName: "Cook, maid and gas", amountPaise: 30000 },
     ]);
     expect(repository.listTransactions("2026-07").filter((item) => item.id === transaction.id)).toHaveLength(1);
@@ -252,7 +252,7 @@ describe("ledger repository", () => {
 
     expect(repository.listTransactions("2026-07").find((item) => item.id === original.id)?.status).toBe("reversed");
     expect(replacement.correctedFromId).toBe(original.id);
-    expect(replacement.categoryName).toBe("Learning and subscriptions");
+    expect(replacement.categoryName).toBe("Learning, entertainment and subscriptions");
     expect(repository.getDashboard("2026-07", 20).regularExpensePaise).toBe(4642200);
     const audits = database.connection
       .prepare("SELECT action FROM audit_events WHERE entity_id = ? ORDER BY created_at, rowid")

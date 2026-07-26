@@ -159,4 +159,48 @@ describe("import repository", () => {
     expect(rejected.candidates[0]?.rejectionReason).toBe("Not my transaction");
     database.close();
   });
+
+  it("replaces unposted parser candidates but protects posted ledger entries", () => {
+    const { database, repository } = createRepository();
+    const created = repository.createArtifact({
+      filename: "statement.pdf",
+      contentHash: "reparse-hash",
+      mimeType: "application/pdf",
+      sizeBytes: 800,
+      accountId: "account-primary-bank",
+      status: "needs_parser",
+      parserMessage: "Password required.",
+      rows: [],
+    });
+
+    const reparsed = repository.replaceArtifactParseResult(created.artifact.id, {
+      status: "parsed",
+      parserMessage: "1 transaction candidate extracted.",
+      rows: [
+        {
+          sourceRow: 1,
+          occurredOn: "2026-07-22",
+          payee: "Local store",
+          amountPaise: 75000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: { Source: "PDF page 1" },
+        },
+      ],
+    });
+    expect(reparsed).toMatchObject({ status: "parsed", rowCount: 1, pendingCount: 1 });
+
+    const candidate = repository.getQueue().candidates[0];
+    if (!candidate) throw new Error("Expected reparsed candidate.");
+    repository.approveCandidates([candidate.id]);
+    expect(() =>
+      repository.replaceArtifactParseResult(created.artifact.id, {
+        status: "parsed",
+        rows: [],
+      }),
+    ).toThrow("posted candidates cannot be parsed again");
+    database.close();
+  });
 });

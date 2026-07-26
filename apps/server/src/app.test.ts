@@ -67,13 +67,35 @@ describe("local API", () => {
       url: "/api/v1/budgets/2026-08",
       payload: {
         plannedIncomePaise: 31000000,
-        lines: [{ categoryId: "category-rent", plannedPaise: 2100000 }],
+        lines: [
+          { categoryId: "category-rent", plannedPaise: 2100000 },
+          {
+            categoryId: "category-groceries",
+            plannedPaise: 500000,
+            actualPaise: 125000,
+            comment: "API sheet edit",
+          },
+        ],
       },
     });
     expect(budgetUpdate.statusCode).toBe(200);
     expect(budgetMonthResponseSchema.parse(budgetUpdate.json())).toMatchObject({
       plannedIncomePaise: 31000000,
-      regularBudgetPaise: 2100000,
+      regularBudgetPaise: 2600000,
+      lines: expect.arrayContaining([
+        expect.objectContaining({
+          categoryId: "category-groceries",
+          plannedPaise: 500000,
+          spentPaise: 125000,
+          comment: "API sheet edit",
+        }),
+      ]),
+    });
+    const augustDashboard = await app.inject({ method: "GET", url: "/api/v1/dashboard?month=2026-08" });
+    expect(dashboardResponseSchema.parse(augustDashboard.json())).toMatchObject({
+      regularExpensePaise: 125000,
+      cashOutflowPaise: 125000,
+      regularBudgetPaise: 2600000,
     });
 
     const liabilities = await app.inject({ method: "GET", url: "/api/v1/liabilities" });

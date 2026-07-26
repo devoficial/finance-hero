@@ -106,6 +106,14 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       PRIMARY KEY (month, category_id)
     ) STRICT;
 
+    CREATE TABLE IF NOT EXISTS monthly_expense_sheet_rows (
+      month TEXT NOT NULL REFERENCES budget_periods(month),
+      category_id TEXT NOT NULL REFERENCES categories(id),
+      comment TEXT,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (month, category_id)
+    ) STRICT;
+
     CREATE TABLE IF NOT EXISTS debts (
       id TEXT PRIMARY KEY NOT NULL,
       account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id),

@@ -6,6 +6,7 @@ import { BudgetRepository } from "./budget-repository";
 import { initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
 import { LedgerRepository } from "./ledger-repository";
 import { seedAcceptedOpeningSnapshot } from "./opening-seed";
+import { WealthRepository } from "./wealth-repository";
 
 const temporaryDirectories: string[] = [];
 
@@ -28,6 +29,7 @@ function createRepository() {
     database,
     ledger: new LedgerRepository(database),
     repository: new BudgetRepository(database),
+    wealth: new WealthRepository(database),
   };
 }
 
@@ -39,10 +41,114 @@ describe("budget repository", () => {
     expect(budget.plannedIncomePaise).toBe(30089300);
     expect(budget.regularBudgetPaise).toBe(6004800);
     expect(budget.lines.reduce((sum, line) => sum + line.plannedPaise, 0)).toBe(6004800);
+    expect(budget.lines).toHaveLength(18);
     expect(budget.lines.find((line) => line.categoryId === "category-rent")).toMatchObject({
       plannedPaise: 2050000,
       spentPaise: 1643300,
       remainingPaise: 406700,
+    });
+    expect(budget.lines.find((line) => line.categoryId === "category-loan-charges")).toMatchObject({
+      categoryName: "Loan and bank charges",
+      budgetEligible: false,
+      spentPaise: 23600,
+    });
+    expect(budget.lines.find((line) => line.categoryId === "category-loan-repayments")).toMatchObject({
+      categoryName: "Loan repayments",
+      budgetEligible: false,
+      spentPaise: 0,
+    });
+    database.close();
+  });
+
+  it("edits a sheet row and updates the ledger, dashboard, monthly cards, and emergency-cover target", () => {
+    const { database, ledger, repository, wealth } = createRepository();
+    const dashboardBefore = ledger.getDashboard("2026-07", 18);
+    const emergencyBefore = wealth.getWealth("2026-07-26").goals.find((goal) => goal.id === "goal-emergency-fund");
+
+    const updated = repository.updateMonth("2026-07", {
+      lines: [
+        {
+          categoryId: "category-groceries",
+          actualPaise: 100000,
+          plannedPaise: 250000,
+          comment: "Edited from monthly expense sheet",
+        },
+      ],
+    });
+
+    expect(updated.updatedAt).not.toBeNull();
+    expect(updated.regularBudgetPaise).toBe(6054800);
+    expect(updated.lines.find((line) => line.categoryId === "category-groceries")).toMatchObject({
+      spentPaise: 100000,
+      plannedPaise: 250000,
+      remainingPaise: 150000,
+      comment: "Edited from monthly expense sheet",
+    });
+    const editedRow = updated.lines.find((line) => line.categoryId === "category-groceries");
+    expect(editedRow?.updatedAt).toBe(updated.updatedAt);
+
+    const dashboardAfter = ledger.getDashboard("2026-07", 18);
+    expect(dashboardAfter.regularExpensePaise).toBe(dashboardBefore.regularExpensePaise + 43200);
+    expect(dashboardAfter.cashOutflowPaise).toBe(dashboardBefore.cashOutflowPaise + 43200);
+    expect(dashboardAfter.regularBudgetPaise).toBe(6054800);
+    expect(ledger.getExpenseYear("2026").months[6]).toMatchObject({
+      regularExpensePaise: dashboardAfter.regularExpensePaise,
+      cashOutflowPaise: dashboardAfter.cashOutflowPaise,
+      regularBudgetPaise: 6054800,
+    });
+    expect(ledger.listTransactions("2026-07")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payee: "Groceries, food and eating out",
+          origin: "expense_sheet_aggregate",
+        }),
+      ]),
+    );
+
+    const emergencyAfter = wealth.getWealth("2026-07-26").goals.find((goal) => goal.id === "goal-emergency-fund");
+    expect(emergencyAfter?.monthlyNeedPaise).toBe((emergencyBefore?.monthlyNeedPaise ?? 0) + 50000);
+    expect(emergencyAfter?.targetPaise).toBe((emergencyBefore?.targetPaise ?? 0) + 150000);
+    database.close();
+  });
+
+  it("creates future actuals from the sheet and prevents totals below detailed transactions", () => {
+    const { database, ledger, repository } = createRepository();
+    ledger.createManualTransaction({
+      occurredOn: "2026-08-05",
+      payee: "Neighbourhood store",
+      kind: "expense",
+      amountPaise: 75000,
+      accountId: "account-primary-bank",
+      categoryId: "category-groceries",
+      idempotencyKey: "budget-sheet:detailed-august-grocery",
+    });
+
+    expect(() =>
+      repository.updateMonth("2026-08", {
+        lines: [{ categoryId: "category-groceries", actualPaise: 50000 }],
+      }),
+    ).toThrow("already has 750 INR in detailed ledger transactions");
+
+    const updated = repository.updateMonth("2026-08", {
+      plannedIncomePaise: 32500000,
+      lines: [
+        {
+          categoryId: "category-groceries",
+          actualPaise: 125000,
+          plannedPaise: 200000,
+          comment: "Includes manual store purchase",
+        },
+      ],
+    });
+    expect(updated.lines.find((line) => line.categoryId === "category-groceries")).toMatchObject({
+      spentPaise: 125000,
+      plannedPaise: 200000,
+      comment: "Includes manual store purchase",
+    });
+    expect(ledger.getDashboard("2026-08", 5)).toMatchObject({
+      regularExpensePaise: 125000,
+      cashOutflowPaise: 125000,
+      regularBudgetPaise: 200000,
     });
     database.close();
   });
@@ -68,7 +174,7 @@ describe("budget repository", () => {
     const audit = database.connection
       .prepare("SELECT action FROM audit_events WHERE entity_id = '2026-08' ORDER BY created_at DESC LIMIT 1")
       .get() as { action: string };
-    expect(audit.action).toBe("budget.updated");
+    expect(audit.action).toBe("expense_sheet.updated");
     database.close();
   });
 
@@ -78,7 +184,7 @@ describe("budget repository", () => {
       repository.updateMonth("2026-07", {
         lines: [{ categoryId: "category-not-real", plannedPaise: 10000 }],
       }),
-    ).toThrow("Budget category does not exist");
+    ).toThrow("Expense sheet category does not exist");
     expect(() =>
       repository.updateMonth("2026-07", {
         lines: [

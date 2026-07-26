@@ -104,8 +104,13 @@ The implemented budget endpoint uses the same versioned prefix:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/budgets/:month` | Income plan, category allocations, actual spend, and remaining amounts |
-| `PUT` | `/budgets/:month` | Audit and apply an income/category allocation revision |
+| `GET` | `/budgets/:month` | Income plan plus every monthly expense-sheet row, actual, limit, comment, and edit timestamp |
+| `PUT` | `/budgets/:month` | Audit and apply sheet cost, limit, comment, or income-plan edits |
+
+Cost edits use the balanced ledger as their source of truth. The endpoint updates the
+month/category aggregate while preserving detailed posted transactions, so it rejects an aggregate
+below the detailed subtotal. Limit edits update the confirmed regular budget used by alerts,
+forecasts, and emergency-cover goals.
 
 The implemented Savings and Goals vertical slice exposes:
 

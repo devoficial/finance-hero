@@ -214,7 +214,18 @@ export class LedgerRepository {
         `)
         .all() as ReferenceDataRecord["accounts"],
       categories: this.database.connection
-        .prepare("SELECT id, name FROM categories WHERE budget_eligible = 1 ORDER BY name")
+        .prepare(`
+          SELECT id, name
+          FROM categories
+          ORDER BY CASE broad_bucket
+            WHEN 'regular' THEN 1
+            WHEN 'nonbudget_expense' THEN 2
+            WHEN 'debt_payment' THEN 3
+            WHEN 'asset_building' THEN 4
+            WHEN 'savings_investment' THEN 5
+            ELSE 6
+          END, name
+        `)
         .all() as ReferenceDataRecord["categories"],
     };
   }

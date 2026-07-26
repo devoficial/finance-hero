@@ -61,13 +61,14 @@ Supported formats:
 
 - text PDF;
 - password-protected PDF, with password held only in process memory;
-- scanned PDF via local OCR;
+- scanned PDF detection, with local OCR still pending;
 - CSV and TSV;
 - XLS and XLSX.
 
 Uploads are copied to a quarantine directory, assigned a content hash, MIME-sniffed,
 size-limited, and scanned for parser safety before extraction. The original is never
-modified. Parser workers have no network access and read only the quarantined file.
+modified. Current generic PDF/Excel extraction runs inside the loopback-only local API;
+future OCR workers will have no network access and will read only the quarantined file.
 
 ### Manual entry
 

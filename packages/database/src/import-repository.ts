@@ -21,6 +21,15 @@ export interface ImportArtifactRecord {
   createdAt: string;
 }
 
+export interface ImportArtifactSource {
+  id: string;
+  filename: string;
+  contentHash: string;
+  mimeType: string;
+  accountId: string | null;
+  approvedCount: number;
+}
+
 export interface ImportCandidateRecord {
   id: string;
   artifactId: string;
@@ -181,6 +190,24 @@ export class ImportRepository {
     return artifact;
   }
 
+  getArtifactSource(id: string): ImportArtifactSource {
+    const artifact = this.database.connection
+      .prepare(`
+        SELECT a.id, a.filename, a.content_hash AS contentHash, a.mime_type AS mimeType,
+               a.account_id AS accountId,
+               COALESCE(SUM(CASE WHEN c.status = 'approved' THEN 1 ELSE 0 END), 0) AS approvedCount
+        FROM import_artifacts a
+        LEFT JOIN import_candidates c ON c.artifact_id = a.id
+        WHERE a.id = ?
+        GROUP BY a.id
+      `)
+      .get(id) as ImportArtifactSource | undefined;
+    if (!artifact) {
+      throw new Error("Statement artifact does not exist.");
+    }
+    return artifact;
+  }
+
   getQueue(): ImportQueueRecord {
     const artifacts = this.database.connection
       .prepare(`
@@ -313,6 +340,66 @@ export class ImportRepository {
     });
     write.immediate();
     return { artifact: this.getArtifact(artifactId), duplicate: false };
+  }
+
+  replaceArtifactParseResult(
+    id: string,
+    input: Pick<CreateImportArtifactInput, "status" | "parserMessage" | "rows">,
+  ): ImportArtifactRecord {
+    const artifact = this.getArtifactSource(id);
+    if (artifact.approvedCount > 0) {
+      throw new Error("A statement with posted candidates cannot be parsed again.");
+    }
+    const now = new Date().toISOString();
+    const write = this.database.connection.transaction(() => {
+      this.database.connection.prepare("DELETE FROM import_candidates WHERE artifact_id = ?").run(id);
+      this.database.connection
+        .prepare(`
+          UPDATE import_artifacts
+          SET status = ?, parser_message = ?, row_count = ?
+          WHERE id = ?
+        `)
+        .run(input.status, input.parserMessage ?? null, input.rows.length, id);
+
+      const insertCandidate = this.database.connection.prepare(`
+        INSERT INTO import_candidates
+          (id, artifact_id, source_row, occurred_on, payee, amount_paise, direction,
+           account_id, category_id, status, confidence, warnings_json, source_json,
+           created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+      `);
+      for (const row of input.rows) {
+        const warnings = [...row.warnings];
+        if (!artifact.accountId && !warnings.includes("Choose an account")) {
+          warnings.push("Choose an account");
+        }
+        insertCandidate.run(
+          randomUUID(),
+          id,
+          row.sourceRow,
+          row.occurredOn,
+          row.payee.trim(),
+          row.amountPaise,
+          row.direction,
+          artifact.accountId,
+          row.categoryId ?? null,
+          row.confidence,
+          JSON.stringify(warnings),
+          JSON.stringify(row.source),
+          now,
+          now,
+        );
+      }
+      this.audit(
+        "import.artifact_reparsed",
+        "import_artifact",
+        id,
+        { rowCount: input.rows.length, status: input.status },
+        now,
+      );
+    });
+    write.immediate();
+    return this.getArtifact(id);
   }
 
   updateCandidate(id: string, input: UpdateImportCandidateInput): ImportCandidateRecord {

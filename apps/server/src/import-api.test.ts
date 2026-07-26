@@ -7,6 +7,7 @@ import {
   statementUploadResponseSchema,
 } from "@finance-hero/contracts";
 import { afterEach, describe, expect, it } from "vitest";
+import * as XLSX from "xlsx";
 import { buildApp } from "./app";
 
 const temporaryDirectories: string[] = [];
@@ -76,7 +77,7 @@ describe("statement import API", () => {
     await app.close();
   });
 
-  it("quarantines PDF and Excel files without pretending they were parsed", async () => {
+  it("quarantines malformed PDFs without pretending they were parsed", async () => {
     const dataDirectory = mkdtempSync(join(tmpdir(), "finance-hero-import-api-"));
     temporaryDirectories.push(dataDirectory);
     const app = await buildApp({
@@ -96,8 +97,49 @@ describe("statement import API", () => {
 
     expect(upload.statusCode).toBe(201);
     expect(statementUploadResponseSchema.parse(upload.json()).artifact).toMatchObject({
-      status: "needs_parser",
+      status: "failed",
       rowCount: 0,
+    });
+    await app.close();
+  });
+
+  it("extracts Excel transactions directly into the review queue", async () => {
+    const dataDirectory = mkdtempSync(join(tmpdir(), "finance-hero-import-api-"));
+    temporaryDirectories.push(dataDirectory);
+    const app = await buildApp({
+      config: {
+        host: "127.0.0.1",
+        port: 4317,
+        dataDirectory,
+        databaseKey: "server-import-test-key-with-at-least-32-characters",
+      },
+    });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Date", "Description", "Amount", "DR/CR"],
+        ["20/07/2026", "APOLLO PHARMACY", 600, "DR"],
+      ]),
+      "Transactions",
+    );
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/v1/statement-uploads?filename=card.xlsx&accountId=account-primary-bank",
+      headers: { "content-type": "application/octet-stream" },
+      payload: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer,
+    });
+
+    expect(upload.statusCode).toBe(201);
+    expect(statementUploadResponseSchema.parse(upload.json()).artifact).toMatchObject({
+      status: "parsed",
+      rowCount: 1,
+    });
+    const queue = importQueueResponseSchema.parse((await app.inject({ method: "GET", url: "/api/v1/imports" })).json());
+    expect(queue.candidates[0]).toMatchObject({
+      payee: "APOLLO PHARMACY",
+      amountPaise: 60000,
+      categoryId: "category-medical",
     });
     await app.close();
   });

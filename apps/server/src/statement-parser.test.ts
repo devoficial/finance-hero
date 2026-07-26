@@ -1,5 +1,53 @@
 import { describe, expect, it } from "vitest";
-import { parseStatementDelimitedFile } from "./statement-parser";
+import * as XLSX from "xlsx";
+import { parseStatementDelimitedFile, parseStatementExcelFile, parseStatementPdfFile } from "./statement-parser";
+
+function createTextPdf(lines: Array<Array<{ text: string; x: number }>>): Buffer {
+  const escapePdfText = (value: string) => value.replace(/([\\()])/g, "\\$1");
+  const text = lines
+    .flatMap((line, lineIndex) =>
+      line.map(
+        ({ text: value, x }) => `BT /F1 11 Tf 1 0 0 1 ${x} ${760 - lineIndex * 24} Tm (${escapePdfText(value)}) Tj ET`,
+      ),
+    )
+    .join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${Buffer.byteLength(text)} >>\nstream\n${text}\nendstream`,
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (let index = 0; index < objects.length; index += 1) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
+  }
+  const xrefOffset = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (const offset of offsets.slice(1)) {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return Buffer.from(pdf);
+}
+
+function createStatementWorkbook(bookType: "xls" | "xlsx"): Buffer {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.aoa_to_sheet([
+      ["Statement summary"],
+      ["Transaction Date", "Narration", "Debit Amount", "Credit Amount"],
+      ["18/07/2026", "GROCERY STORE", 2450.75, ""],
+      ["19/07/2026", "MONTHLY SALARY", "", 300000],
+    ]),
+    "Transactions",
+  );
+  return XLSX.write(workbook, { type: "buffer", bookType }) as Buffer;
+}
 
 describe("statement delimited parser", () => {
   it("extracts quoted debit and credit rows from a bank CSV", () => {
@@ -44,6 +92,71 @@ describe("statement delimited parser", () => {
   it("rejects a table without recognizable statement headers", () => {
     expect(() => parseStatementDelimitedFile(Buffer.from("A,B,C\n1,2,3"), "statement.csv")).toThrow(
       "Required date, description, and amount columns could not be detected.",
+    );
+  });
+});
+
+describe("statement Excel parser", () => {
+  it.each(["xls", "xlsx"] as const)("extracts rows from %s workbooks", (bookType) => {
+    const parsed = parseStatementExcelFile(createStatementWorkbook(bookType), `statement.${bookType}`);
+
+    expect(parsed.rows).toHaveLength(2);
+    expect(parsed.rows[0]).toMatchObject({
+      occurredOn: "2026-07-18",
+      payee: "GROCERY STORE",
+      amountPaise: 245075,
+      direction: "debit",
+    });
+    expect(parsed.rows[1]).toMatchObject({
+      occurredOn: "2026-07-19",
+      amountPaise: 30000000,
+      direction: "credit",
+    });
+  });
+});
+
+describe("statement PDF parser", () => {
+  it("reconstructs positioned transaction columns from a text PDF", async () => {
+    const pdf = createTextPdf([
+      [
+        { text: "Date", x: 50 },
+        { text: "Description", x: 150 },
+        { text: "Debit", x: 350 },
+        { text: "Credit", x: 450 },
+        { text: "Balance", x: 540 },
+      ],
+      [
+        { text: "18/07/2026", x: 50 },
+        { text: "SWIGGY ORDER", x: 150 },
+        { text: "1250.50", x: 350 },
+        { text: "998749.50", x: 540 },
+      ],
+      [
+        { text: "19/07/2026", x: 50 },
+        { text: "MONTHLY SALARY", x: 150 },
+        { text: "300000", x: 450 },
+        { text: "1298749.50", x: 540 },
+      ],
+    ]);
+
+    const parsed = await parseStatementPdfFile(pdf);
+
+    expect(parsed.rows).toHaveLength(2);
+    expect(parsed.rows[0]).toMatchObject({
+      occurredOn: "2026-07-18",
+      payee: "SWIGGY ORDER",
+      amountPaise: 125050,
+      direction: "debit",
+    });
+    expect(parsed.rows[1]).toMatchObject({
+      occurredOn: "2026-07-19",
+      direction: "credit",
+    });
+  });
+
+  it("flags PDFs without a text transaction table for OCR", async () => {
+    await expect(parseStatementPdfFile(createTextPdf([[{ text: "Scanned statement cover", x: 50 }]]))).rejects.toThrow(
+      "OCR is required",
     );
   });
 });

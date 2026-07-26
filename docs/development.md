@@ -43,6 +43,7 @@ pnpm start:local
 - Audited correction: `POST /api/v1/transactions/:id/replace`
 - Import queue: `GET /api/v1/imports`
 - Statement upload: `POST /api/v1/statement-uploads?filename=&accountId=`
+- Retry/unlock statement extraction: `POST /api/v1/imports/:id/parse`
 - Candidate edit: `PATCH /api/v1/candidates/:id`
 - Candidate approval/rejection: `POST /api/v1/candidate-actions/approve`, `POST /api/v1/candidate-actions/reject`
 
@@ -83,6 +84,10 @@ before updating it.
 - Monthly `Overall Total Expenses` cash outflows from September 2025 through July 2026 are
   reconciled in the encrypted ledger, including debt payments, construction, savings, repayment,
   and emergency-fund rows. Full transaction-by-transaction Google Sheet migration is still pending.
+- The Expenses page exposes those monthly totals as an editable spreadsheet register. Cost edits
+  revise the ledger-backed month/category aggregate, limit edits recalculate dashboard alerts,
+  forecasts, and emergency-cover goals, and comments plus page/row edit timestamps are persisted.
+  A category total cannot be lowered below its already-posted detailed ledger transactions.
 - Dashboard totals, category spending, institutional debts, personal payables, receivables, financial accounts,
   and the ledger are live database queries. Personal balances can be created with
   `POST /api/v1/personal-balances` and edited or settled with `PATCH /api/v1/personal-balances/:id`.
@@ -94,10 +99,10 @@ before updating it.
 - Debt snowball/avalanche scenarios and the twelve-month forecast are deterministic browser calculations over
   current API data. Forecast assumptions remain editable and construction commitments are disclosed but excluded
   until their payment dates are known.
-- Google login, device pairing, LAN HTTPS, Gmail, SMS, and binary statement parsing are not connected yet.
-- Local CSV/TSV statement extraction and review are connected. Uploaded PDF/XLS/XLSX files are preserved in
-  `data/imports/quarantine` and explicitly marked `needs_parser`; they are never presented as parsed data.
-- Institution-specific PDF/Excel extraction, statement balance reconciliation, merge/split review actions,
-  Gmail discovery, and iPhone Shortcut ingestion remain pending.
+- Google login, device pairing, LAN HTTPS, Gmail, and SMS are not connected yet.
+- Local CSV, TSV, text-PDF, XLS, and XLSX extraction is connected to the approval queue. Originals are preserved in
+  `data/imports/quarantine`; password-protected PDFs can be retried with a password held only in process memory.
+- Scanned-PDF OCR, institution-specific layouts, statement balance reconciliation, merge/split review actions,
+  Gmail discovery, and iPhone Shortcut ingestion remain pending. Unsupported layouts stay outside the ledger.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
 - PWA SVG branding is sufficient for development; release-quality iOS PNG icons are pending.

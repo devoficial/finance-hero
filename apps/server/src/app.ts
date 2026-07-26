@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   budgetMonthResponseSchema,
@@ -17,6 +17,7 @@ import {
   financialAccountsResponseSchema,
   financialGoalSchema,
   healthResponseSchema,
+  importArtifactSchema,
   importCandidateActionRequestSchema,
   importCandidateSchema,
   importQueueResponseSchema,
@@ -33,6 +34,7 @@ import {
   rejectImportCandidatesRequestSchema,
   replaceTransactionRequestSchema,
   reverseTransactionRequestSchema,
+  statementParseRequestSchema,
   statementUploadResponseSchema,
   updateBudgetMonthRequestSchema,
   updateFinancialAccountRequestSchema,
@@ -62,7 +64,13 @@ import {
 } from "@finance-hero/database";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { ServerConfig } from "./config";
-import { parseStatementDelimitedFile } from "./statement-parser";
+import {
+  type ParsedStatementRow,
+  parseStatementDelimitedFile,
+  parseStatementExcelFile,
+  parseStatementPdfFile,
+  StatementPasswordRequiredError,
+} from "./statement-parser";
 
 export interface BuildAppOptions {
   config: ServerConfig;
@@ -102,7 +110,7 @@ function suggestCategoryId(payee: string): string | undefined {
   return CATEGORY_RULES.find((rule) => rule.terms.some((term) => normalized.includes(term)))?.categoryId;
 }
 
-function detectStatementType(content: Buffer, extension: string): string {
+function detectStatementType(content: Buffer, extension: string): "csv" | "tsv" | "pdf" | "xls" | "xlsx" | "unknown" {
   if (content.subarray(0, 5).toString("ascii") === "%PDF-") return "pdf";
   if (content.subarray(0, 4).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0]))) return "xls";
   if (content.subarray(0, 2).toString("ascii") === "PK") return "xlsx";
@@ -117,6 +125,46 @@ function statementMimeType(fileType: string): string {
   if (fileType === "xls") return "application/vnd.ms-excel";
   if (fileType === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   return "application/octet-stream";
+}
+
+function statementFileTypeFromMime(mimeType: string): "csv" | "tsv" | "pdf" | "xls" | "xlsx" | "unknown" {
+  if (mimeType === "text/csv") return "csv";
+  if (mimeType === "text/tab-separated-values") return "tsv";
+  if (mimeType === "application/pdf") return "pdf";
+  if (mimeType === "application/vnd.ms-excel") return "xls";
+  if (mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return "xlsx";
+  return "unknown";
+}
+
+function prepareImportRows(rows: ParsedStatementRow[]) {
+  return rows.map((row) => {
+    const categoryId = row.direction === "debit" ? suggestCategoryId(row.payee) : undefined;
+    return {
+      ...row,
+      categoryId,
+      confidence: categoryId ? row.confidence : Math.min(row.confidence, 60),
+      warnings:
+        row.direction === "debit" && !categoryId ? [...row.warnings, "Choose an expense category"] : row.warnings,
+    };
+  });
+}
+
+async function parseStatementContent(
+  content: Buffer,
+  fileType: "csv" | "tsv" | "pdf" | "xls" | "xlsx" | "unknown",
+  filename: string,
+  password?: string,
+) {
+  if (fileType === "csv" || fileType === "tsv") {
+    return parseStatementDelimitedFile(content, `statement.${fileType}`);
+  }
+  if (fileType === "pdf") {
+    return parseStatementPdfFile(content, password);
+  }
+  if (fileType === "xls" || fileType === "xlsx") {
+    return parseStatementExcelFile(content, filename);
+  }
+  throw new Error("Unsupported file type. Upload CSV, TSV, PDF, XLS, or XLSX.");
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
@@ -319,35 +367,23 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       const extension = filename.toLowerCase().split(".").pop() ?? "";
       const contentHash = createHash("sha256").update(content).digest("hex");
       const fileType = detectStatementType(content, extension);
-      const textStatement = fileType === "csv" || fileType === "tsv";
-      const recognizedBinary = ["pdf", "xls", "xlsx"].includes(fileType);
-      let rows: ReturnType<typeof parseStatementDelimitedFile>["rows"] = [];
+      let rows: ReturnType<typeof prepareImportRows> = [];
       let status: "parsed" | "needs_parser" | "failed";
       let parserMessage: string;
-      if (textStatement) {
+      if (fileType !== "unknown") {
         try {
-          const parsed = parseStatementDelimitedFile(content, `statement.${fileType}`);
-          rows = parsed.rows.map((row) => {
-            const categoryId = row.direction === "debit" ? suggestCategoryId(row.payee) : undefined;
-            return {
-              ...row,
-              categoryId,
-              confidence: categoryId ? row.confidence : Math.min(row.confidence, 60),
-              warnings:
-                row.direction === "debit" && !categoryId
-                  ? [...row.warnings, "Choose an expense category"]
-                  : row.warnings,
-            };
-          });
+          const parsed = await parseStatementContent(content, fileType, filename);
+          rows = prepareImportRows(parsed.rows);
           status = "parsed";
           parserMessage = parsed.message;
         } catch (error) {
-          status = "failed";
+          const message = error instanceof Error ? error.message : "Statement could not be parsed.";
+          status =
+            error instanceof StatementPasswordRequiredError || message.includes("OCR is required")
+              ? "needs_parser"
+              : "failed";
           parserMessage = error instanceof Error ? error.message : "Statement text could not be parsed.";
         }
-      } else if (recognizedBinary) {
-        status = "needs_parser";
-        parserMessage = "File secured locally. PDF and Excel extraction is the next parser plug-in.";
       } else {
         status = "failed";
         parserMessage = "Unsupported file type. Upload CSV, TSV, PDF, XLS, or XLSX.";
@@ -373,6 +409,39 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     } catch (error) {
       const message = error instanceof Error ? error.message : "Statement could not be uploaded.";
       return reply.code(400).send({ error: { code: "INVALID_STATEMENT_UPLOAD", message } });
+    }
+  });
+
+  app.post("/api/v1/imports/:id/parse", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const { id } = request.params as { id: string };
+      const input = statementParseRequestSchema.parse(request.body ?? {});
+      const artifact = imports.getArtifactSource(id);
+      const fileType = statementFileTypeFromMime(artifact.mimeType);
+      if (fileType === "unknown") {
+        throw new Error("This source file type cannot be parsed.");
+      }
+      const quarantinePath = join(
+        options.config.dataDirectory,
+        "imports",
+        "quarantine",
+        `${artifact.contentHash}.${fileType}`,
+      );
+      const content = readFileSync(quarantinePath);
+      const parsed = await parseStatementContent(content, fileType, artifact.filename, input.password);
+      const updated = imports.replaceArtifactParseResult(id, {
+        status: "parsed",
+        parserMessage: parsed.message,
+        rows: prepareImportRows(parsed.rows),
+      });
+      return reply.header("cache-control", "no-store").send(importArtifactSchema.parse(updated));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Statement could not be parsed.";
+      const statusCode = message === "Statement artifact does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "STATEMENT_PARSE_FAILED", message } });
     }
   });
 

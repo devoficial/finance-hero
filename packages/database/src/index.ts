@@ -15,6 +15,7 @@ export { type FinanceHeroDatabase, initializeFoundationSchema, openEncryptedData
 export {
   type CreateImportArtifactInput,
   type ImportArtifactRecord,
+  type ImportArtifactSource,
   type ImportCandidateRecord,
   type ImportCandidateStatus,
   type ImportQueueRecord,

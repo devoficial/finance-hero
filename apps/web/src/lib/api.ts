@@ -24,6 +24,7 @@ import {
   type ImportCandidate,
   type ImportCandidateActionRequest,
   type ImportQueueResponse,
+  importArtifactSchema,
   importCandidateSchema,
   importQueueResponseSchema,
   type LedgerResponse,
@@ -46,6 +47,7 @@ import {
   type RejectImportCandidatesRequest,
   type ReverseTransactionRequest,
   referenceDataResponseSchema,
+  type StatementParseRequest,
   type StatementUploadResponse,
   statementUploadResponseSchema,
   type UpdateBudgetMonthRequest,
@@ -216,6 +218,19 @@ export async function uploadStatement(file: File, accountId?: string): Promise<S
     throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
   }
   return statementUploadResponseSchema.parse(await response.json());
+}
+
+export async function parseStatementArtifact(id: string, input: StatementParseRequest = {}) {
+  const response = await fetch(`/api/v1/imports/${encodeURIComponent(id)}/parse`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return importArtifactSchema.parse(await response.json());
 }
 
 export async function updateImportCandidate(id: string, input: UpdateImportCandidateRequest): Promise<ImportCandidate> {

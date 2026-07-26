@@ -4,7 +4,7 @@ import type { FinanceHeroDatabase } from "./encrypted-database";
 
 const SOURCE = "Finance tracker 2025:accepted opening snapshot";
 const SEEDED_AT = "2026-07-18T12:00:00.000Z";
-const EXPENSE_HISTORY_SEED = "2026-07-v4";
+const EXPENSE_HISTORY_SEED = "2026-07-v5";
 const CREDIT_CARD_BILLS_CATEGORY = [
   "category-credit-card-bills",
   "Credit card bills (unreconciled)",
@@ -15,7 +15,7 @@ const CASH_FLOW_CATEGORIES = [
   ["category-home-construction", "Home construction", "asset_building"],
   ["category-loan-charges", "Loan and bank charges", "nonbudget_expense"],
   ["category-extra-savings", "Extra savings / lending / payback", "savings_investment"],
-  ["category-loan-repayments", "Loan repayments / bank charges (unallocated)", "debt_payment"],
+  ["category-loan-repayments", "Loan repayments", "debt_payment"],
   ["category-emergency-fund", "Emergency fund", "savings_investment"],
 ] as const;
 
@@ -23,14 +23,14 @@ const categories = [
   ["category-rent", "Rent", "regular", 20500],
   ["category-home", "Home", "regular", 9000],
   ["category-household", "Cook, maid and gas", "regular", 5580],
-  ["category-utilities", "Broadband and utilities", "regular", 1800],
-  ["category-groceries", "Groceries and food", "regular", 2000],
-  ["category-transport", "Transport", "regular", 3000],
-  ["category-personal", "Shopping and personal care", "regular", 3000],
-  ["category-learning", "Learning and subscriptions", "regular", 5268],
-  ["category-medical", "Medical", "regular", 6000],
+  ["category-utilities", "Broadband and electricity", "regular", 1800],
+  ["category-groceries", "Groceries, food and eating out", "regular", 2000],
+  ["category-transport", "Transport and travel", "regular", 3000],
+  ["category-personal", "Shopping, personal care and gym", "regular", 3000],
+  ["category-learning", "Learning, entertainment and subscriptions", "regular", 5268],
+  ["category-medical", "Medical expenses", "regular", 6000],
   ["category-insurance", "Insurance and savings", "savings_investment", 1900],
-  ["category-misc", "Miscellaneous", "regular", 2000],
+  ["category-misc", "Miscellaneous, lending and others", "regular", 2000],
 ] as const;
 
 const debts = [
@@ -300,6 +300,13 @@ const historicalExpenseMonths = [
 
 function seedAcceptedPersonalBalances(database: FinanceHeroDatabase): void {
   const seed = database.connection.transaction(() => {
+    const renameCategory = database.connection.prepare("UPDATE categories SET name = ? WHERE id = ?");
+    for (const [categoryId, name] of categories) {
+      renameCategory.run(name, categoryId);
+    }
+    for (const [categoryId, name] of CASH_FLOW_CATEGORIES) {
+      renameCategory.run(name, categoryId);
+    }
     const existing = database.connection
       .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_personal_balance_seed'")
       .get() as { value: string } | undefined;
