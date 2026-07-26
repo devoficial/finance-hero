@@ -182,6 +182,13 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     }
   }
 
+  function rejectCandidate(candidate: ImportCandidate) {
+    const reason = window.prompt(`Why should "${candidate.payee}" be rejected?`, "Not a valid transaction");
+    if (reason?.trim()) {
+      rejectMutation.mutate({ ids: [candidate.id], reason: reason.trim() });
+    }
+  }
+
   function retryExtraction(id: string, parserMessage: string | null) {
     const requiresPassword = parserMessage?.toLowerCase().includes("password") ?? false;
     if (!requiresPassword) {
@@ -379,9 +386,19 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
             Reject
           </button>
         </div>
+        {actionError && <p className="form-error import-review-error">{actionError}</p>}
 
         <div className="import-table-wrap">
           <table className="import-table">
+            <colgroup>
+              <col className="candidate-select-column" />
+              <col className="candidate-source-column" />
+              <col className="candidate-description-column" />
+              <col className="candidate-amount-column" />
+              <col className="candidate-assignment-column" />
+              <col className="candidate-signal-column" />
+              <col className="candidate-actions-column" />
+            </colgroup>
             <thead>
               <tr>
                 <th aria-label="Select" />
@@ -406,7 +423,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                     className={candidate.status !== "pending" ? `candidate-${candidate.status}` : ""}
                     key={candidate.id}
                   >
-                    <td>
+                    <td className="candidate-select-cell">
                       <input
                         aria-label={`Select ${candidate.payee}`}
                         checked={selected.has(candidate.id)}
@@ -415,19 +432,19 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                         type="checkbox"
                       />
                     </td>
-                    <td>
+                    <td className="candidate-source">
                       <strong>{candidate.occurredOn ? formatDate(candidate.occurredOn) : "Date required"}</strong>
                       <small>
                         {candidate.filename} · row {candidate.sourceRow}
                       </small>
                     </td>
-                    <td>
+                    <td className="candidate-description">
                       <strong>{candidate.payee}</strong>
                       <small className={candidate.direction === "debit" ? "debit-label" : "credit-label"}>
                         {candidate.direction}
                       </small>
                     </td>
-                    <td className={candidate.direction === "debit" ? "negative" : "positive"}>
+                    <td className={`candidate-amount ${candidate.direction === "debit" ? "negative" : "positive"}`}>
                       <strong>
                         {candidate.direction === "debit" ? "-" : "+"}
                         {money(candidate.amountPaise)}
@@ -516,17 +533,44 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                         </>
                       )}
                     </td>
-                    <td>
+                    <td className="candidate-signal">
                       <span className={`confidence ${candidate.confidence >= 75 ? "high" : "review"}`}>
                         {candidate.confidence}% confidence
                       </span>
                       <small>{candidate.warnings[0] ?? candidate.status}</small>
                     </td>
-                    <td>
+                    <td className="candidate-actions">
                       {candidate.status === "pending" ? (
-                        <button onClick={() => beginEdit(candidate)} type="button">
-                          Review
-                        </button>
+                        <div className="candidate-action-group">
+                          <button
+                            className="candidate-approve"
+                            disabled={!candidateIsReady(candidate) || approveMutation.isPending}
+                            onClick={() => approveMutation.mutate([candidate.id])}
+                            type="button"
+                          >
+                            {approveMutation.isPending && approveMutation.variables?.includes(candidate.id)
+                              ? "Approving..."
+                              : "Approve"}
+                          </button>
+                          <button
+                            className="candidate-edit"
+                            disabled={approveMutation.isPending || rejectMutation.isPending}
+                            onClick={() => beginEdit(candidate)}
+                            type="button"
+                          >
+                            Edit details
+                          </button>
+                          <button
+                            className="candidate-reject"
+                            disabled={approveMutation.isPending || rejectMutation.isPending}
+                            onClick={() => rejectCandidate(candidate)}
+                            type="button"
+                          >
+                            {rejectMutation.isPending && rejectMutation.variables?.ids.includes(candidate.id)
+                              ? "Rejecting..."
+                              : "Reject"}
+                          </button>
+                        </div>
                       ) : (
                         <span className={`candidate-status ${candidate.status}`}>{candidate.status}</span>
                       )}
