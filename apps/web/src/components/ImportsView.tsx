@@ -40,7 +40,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const [file, setFile] = useState<File | null>(null);
   const [uploadAccountId, setUploadAccountId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
+  const [filter, setFilter] = useState<"pending" | "credits" | "approved" | "rejected" | "all">("pending");
   const [editing, setEditing] = useState<ImportCandidate | null>(null);
   const [editDate, setEditDate] = useState("");
   const [editPayee, setEditPayee] = useState("");
@@ -173,7 +173,11 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   });
 
   const candidates = useMemo(
-    () => (data?.candidates ?? []).filter((candidate) => filter === "all" || candidate.status === filter),
+    () =>
+      (data?.candidates ?? []).filter(
+        (candidate) =>
+          filter === "all" || (filter === "credits" ? candidate.direction === "credit" : candidate.status === filter),
+      ),
     [data, filter],
   );
   const pendingVisible = candidates.filter((candidate) => candidate.status === "pending");
@@ -188,7 +192,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     readyPendingVisible.length > 0 && readyPendingVisible.every((candidate) => selected.has(candidate.id));
   const assignmentIsPending = (id: string) => assignmentMutation.isPending && assignmentMutation.variables?.id === id;
 
-  function changeFilter(nextFilter: "pending" | "approved" | "rejected" | "all") {
+  function changeFilter(nextFilter: "pending" | "credits" | "approved" | "rejected" | "all") {
     setFilter(nextFilter);
     setSelected(new Set());
   }
@@ -423,6 +427,14 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
               Pending <span>{data?.pendingCount ?? 0}</span>
             </button>
             <button
+              className={filter === "credits" ? "active" : ""}
+              onClick={() => changeFilter("credits")}
+              type="button"
+            >
+              Credits{" "}
+              <span>{data?.candidates.filter((candidate) => candidate.direction === "credit").length ?? 0}</span>
+            </button>
+            <button
               className={filter === "approved" ? "active" : ""}
               onClick={() => changeFilter("approved")}
               type="button"
@@ -442,7 +454,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
           </div>
         </div>
 
-        {(filter === "pending" || filter === "all") && (
+        {(filter === "pending" || filter === "credits" || filter === "all") && (
           <div className="import-bulk-bar">
             <label>
               <input
@@ -504,11 +516,13 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                   <td className="empty-state" colSpan={7}>
                     {filter === "pending"
                       ? "No transactions are waiting for approval."
-                      : filter === "approved"
-                        ? "No transactions have been approved yet."
-                        : filter === "rejected"
-                          ? "No transactions have been rejected."
-                          : "No candidates available."}
+                      : filter === "credits"
+                        ? "No credit transactions were detected."
+                        : filter === "approved"
+                          ? "No transactions have been approved yet."
+                          : filter === "rejected"
+                            ? "No transactions have been rejected."
+                            : "No candidates available."}
                   </td>
                 </tr>
               ) : (
