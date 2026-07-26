@@ -575,11 +575,6 @@ export class BudgetRepository {
       `)
       .get(month, category.id, ...aggregateIds) as { amountPaise: number };
     const aggregatePaise = desiredPaise - base.amountPaise;
-    if (aggregatePaise < 0) {
-      throw new Error(
-        `${category.name} already has ${base.amountPaise / 100} INR in detailed ledger transactions. Correct those entries before lowering the sheet total.`,
-      );
-    }
 
     if (existingAggregate) {
       this.database.connection.prepare("DELETE FROM postings WHERE transaction_id = ?").run(existingAggregate.id);
@@ -597,7 +592,7 @@ export class BudgetRepository {
         .run(
           expenseSheetDate(month),
           category.name,
-          "Monthly category total edited from the expense sheet.",
+          "Monthly category total or correction edited from the expense sheet.",
           `monthly-expense-sheet:${month}:${category.id}`,
           existingAggregate.id,
         );
@@ -619,7 +614,7 @@ export class BudgetRepository {
         expenseSheetDate(month),
         month,
         category.name,
-        "Monthly category total edited from the expense sheet.",
+        "Monthly category total or correction edited from the expense sheet.",
         `monthly-expense-sheet:${month}:${category.id}`,
         now,
       );

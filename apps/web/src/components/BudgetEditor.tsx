@@ -301,6 +301,19 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
     setValidationError(null);
   }
 
+  function normalizeDraftMoney(categoryId: string, field: "actual" | "limit") {
+    const current = lineValues[categoryId]?.[field] ?? "";
+    const parsed = parseRupeeExpression(current);
+    if (parsed == null) {
+      setValidationError("Enter a valid addition or subtraction, for example 4184-2361.");
+      return;
+    }
+    const normalized = rupeeInput(parsed);
+    if (normalized !== current) {
+      updateDraft(categoryId, field, normalized);
+    }
+  }
+
   function reset() {
     loadDraft(currentBudget);
     setValidationError(null);
@@ -492,6 +505,12 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
           </button>
         </div>
       </div>
+
+      {(validationError || mutation.error || removeImportedCreditMutation.error) && (
+        <p className="form-error expense-sheet-error" role="alert">
+          {validationError ?? mutation.error?.message ?? removeImportedCreditMutation.error?.message}
+        </p>
+      )}
 
       <section className="cash-bridge" aria-label="Monthly cash bridge">
         <div className="cash-bridge-heading">
@@ -709,7 +728,14 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
                       <input
                         aria-label={`${line.categoryName} cost in INR`}
                         inputMode="decimal"
+                        onBlur={() => normalizeDraftMoney(line.categoryId, "actual")}
                         onChange={(event) => updateDraft(line.categoryId, "actual", event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            event.currentTarget.blur();
+                          }
+                        }}
                         placeholder="16433+500-200"
                         type="text"
                         value={draft.actual}
@@ -723,7 +749,14 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
                         <input
                           aria-label={`${line.categoryName} limit in INR`}
                           inputMode="decimal"
+                          onBlur={() => normalizeDraftMoney(line.categoryId, "limit")}
                           onChange={(event) => updateDraft(line.categoryId, "limit", event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                          }}
                           placeholder="20500+1000"
                           type="text"
                           value={draft.limit}
@@ -787,11 +820,6 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         </div>
       </div>
 
-      {(validationError || mutation.error || removeImportedCreditMutation.error) && (
-        <p className="form-error expense-sheet-error">
-          {validationError ?? mutation.error?.message ?? removeImportedCreditMutation.error?.message}
-        </p>
-      )}
       {creditToRemove && (
         <div className="modal-backdrop" role="presentation">
           <section

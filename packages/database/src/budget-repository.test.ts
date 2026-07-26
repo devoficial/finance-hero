@@ -294,7 +294,7 @@ describe("budget repository", () => {
     database.close();
   });
 
-  it("creates future actuals from the sheet and prevents totals below detailed transactions", () => {
+  it("uses a signed sheet correction when a total is lower than detailed transactions", () => {
     const { database, ledger, repository } = createRepository();
     ledger.createManualTransaction({
       occurredOn: "2026-08-05",
@@ -306,11 +306,11 @@ describe("budget repository", () => {
       idempotencyKey: "budget-sheet:detailed-august-grocery",
     });
 
-    expect(() =>
-      repository.updateMonth("2026-08", {
-        lines: [{ categoryId: "category-groceries", actualPaise: 50000 }],
-      }),
-    ).toThrow("already has 750 INR in detailed ledger transactions");
+    const corrected = repository.updateMonth("2026-08", {
+      lines: [{ categoryId: "category-groceries", actualPaise: 50000 }],
+    });
+    expect(corrected.lines.find((line) => line.categoryId === "category-groceries")?.spentPaise).toBe(50000);
+    expect(ledger.getDashboard("2026-08", 5).cashOutflowPaise).toBe(50000);
 
     const updated = repository.updateMonth("2026-08", {
       plannedIncomePaise: 32500000,
