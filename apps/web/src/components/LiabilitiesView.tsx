@@ -515,6 +515,39 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
 
   return (
     <>
+      <section className="liability-metrics" aria-label="Liability summary">
+        <article className="metric-card liability-metric-card warning">
+          <span>Current principal</span>
+          <strong>{money(data.totalPrincipalPaise)}</strong>
+          <small>{data.activeCount} active facilities</small>
+        </article>
+        <article className="metric-card liability-metric-card">
+          <span>Total monthly EMI</span>
+          <strong>{money(data.totalEmiPaise)}</strong>
+          <small>Committed monthly outflow</small>
+        </article>
+        <article className="metric-card liability-metric-card">
+          <span>Other liabilities</span>
+          <strong>{money(data.otherLiabilityPaise)}</strong>
+          <small>Open personal payables</small>
+        </article>
+        <article className="metric-card liability-metric-card positive">
+          <span>Money to get back</span>
+          <strong>{money(data.receivablePaise)}</strong>
+          <small>Open personal receivables</small>
+        </article>
+        <article className="metric-card liability-metric-card warning">
+          <span>Net obligations</span>
+          <strong>{money(data.netObligationPaise)}</strong>
+          <small>Principal + payables - receivables</small>
+        </article>
+        <article className="metric-card liability-metric-card positive">
+          <span>Cleared accounts</span>
+          <strong>{data.clearedCount}</strong>
+          <small>{money(data.totalOriginalPaise)} original obligations</small>
+        </article>
+      </section>
+
       <section className="personal-balance-grid" aria-label="Personal balances">
         {personalPanel(
           "Other liabilities",
@@ -704,38 +737,6 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
         </div>
       </article>
 
-      <section className="liability-metrics" aria-label="Liability summary">
-        <article className="metric-card liability-metric-card warning">
-          <span>Current principal</span>
-          <strong>{money(data.totalPrincipalPaise)}</strong>
-          <small>{data.activeCount} active facilities</small>
-        </article>
-        <article className="metric-card liability-metric-card">
-          <span>Total monthly EMI</span>
-          <strong>{money(data.totalEmiPaise)}</strong>
-          <small>Committed monthly outflow</small>
-        </article>
-        <article className="metric-card liability-metric-card">
-          <span>Other liabilities</span>
-          <strong>{money(data.otherLiabilityPaise)}</strong>
-          <small>Open personal payables</small>
-        </article>
-        <article className="metric-card liability-metric-card positive">
-          <span>Money to get back</span>
-          <strong>{money(data.receivablePaise)}</strong>
-          <small>Open personal receivables</small>
-        </article>
-        <article className="metric-card liability-metric-card warning">
-          <span>Net obligations</span>
-          <strong>{money(data.netObligationPaise)}</strong>
-          <small>Principal + payables - receivables</small>
-        </article>
-        <article className="metric-card liability-metric-card positive">
-          <span>Cleared accounts</span>
-          <strong>{data.clearedCount}</strong>
-          <small>{money(data.totalOriginalPaise)} original obligations</small>
-        </article>
-      </section>
 
       <section className="panel debt-planner">
         <div className="panel-heading debt-planner-heading">
