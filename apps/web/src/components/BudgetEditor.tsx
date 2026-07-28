@@ -512,7 +512,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         </p>
       )}
 
-      <div aria-label="Selected month expense summary" className="expense-sheet-summary expense-sheet-summary-top">
+      <section aria-label="Selected month expense summary" className="expense-sheet-summary expense-sheet-summary-top">
         <div>
           <span>Expense budget</span>
           <strong>{money(draftTotals.planned)}</strong>
@@ -533,6 +533,158 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
           <span>Overall total cash outflow</span>
           <strong>{money(draftTotals.overallActual)}</strong>
         </div>
+      </section>
+
+      <div className="budget-plan-strip expense-sheet-strip">
+        <label>
+          <span>Expected monthly salary plan</span>
+          <div className="sheet-money-input">
+            <b>₹</b>
+            <input
+              aria-label="Monthly income plan in INR"
+              inputMode="decimal"
+              onChange={(event) => {
+                checkpoint();
+                setIncome(event.target.value);
+                setDirty(true);
+                setSavedMessage(null);
+              }}
+              placeholder="300893+bonus-correction"
+              type="text"
+              value={income}
+            />
+          </div>
+        </label>
+        <div>
+          <span>Regular expense limit</span>
+          <strong>{money(draftTotals.planned)}</strong>
+        </div>
+        <div>
+          <span>{historical ? "Recorded EMI payments" : "Scheduled monthly EMIs"}</span>
+          <strong>{money(emiPaise)}</strong>
+        </div>
+        <div className={!hasIncomePlan ? "unknown" : freeAfterPlan < 0 ? "negative" : ""}>
+          <span>Free after limits + EMIs</span>
+          <strong>{hasIncomePlan ? money(freeAfterPlan) : "Not available"}</strong>
+        </div>
+      </div>
+
+      <div className="expense-ledger-heading">
+        <div>
+          <p className="eyebrow">ACTUAL LEDGER / CATEGORY REGISTER</p>
+          <h3>Recorded spending and monthly limits</h3>
+        </div>
+        <small>Update costs, budgets and notes directly in the sheet.</small>
+      </div>
+
+      <div className="expense-sheet-note">
+        <strong>One source of truth.</strong>
+        <span>
+          Money cells accept additions and subtractions such as 16433+500-200. Cost updates recorded spending; limits
+          update alerts, forecasts and emergency-fund needs.
+        </span>
+      </div>
+
+      <div className="expense-sheet-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Expense type</th>
+              <th scope="col">Class</th>
+              <th scope="col">Cost</th>
+              <th scope="col">Limit</th>
+              <th scope="col">Over / short</th>
+              <th scope="col">Comments</th>
+              <th scope="col">Last updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {budget.lines.map((line) => {
+              const draft = lineValues[line.categoryId] ?? draftFor(line);
+              const actual = parseRupeeExpression(draft.actual) ?? 0;
+              const limit = parseRupeeExpression(draft.limit) ?? 0;
+              const remaining = limit - actual;
+              return (
+                <tr className={`sheet-row ${line.broadBucket}`} key={line.categoryId}>
+                  <th scope="row">
+                    <span>{line.categoryName}</span>
+                  </th>
+                  <td>
+                    <span className={`sheet-class ${line.broadBucket}`}>{lineType(line)}</span>
+                  </td>
+                  <td>
+                    <div className="sheet-money-input">
+                      <b>₹</b>
+                      <input
+                        aria-label={`${line.categoryName} cost in INR`}
+                        inputMode="decimal"
+                        onBlur={() => normalizeDraftMoney(line.categoryId, "actual")}
+                        onChange={(event) => updateDraft(line.categoryId, "actual", event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            event.currentTarget.blur();
+                          }
+                        }}
+                        placeholder="16433+500-200"
+                        type="text"
+                        value={draft.actual}
+                      />
+                    </div>
+                  </td>
+                  <td>
+                    {line.budgetEligible ? (
+                      <div className="sheet-money-input">
+                        <b>₹</b>
+                        <input
+                          aria-label={`${line.categoryName} limit in INR`}
+                          inputMode="decimal"
+                          onBlur={() => normalizeDraftMoney(line.categoryId, "limit")}
+                          onChange={(event) => updateDraft(line.categoryId, "limit", event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                          }}
+                          placeholder="20500+1000"
+                          type="text"
+                          value={draft.limit}
+                        />
+                      </div>
+                    ) : (
+                      <span className="sheet-not-applicable">—</span>
+                    )}
+                  </td>
+                  <td>
+                    {line.budgetEligible ? (
+                      <strong className={remaining < 0 ? "sheet-over" : "sheet-short"}>
+                        {remaining < 0 ? "-" : "+"}
+                        {money(Math.abs(remaining))}
+                      </strong>
+                    ) : (
+                      <span className="sheet-not-applicable">Tracked total</span>
+                    )}
+                  </td>
+                  <td>
+                    <input
+                      aria-label={`${line.categoryName} comment`}
+                      className="sheet-comment-input"
+                      maxLength={500}
+                      onChange={(event) => updateDraft(line.categoryId, "comment", event.target.value)}
+                      placeholder="Optional note"
+                      type="text"
+                      value={draft.comment}
+                    />
+                  </td>
+                  <td>
+                    <span className="sheet-updated">{formatRowUpdated(line.updatedAt)}</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       <section className="cash-bridge" aria-label="Monthly cash bridge">
@@ -675,150 +827,6 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
           {cashAdjustments.length === 0 && <p>No salary or extra cash recorded for this month yet.</p>}
         </div>
       </section>
-
-      <div className="budget-plan-strip expense-sheet-strip">
-        <label>
-          <span>Expected monthly salary plan</span>
-          <div className="sheet-money-input">
-            <b>₹</b>
-            <input
-              aria-label="Monthly income plan in INR"
-              inputMode="decimal"
-              onChange={(event) => {
-                checkpoint();
-                setIncome(event.target.value);
-                setDirty(true);
-                setSavedMessage(null);
-              }}
-              placeholder="300893+bonus-correction"
-              type="text"
-              value={income}
-            />
-          </div>
-        </label>
-        <div>
-          <span>Regular expense limit</span>
-          <strong>{money(draftTotals.planned)}</strong>
-        </div>
-        <div>
-          <span>{historical ? "Recorded EMI payments" : "Scheduled monthly EMIs"}</span>
-          <strong>{money(emiPaise)}</strong>
-        </div>
-        <div className={!hasIncomePlan ? "unknown" : freeAfterPlan < 0 ? "negative" : ""}>
-          <span>Free after limits + EMIs</span>
-          <strong>{hasIncomePlan ? money(freeAfterPlan) : "Not available"}</strong>
-        </div>
-      </div>
-
-      <div className="expense-sheet-note">
-        <strong>One source of truth.</strong>
-        <span>
-          Money cells accept additions and subtractions such as 16433+500-200. Cost updates recorded spending; limits
-          update alerts, forecasts and emergency-fund needs.
-        </span>
-      </div>
-
-      <div className="expense-sheet-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Expense type</th>
-              <th scope="col">Class</th>
-              <th scope="col">Cost</th>
-              <th scope="col">Limit</th>
-              <th scope="col">Over / short</th>
-              <th scope="col">Comments</th>
-              <th scope="col">Last updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {budget.lines.map((line) => {
-              const draft = lineValues[line.categoryId] ?? draftFor(line);
-              const actual = parseRupeeExpression(draft.actual) ?? 0;
-              const limit = parseRupeeExpression(draft.limit) ?? 0;
-              const remaining = limit - actual;
-              return (
-                <tr className={`sheet-row ${line.broadBucket}`} key={line.categoryId}>
-                  <th scope="row">
-                    <span>{line.categoryName}</span>
-                  </th>
-                  <td>
-                    <span className={`sheet-class ${line.broadBucket}`}>{lineType(line)}</span>
-                  </td>
-                  <td>
-                    <div className="sheet-money-input">
-                      <b>₹</b>
-                      <input
-                        aria-label={`${line.categoryName} cost in INR`}
-                        inputMode="decimal"
-                        onBlur={() => normalizeDraftMoney(line.categoryId, "actual")}
-                        onChange={(event) => updateDraft(line.categoryId, "actual", event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            event.currentTarget.blur();
-                          }
-                        }}
-                        placeholder="16433+500-200"
-                        type="text"
-                        value={draft.actual}
-                      />
-                    </div>
-                  </td>
-                  <td>
-                    {line.budgetEligible ? (
-                      <div className="sheet-money-input">
-                        <b>₹</b>
-                        <input
-                          aria-label={`${line.categoryName} limit in INR`}
-                          inputMode="decimal"
-                          onBlur={() => normalizeDraftMoney(line.categoryId, "limit")}
-                          onChange={(event) => updateDraft(line.categoryId, "limit", event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              event.currentTarget.blur();
-                            }
-                          }}
-                          placeholder="20500+1000"
-                          type="text"
-                          value={draft.limit}
-                        />
-                      </div>
-                    ) : (
-                      <span className="sheet-not-applicable">—</span>
-                    )}
-                  </td>
-                  <td>
-                    {line.budgetEligible ? (
-                      <strong className={remaining < 0 ? "sheet-over" : "sheet-short"}>
-                        {remaining < 0 ? "-" : "+"}
-                        {money(Math.abs(remaining))}
-                      </strong>
-                    ) : (
-                      <span className="sheet-not-applicable">Tracked total</span>
-                    )}
-                  </td>
-                  <td>
-                    <input
-                      aria-label={`${line.categoryName} comment`}
-                      className="sheet-comment-input"
-                      maxLength={500}
-                      onChange={(event) => updateDraft(line.categoryId, "comment", event.target.value)}
-                      placeholder="Optional note"
-                      type="text"
-                      value={draft.comment}
-                    />
-                  </td>
-                  <td>
-                    <span className="sheet-updated">{formatRowUpdated(line.updatedAt)}</span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
 
       {creditToRemove && (
         <div className="modal-backdrop" role="presentation">
