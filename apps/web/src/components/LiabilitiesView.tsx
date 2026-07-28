@@ -515,6 +515,94 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
 
   return (
     <>
+      <section className="personal-balance-grid" aria-label="Personal balances">
+        {personalPanel(
+          "Other liabilities",
+          "Money you need to repay outside banks and credit cards.",
+          "payable",
+          data.otherLiabilities,
+          data.otherLiabilityPaise,
+        )}
+        {personalPanel(
+          "Money to get back",
+          "Money other people need to return to you.",
+          "receivable",
+          data.receivables,
+          data.receivablePaise,
+        )}
+      </section>
+
+      {personalForm && (
+        <article className="panel personal-balance-editor-panel">
+          <div className="panel-heading compact">
+            <div>
+              <p className="eyebrow">UPDATE ENCRYPTED PERSONAL BALANCE</p>
+              <h2>
+                {personalForm.id ? "Edit" : "Add"}{" "}
+                {personalForm.direction === "payable" ? "other liability" : "money to get back"}
+              </h2>
+            </div>
+            <button className="editor-close-button" onClick={() => setPersonalForm(null)} type="button">
+              Cancel
+            </button>
+          </div>
+          <form className="personal-balance-form" onSubmit={submitPersonalBalance}>
+            <label>
+              <span>Name</span>
+              <input
+                maxLength={160}
+                required
+                value={personalForm.name}
+                onChange={(event) => setPersonalForm({ ...personalForm, name: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>Amount (INR)</span>
+              <input
+                inputMode="decimal"
+                min="0"
+                required
+                step="0.01"
+                type="number"
+                value={personalForm.amount}
+                onChange={(event) => setPersonalForm({ ...personalForm, amount: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>Note</span>
+              <input
+                maxLength={500}
+                placeholder="Optional"
+                value={personalForm.note}
+                onChange={(event) => setPersonalForm({ ...personalForm, note: event.target.value })}
+              />
+            </label>
+            {personalForm.id && (
+              <label>
+                <span>Status</span>
+                <select
+                  value={personalForm.status}
+                  onChange={(event) =>
+                    setPersonalForm({ ...personalForm, status: event.target.value as "open" | "settled" })
+                  }
+                >
+                  <option value="open">Open</option>
+                  <option value="settled">Settled</option>
+                </select>
+              </label>
+            )}
+            <button className="save-liability-button" disabled={personalMutation.isPending} type="submit">
+              {personalMutation.isPending ? "Saving..." : "Save balance"}
+            </button>
+            {(personalValidationError || personalMutation.error) && (
+              <p className="form-error liability-editor-error">
+                {personalValidationError ?? personalMutation.error?.message ?? "Update failed."}
+              </p>
+            )}
+          </form>
+        </article>
+      )}
+
       <section className="liability-metrics" aria-label="Liability summary">
         <article className="metric-card liability-metric-card warning">
           <span>Current principal</span>
@@ -897,94 +985,6 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
             </div>
           )}
         </div>
-      </section>
-
-      {personalForm && (
-        <article className="panel personal-balance-editor-panel">
-          <div className="panel-heading compact">
-            <div>
-              <p className="eyebrow">UPDATE ENCRYPTED PERSONAL BALANCE</p>
-              <h2>
-                {personalForm.id ? "Edit" : "Add"}{" "}
-                {personalForm.direction === "payable" ? "other liability" : "money to get back"}
-              </h2>
-            </div>
-            <button className="editor-close-button" onClick={() => setPersonalForm(null)} type="button">
-              Cancel
-            </button>
-          </div>
-          <form className="personal-balance-form" onSubmit={submitPersonalBalance}>
-            <label>
-              <span>Name</span>
-              <input
-                maxLength={160}
-                required
-                value={personalForm.name}
-                onChange={(event) => setPersonalForm({ ...personalForm, name: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>Amount (INR)</span>
-              <input
-                inputMode="decimal"
-                min="0"
-                required
-                step="0.01"
-                type="number"
-                value={personalForm.amount}
-                onChange={(event) => setPersonalForm({ ...personalForm, amount: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>Note</span>
-              <input
-                maxLength={500}
-                placeholder="Optional"
-                value={personalForm.note}
-                onChange={(event) => setPersonalForm({ ...personalForm, note: event.target.value })}
-              />
-            </label>
-            {personalForm.id && (
-              <label>
-                <span>Status</span>
-                <select
-                  value={personalForm.status}
-                  onChange={(event) =>
-                    setPersonalForm({ ...personalForm, status: event.target.value as "open" | "settled" })
-                  }
-                >
-                  <option value="open">Open</option>
-                  <option value="settled">Settled</option>
-                </select>
-              </label>
-            )}
-            <button className="save-liability-button" disabled={personalMutation.isPending} type="submit">
-              {personalMutation.isPending ? "Saving..." : "Save balance"}
-            </button>
-            {(personalValidationError || personalMutation.error) && (
-              <p className="form-error liability-editor-error">
-                {personalValidationError ?? personalMutation.error?.message ?? "Update failed."}
-              </p>
-            )}
-          </form>
-        </article>
-      )}
-
-      <section className="personal-balance-grid" aria-label="Personal balances">
-        {personalPanel(
-          "Other liabilities",
-          "Money you need to repay outside banks and credit cards.",
-          "payable",
-          data.otherLiabilities,
-          data.otherLiabilityPaise,
-        )}
-        {personalPanel(
-          "Money to get back",
-          "Money other people need to return to you.",
-          "receivable",
-          data.receivables,
-          data.receivablePaise,
-        )}
       </section>
 
       {(editingId || creatingLiability) && form && (
