@@ -3431,6 +3431,10 @@ h2 {
   border: 1px solid var(--line);
   border-top: 0;
 }
+.expense-sheet-summary-top {
+  margin-bottom: 14px;
+  border-top: 1px solid var(--line);
+}
 .expense-sheet-summary > div {
   display: grid;
   gap: 5px;

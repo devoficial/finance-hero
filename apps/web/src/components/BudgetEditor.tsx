@@ -512,6 +512,29 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         </p>
       )}
 
+      <div aria-label="Selected month expense summary" className="expense-sheet-summary expense-sheet-summary-top">
+        <div>
+          <span>Expense budget</span>
+          <strong>{money(draftTotals.planned)}</strong>
+        </div>
+        <div>
+          <span>Current regular expenses</span>
+          <strong>{money(draftTotals.regularActual)}</strong>
+        </div>
+        <div className={draftTotals.planned - draftTotals.regularActual < 0 ? "negative" : ""}>
+          <span>Remaining expense budget</span>
+          <strong>{money(draftTotals.planned - draftTotals.regularActual)}</strong>
+        </div>
+        <div>
+          <span>Personal spend excluding home, rent and house help</span>
+          <strong>{money(draftTotals.personalActual)}</strong>
+        </div>
+        <div className="overall">
+          <span>Overall total cash outflow</span>
+          <strong>{money(draftTotals.overallActual)}</strong>
+        </div>
+      </div>
+
       <section className="cash-bridge" aria-label="Monthly cash bridge">
         <div className="cash-bridge-heading">
           <div>
@@ -795,29 +818,6 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
             })}
           </tbody>
         </table>
-      </div>
-
-      <div className="expense-sheet-summary">
-        <div>
-          <span>Expense budget</span>
-          <strong>{money(draftTotals.planned)}</strong>
-        </div>
-        <div>
-          <span>Current regular expenses</span>
-          <strong>{money(draftTotals.regularActual)}</strong>
-        </div>
-        <div className={draftTotals.planned - draftTotals.regularActual < 0 ? "negative" : ""}>
-          <span>Remaining expense budget</span>
-          <strong>{money(draftTotals.planned - draftTotals.regularActual)}</strong>
-        </div>
-        <div>
-          <span>Personal spend excluding home, rent and house help</span>
-          <strong>{money(draftTotals.personalActual)}</strong>
-        </div>
-        <div className="overall">
-          <span>Overall total cash outflow</span>
-          <strong>{money(draftTotals.overallActual)}</strong>
-        </div>
       </div>
 
       {creditToRemove && (
