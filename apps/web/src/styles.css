@@ -1540,28 +1540,138 @@ h2 {
 .liability-metrics .metric-card:last-child {
   border-right: 0;
 }
-.expense-year-panel,
+.expense-period-panel,
 .selected-expense-panel {
   margin-bottom: 16px;
 }
-.expense-month-grid {
+.expense-period-panel {
+  padding-bottom: 12px;
+}
+.expense-period-panel .panel-heading {
+  align-items: center;
+  margin-bottom: 14px;
+}
+.expense-period-panel .panel-heading h2 {
+  margin-bottom: 2px;
+}
+.expense-period-panel .panel-heading small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.expense-month-tabs {
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 2px 1px 9px;
+  scroll-padding-inline: 1px;
+  scroll-snap-type: x proximity;
+  scrollbar-color: var(--green) #d9d8d0;
+  scrollbar-width: thin;
+}
+.expense-month-tabs::-webkit-scrollbar {
+  height: 7px;
+}
+.expense-month-tabs::-webkit-scrollbar-track {
+  background: #d9d8d0;
+}
+.expense-month-tabs::-webkit-scrollbar-thumb {
+  background: var(--green);
+}
+.expense-month-tab {
+  position: relative;
+  flex: 0 0 158px;
+  min-height: 98px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: space-between;
   gap: 10px;
+  border: 1px solid var(--line);
+  background: #f8f5ed;
+  color: var(--ink);
+  padding: 11px 12px 10px;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
 }
-.expense-month-grid .month-card {
-  min-width: 0;
-}
-.expense-month-grid .month-card.empty {
-  opacity: 0.62;
-}
-.expense-month-grid .month-card.selected {
+.expense-month-tab:hover {
   border-color: var(--green);
+  transform: translateY(-1px);
+}
+.expense-month-tab header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.expense-month-tab header span {
+  font:
+    700 10px "DM Mono",
+    monospace;
+  letter-spacing: 0.05em;
+}
+.expense-month-tab header small,
+.expense-month-tab footer {
+  color: var(--muted);
+  font:
+    8px "DM Mono",
+    monospace;
+}
+.expense-month-tab header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.expense-month-tab > strong {
+  overflow: hidden;
+  color: var(--green);
+  font:
+    600 19px "Newsreader",
+    serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.expense-month-tab footer {
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
+}
+.expense-month-tab.empty,
+.expense-month-tab.future {
+  opacity: 0.64;
+}
+.expense-month-tab.over-budget:not(.selected)::before {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  left: -1px;
+  height: 3px;
+  background: var(--red);
+  content: "";
+}
+.expense-month-tab.selected {
+  border-color: var(--green);
+  background: var(--green);
   box-shadow: inset 0 -4px var(--yellow);
+  color: white;
   opacity: 1;
 }
-.expense-month-grid .month-card.has-data > strong {
+.expense-month-tab.selected > strong,
+.expense-month-tab.selected header small,
+.expense-month-tab.selected footer {
+  color: white;
+}
+.expense-month-tab.selected footer {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.expense-month-tab:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+.expense-month-tab.has-data > strong {
   color: var(--green);
+}
+.expense-month-tab.selected.has-data > strong {
+  color: white;
 }
 .cashflow-classification {
   display: grid;
@@ -5288,9 +5398,6 @@ h2 {
   .dashboard-detail-grid {
     grid-template-columns: 1fr;
   }
-  .expense-month-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
   .liability-metrics {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -5817,11 +5924,18 @@ h2 {
   .expense-overview-grid .metric-card:last-child {
     border-bottom: 0;
   }
-  .expense-month-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .expense-period-panel {
+    padding: 14px 12px 8px;
   }
-  .expense-month-grid .month-card {
-    min-width: 0;
+  .expense-period-panel .panel-heading {
+    align-items: flex-start;
+  }
+  .expense-period-panel .panel-heading > div small {
+    display: block;
+    max-width: 240px;
+  }
+  .expense-month-tab {
+    flex-basis: min(72vw, 190px);
   }
   .expense-detail-grid {
     grid-template-columns: 1fr;

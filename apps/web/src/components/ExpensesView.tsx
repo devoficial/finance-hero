@@ -1,4 +1,5 @@
 import type { BudgetMonthResponse, DashboardResponse, ExpenseYearResponse } from "@finance-hero/contracts";
+import { useEffect, useRef } from "react";
 import { BudgetEditor } from "./BudgetEditor";
 
 interface ExpensesViewProps {
@@ -57,6 +58,7 @@ export function ExpensesView({
   onYearChange,
   onSelectMonth,
 }: ExpensesViewProps) {
+  const monthTabsRef = useRef<HTMLDivElement>(null);
   const currentMonth = new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
     month: "2-digit",
@@ -64,6 +66,12 @@ export function ExpensesView({
   }).format(new Date());
   const historical = selectedMonth < currentMonth;
   const recordedEmiPaise = budget?.lines.find((line) => line.categoryId === "category-emi-payments")?.spentPaise ?? 0;
+  useEffect(() => {
+    monthTabsRef.current
+      ?.querySelector<HTMLElement>(`[data-month="${selectedMonth}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [selectedMonth]);
+
   if (loading || !yearData || !selectedDashboard) {
     return <section className="panel loading-panel">Building the monthly expense register...</section>;
   }
@@ -74,6 +82,72 @@ export function ExpensesView({
 
   return (
     <>
+      <article className="panel expense-period-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">EXPENSE REGISTER / {year}</p>
+            <h2>Choose a month</h2>
+            <small>The selected month opens directly in the editable register below.</small>
+          </div>
+          <label>
+            <span>Year</span>
+            <select value={year} onChange={(event) => onYearChange(event.target.value)}>
+              <option>2026</option>
+              <option>2025</option>
+            </select>
+          </label>
+        </div>
+
+        <div aria-label={`${year} expense months`} className="expense-month-tabs" ref={monthTabsRef} role="tablist">
+          {yearData.months.map((month) => {
+            const imported = month.transactionCount > 0 || month.regularBudgetPaise > 0;
+            const future = month.month > dataCutoffMonth;
+            const selected = month.month === selectedMonth;
+            return (
+              <button
+                aria-controls="selected-month-expense-register"
+                aria-selected={selected}
+                className={`expense-month-tab ${selected ? "selected" : ""} ${
+                  imported ? "has-data" : future ? "future" : "empty"
+                } ${month.budgetUsedPercentage > 100 ? "over-budget" : ""}`}
+                data-month={month.month}
+                key={month.month}
+                onClick={() => {
+                  onSelectMonth(month.month);
+                }}
+                role="tab"
+                type="button"
+              >
+                <header>
+                  <span>{monthName(month.month, "short").toUpperCase()}</span>
+                  <small>
+                    {imported ? `${month.transactionCount} entries` : future ? "Upcoming" : "Awaiting import"}
+                  </small>
+                </header>
+                <strong>{imported ? money(month.cashOutflowPaise) : future ? "Upcoming" : "Not imported"}</strong>
+                <footer>
+                  {imported && month.regularBudgetPaise > 0
+                    ? `${month.budgetUsedPercentage}% of regular budget`
+                    : future
+                      ? "Planning available"
+                      : "Open month"}
+                </footer>
+              </button>
+            );
+          })}
+        </div>
+      </article>
+
+      <div id="selected-month-expense-register" role="tabpanel">
+        <BudgetEditor
+          budget={budget}
+          emiPaise={historical ? recordedEmiPaise : selectedDashboard.totalEmiPaise}
+          historical={historical}
+          loading={budgetLoading}
+          money={money}
+        />
+      </div>
+
       <section className="expense-overview-grid" aria-label="Annual expense summary">
         <article className="metric-card">
           <span>Cash outflow in {year}</span>
@@ -93,68 +167,6 @@ export function ExpensesView({
           <small>{money(selectedDashboard.totalExpensePaise)} is expense; the rest is debt or asset movement</small>
         </article>
       </section>
-
-      <article className="panel expense-year-panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">DAILY EXPENSE REGISTER / 12 MONTHS</p>
-            <h2>{year} monthly cards</h2>
-          </div>
-          <label>
-            <span>Year</span>
-            <select value={year} onChange={(event) => onYearChange(event.target.value)}>
-              <option>2026</option>
-              <option>2025</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="expense-month-grid">
-          {yearData.months.map((month) => {
-            const imported = month.transactionCount > 0 || month.regularBudgetPaise > 0;
-            const future = month.month > dataCutoffMonth;
-            return (
-              <button
-                className={`month-card ${month.month === selectedMonth ? "selected" : ""} ${imported ? "has-data" : future ? "future" : "empty"}`}
-                key={month.month}
-                onClick={() => {
-                  onSelectMonth(month.month);
-                }}
-                type="button"
-              >
-                <div>
-                  <span>{monthName(month.month, "short").toUpperCase()}</span>
-                  <small>
-                    {imported ? `${month.transactionCount} entries` : future ? "Upcoming" : "Awaiting import"}
-                  </small>
-                </div>
-                <strong>{imported ? money(month.cashOutflowPaise) : future ? "Upcoming" : "Not imported"}</strong>
-                <div className="progress-track">
-                  <i style={{ width: `${Math.min(100, month.budgetUsedPercentage)}%` }} />
-                </div>
-                <footer>
-                  <span>
-                    {imported && month.regularBudgetPaise > 0
-                      ? `Regular ${money(month.regularExpensePaise)} / ${money(month.regularBudgetPaise)}`
-                      : future
-                        ? "No entries expected yet"
-                        : "No source data"}
-                  </span>
-                  <b>{imported && month.budgetUsedPercentage > 0 ? `${month.budgetUsedPercentage}%` : "OPEN →"}</b>
-                </footer>
-              </button>
-            );
-          })}
-        </div>
-      </article>
-
-      <BudgetEditor
-        budget={budget}
-        emiPaise={historical ? recordedEmiPaise : selectedDashboard.totalEmiPaise}
-        historical={historical}
-        loading={budgetLoading}
-        money={money}
-      />
 
       <article className="panel selected-expense-panel">
         <div className="panel-heading">
