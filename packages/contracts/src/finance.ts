@@ -101,6 +101,30 @@ export const importArtifactSchema = z.object({
   pendingCount: z.number().int().nonnegative(),
   approvedCount: z.number().int().nonnegative(),
   rejectedCount: z.number().int().nonnegative(),
+  reconciliation: z.object({
+    periodStart: localDateSchema.nullable(),
+    periodEnd: localDateSchema.nullable(),
+    openingBalancePaise: paiseSchema.nullable(),
+    closingBalancePaise: paiseSchema.nullable(),
+    extractedMovementPaise: paiseSchema,
+    recognizedMovementPaise: paiseSchema,
+    expectedClosingBalancePaise: paiseSchema.nullable(),
+    extractionDifferencePaise: paiseSchema.nullable(),
+    ledgerDifferencePaise: paiseSchema.nullable(),
+    pendingCount: z.number().int().nonnegative(),
+    rejectedCount: z.number().int().nonnegative(),
+    status: z.enum([
+      "metadata_required",
+      "account_required",
+      "review_pending",
+      "extraction_mismatch",
+      "ledger_mismatch",
+      "ready",
+      "reconciled",
+    ]),
+    reconciledAt: z.string().datetime().nullable(),
+    canReconcile: z.boolean(),
+  }),
   createdAt: z.string().datetime(),
 });
 
@@ -154,6 +178,14 @@ export const statementUploadResponseSchema = z.object({
 
 export const statementParseRequestSchema = z.object({
   password: z.string().max(256).optional(),
+});
+
+export const updateStatementReconciliationRequestSchema = z.object({
+  accountId: z.string().min(1),
+  periodStart: localDateSchema,
+  periodEnd: localDateSchema,
+  openingBalancePaise: paiseSchema,
+  closingBalancePaise: paiseSchema,
 });
 
 export const updateImportCandidateRequestSchema = z
@@ -649,6 +681,7 @@ export type ImportCandidate = z.infer<typeof importCandidateSchema>;
 export type ImportQueueResponse = z.infer<typeof importQueueResponseSchema>;
 export type StatementUploadResponse = z.infer<typeof statementUploadResponseSchema>;
 export type StatementParseRequest = z.infer<typeof statementParseRequestSchema>;
+export type UpdateStatementReconciliationRequest = z.infer<typeof updateStatementReconciliationRequestSchema>;
 export type UpdateImportCandidateRequest = z.infer<typeof updateImportCandidateRequestSchema>;
 export type ImportCandidateActionRequest = z.infer<typeof importCandidateActionRequestSchema>;
 export type RejectImportCandidatesRequest = z.infer<typeof rejectImportCandidatesRequestSchema>;

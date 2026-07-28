@@ -1,4 +1,5 @@
 import type {
+  ImportArtifact,
   ImportCandidate,
   ImportQueueResponse,
   ReferenceDataResponse,
@@ -10,10 +11,12 @@ import { createPortal } from "react-dom";
 import {
   approveImportCandidates,
   parseStatementArtifact,
+  reconcileStatement,
   rejectImportCandidates,
   resetImportCandidatesToPending,
   resolveImportDuplicate,
   updateImportCandidate,
+  updateStatementReconciliation,
   uploadStatement,
 } from "../lib/api";
 
@@ -29,11 +32,47 @@ function rupeesToPaise(value: string): number | null {
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) : null;
 }
 
+function signedRupeesToPaise(value: string): number | null {
+  const amount = Number(value.replace(/,/g, ""));
+  return Number.isFinite(amount) ? Math.round(amount * 100) : null;
+}
+
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).format(
     new Date(`${value}T00:00:00Z`),
   );
 }
+
+const reconciliationCopy: Record<ImportArtifact["reconciliation"]["status"], { label: string; explanation: string }> = {
+  account_required: {
+    label: "Choose account",
+    explanation: "Assign the account represented by this statement.",
+  },
+  metadata_required: {
+    label: "Balance details needed",
+    explanation: "Enter the statement period, opening balance, and closing balance.",
+  },
+  review_pending: {
+    label: "Review transactions",
+    explanation: "Approve or reject every detected row before final reconciliation.",
+  },
+  extraction_mismatch: {
+    label: "Statement rows do not add up",
+    explanation: "The extracted debits and credits do not reproduce the statement closing balance.",
+  },
+  ledger_mismatch: {
+    label: "Approved records differ",
+    explanation: "Rejected, reassigned, or missing rows prevent the approved records from matching the statement.",
+  },
+  ready: {
+    label: "Ready to reconcile",
+    explanation: "The statement movement and approved records both match the closing balance.",
+  },
+  reconciled: {
+    label: "Reconciled",
+    explanation: "This closing balance is now the trusted account balance for the statement date.",
+  },
+};
 
 export function ImportsView({ data, loading, money, referenceData }: ImportsViewProps) {
   const queryClient = useQueryClient();
@@ -54,15 +93,22 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const [rejectRequest, setRejectRequest] = useState<{ ids: string[]; label: string } | null>(null);
   const [rejectReason, setRejectReason] = useState("Not a valid transaction");
   const [resetRequest, setResetRequest] = useState<ImportCandidate | null>(null);
+  const [reconciling, setReconciling] = useState<ImportArtifact | null>(null);
+  const [reconcileAccountId, setReconcileAccountId] = useState("");
+  const [reconcilePeriodStart, setReconcilePeriodStart] = useState("");
+  const [reconcilePeriodEnd, setReconcilePeriodEnd] = useState("");
+  const [reconcileOpening, setReconcileOpening] = useState("");
+  const [reconcileClosing, setReconcileClosing] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const accounts = referenceData?.accounts ?? [];
   const categories = referenceData?.categories ?? [];
   const primarySalaryAccount = accounts.find(
     (account) => account.accountClass === "asset" && account.name.toLowerCase() === "primary salary account",
   );
+  const reconciliationAccount = accounts.find((account) => account.id === reconcileAccountId);
 
   useEffect(() => {
-    if (!editing && !rejectRequest && !resetRequest) return;
+    if (!editing && !rejectRequest && !resetRequest && !reconciling) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -70,13 +116,14 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
       setEditing(null);
       setRejectRequest(null);
       setResetRequest(null);
+      setReconciling(null);
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [editing, rejectRequest, resetRequest]);
+  }, [editing, rejectRequest, resetRequest, reconciling]);
 
   useEffect(() => {
     if (!uploadAccountId && primarySalaryAccount) {
@@ -181,6 +228,45 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
       await refresh();
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : "Duplicate resolution failed."),
+  });
+  const reconciliationDetailsMutation = useMutation({
+    mutationFn: ({
+      id,
+      accountId,
+      periodStart,
+      periodEnd,
+      openingBalancePaise,
+      closingBalancePaise,
+    }: {
+      id: string;
+      accountId: string;
+      periodStart: string;
+      periodEnd: string;
+      openingBalancePaise: number;
+      closingBalancePaise: number;
+    }) =>
+      updateStatementReconciliation(id, {
+        accountId,
+        periodStart,
+        periodEnd,
+        openingBalancePaise,
+        closingBalancePaise,
+      }),
+    onSuccess: async (artifact) => {
+      setReconciling(artifact);
+      setActionError(null);
+      await refresh();
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : "Balance details could not be saved."),
+  });
+  const reconcileMutation = useMutation({
+    mutationFn: (id: string) => reconcileStatement(id),
+    onSuccess: async (artifact) => {
+      setReconciling(artifact);
+      setActionError(null);
+      await refresh();
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : "Statement reconciliation failed."),
   });
 
   const candidates = useMemo(
@@ -308,6 +394,48 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     }
   }
 
+  function beginReconciliation(artifact: ImportArtifact) {
+    setReconciling(artifact);
+    setReconcileAccountId(artifact.accountId ?? primarySalaryAccount?.id ?? "");
+    setReconcilePeriodStart(artifact.reconciliation.periodStart ?? "");
+    setReconcilePeriodEnd(artifact.reconciliation.periodEnd ?? "");
+    setReconcileOpening(
+      artifact.reconciliation.openingBalancePaise == null
+        ? ""
+        : String(artifact.reconciliation.openingBalancePaise / 100),
+    );
+    setReconcileClosing(
+      artifact.reconciliation.closingBalancePaise == null
+        ? ""
+        : String(artifact.reconciliation.closingBalancePaise / 100),
+    );
+    setActionError(null);
+  }
+
+  function saveReconciliationDetails() {
+    if (!reconciling) return;
+    const openingBalancePaise = signedRupeesToPaise(reconcileOpening);
+    const closingBalancePaise = signedRupeesToPaise(reconcileClosing);
+    if (
+      !reconcileAccountId ||
+      !reconcilePeriodStart ||
+      !reconcilePeriodEnd ||
+      openingBalancePaise == null ||
+      closingBalancePaise == null
+    ) {
+      setActionError("Account, statement dates, opening balance, and closing balance are required.");
+      return;
+    }
+    reconciliationDetailsMutation.mutate({
+      id: reconciling.id,
+      accountId: reconcileAccountId,
+      periodStart: reconcilePeriodStart,
+      periodEnd: reconcilePeriodEnd,
+      openingBalancePaise,
+      closingBalancePaise,
+    });
+  }
+
   if (loading && !data) {
     return <section className="panel loading-panel">Loading the local review queue...</section>;
   }
@@ -425,7 +553,12 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                   <span>{artifact.approvedCount} posted</span>
                 </div>
                 <div className="artifact-parser">
-                  <small>{artifact.parserMessage}</small>
+                  <div className="artifact-parser-copy">
+                    <small>{artifact.parserMessage}</small>
+                    <span className={`reconciliation-status ${artifact.reconciliation.status}`}>
+                      {reconciliationCopy[artifact.reconciliation.status].label}
+                    </span>
+                  </div>
                   {(artifact.status === "failed" || artifact.status === "needs_parser") && (
                     <button
                       className="artifact-parse-button"
@@ -438,6 +571,15 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                         : artifact.parserMessage?.toLowerCase().includes("password")
                           ? "Unlock PDF"
                           : "Retry extraction"}
+                    </button>
+                  )}
+                  {artifact.status === "parsed" && (
+                    <button
+                      className="artifact-reconcile-button"
+                      onClick={() => beginReconciliation(artifact)}
+                      type="button"
+                    >
+                      {artifact.reconciliation.status === "reconciled" ? "View balance" : "Review balance"}
                     </button>
                   )}
                 </div>
@@ -785,6 +927,211 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
         </div>
       </section>
 
+      {reconciling &&
+        createPortal(
+          <div className="modal-backdrop" role="presentation">
+            <section
+              aria-labelledby="statement-reconciliation-title"
+              aria-modal="true"
+              className="wealth-modal reconciliation-modal"
+              role="dialog"
+            >
+              <div className="modal-title">
+                <div>
+                  <p className="eyebrow">STATEMENT BALANCE CONTROL</p>
+                  <h2 id="statement-reconciliation-title">Prove the closing balance</h2>
+                  <small>{reconciling.filename}</small>
+                </div>
+                <button onClick={() => setReconciling(null)} type="button">
+                  Close
+                </button>
+              </div>
+
+              <div className={`reconciliation-banner ${reconciling.reconciliation.status}`}>
+                <span>{reconciliationCopy[reconciling.reconciliation.status].label}</span>
+                <strong>{reconciliationCopy[reconciling.reconciliation.status].explanation}</strong>
+              </div>
+
+              <div className="reconciliation-fields">
+                <label className="wide">
+                  Statement account
+                  <select
+                    disabled={reconciling.reconciliation.status === "reconciled"}
+                    onChange={(event) => setReconcileAccountId(event.target.value)}
+                    value={reconcileAccountId}
+                  >
+                    <option value="">Choose account</option>
+                    <optgroup label="Bank accounts and wallets">
+                      {accounts
+                        .filter((account) => account.accountClass === "asset")
+                        .map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Credit cards and loans">
+                      {accounts
+                        .filter((account) => account.accountClass === "liability")
+                        .map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+                </label>
+                <label>
+                  Period starts
+                  <input
+                    disabled={reconciling.reconciliation.status === "reconciled"}
+                    onChange={(event) => setReconcilePeriodStart(event.target.value)}
+                    type="date"
+                    value={reconcilePeriodStart}
+                  />
+                </label>
+                <label>
+                  Period ends
+                  <input
+                    disabled={reconciling.reconciliation.status === "reconciled"}
+                    onChange={(event) => setReconcilePeriodEnd(event.target.value)}
+                    type="date"
+                    value={reconcilePeriodEnd}
+                  />
+                </label>
+                <label>
+                  Opening balance (INR)
+                  <input
+                    disabled={reconciling.reconciliation.status === "reconciled"}
+                    inputMode="decimal"
+                    onChange={(event) => setReconcileOpening(event.target.value)}
+                    placeholder="0.00"
+                    value={reconcileOpening}
+                  />
+                </label>
+                <label>
+                  Statement closing balance (INR)
+                  <input
+                    disabled={reconciling.reconciliation.status === "reconciled"}
+                    inputMode="decimal"
+                    onChange={(event) => setReconcileClosing(event.target.value)}
+                    placeholder="0.00"
+                    value={reconcileClosing}
+                  />
+                </label>
+              </div>
+
+              <div className="reconciliation-equation">
+                <article>
+                  <span>Opening balance</span>
+                  <strong>
+                    {reconciling.reconciliation.openingBalancePaise == null
+                      ? "Not entered"
+                      : money(reconciling.reconciliation.openingBalancePaise)}
+                  </strong>
+                </article>
+                <i>+</i>
+                <article>
+                  <span>Approved movement</span>
+                  <strong>{money(reconciling.reconciliation.recognizedMovementPaise)}</strong>
+                  <small>{reconciling.reconciliation.pendingCount} rows still pending</small>
+                </article>
+                <i>=</i>
+                <article>
+                  <span>Calculated close</span>
+                  <strong>
+                    {reconciling.reconciliation.expectedClosingBalancePaise == null
+                      ? "Not available"
+                      : money(reconciling.reconciliation.expectedClosingBalancePaise)}
+                  </strong>
+                </article>
+                <i>vs</i>
+                <article className={reconciling.reconciliation.ledgerDifferencePaise === 0 ? "matched" : "unmatched"}>
+                  <span>Statement close</span>
+                  <strong>
+                    {reconciling.reconciliation.closingBalancePaise == null
+                      ? "Not entered"
+                      : money(reconciling.reconciliation.closingBalancePaise)}
+                  </strong>
+                </article>
+              </div>
+
+              <div className="reconciliation-checks">
+                <article
+                  className={reconciling.reconciliation.extractionDifferencePaise === 0 ? "check-pass" : "check-fail"}
+                >
+                  <span>Extraction check</span>
+                  <strong>
+                    {reconciling.reconciliation.extractionDifferencePaise == null
+                      ? "Needs balance details"
+                      : reconciling.reconciliation.extractionDifferencePaise === 0
+                        ? "All source rows reproduce the statement"
+                        : `${money(Math.abs(reconciling.reconciliation.extractionDifferencePaise))} difference`}
+                  </strong>
+                  <small>Uses every debit and credit detected in the uploaded file.</small>
+                </article>
+                <article
+                  className={reconciling.reconciliation.ledgerDifferencePaise === 0 ? "check-pass" : "check-fail"}
+                >
+                  <span>Approved-record check</span>
+                  <strong>
+                    {reconciling.reconciliation.ledgerDifferencePaise == null
+                      ? "Complete the review first"
+                      : reconciling.reconciliation.ledgerDifferencePaise === 0
+                        ? "Approved records match the statement"
+                        : `${money(Math.abs(reconciling.reconciliation.ledgerDifferencePaise))} difference`}
+                  </strong>
+                  <small>
+                    {reconciling.reconciliation.rejectedCount} rejected · {reconciling.reconciliation.pendingCount}{" "}
+                    pending
+                  </small>
+                </article>
+              </div>
+
+              <p className="reconciliation-impact">
+                <strong>What happens when reconciled:</strong>{" "}
+                {reconciliationAccount?.id === "account-primary-bank"
+                  ? "the statement closing balance becomes this month’s trusted closing balance and the next month’s carryover."
+                  : reconciliationAccount?.accountClass === "liability"
+                    ? "the statement closing balance updates the loan or credit-card principal."
+                    : "the statement is locked as reviewed evidence for this account."}
+              </p>
+              {actionError && <p className="form-error">{actionError}</p>}
+              <div className="modal-actions reconciliation-actions">
+                <button onClick={() => setReconciling(null)} type="button">
+                  Close
+                </button>
+                {reconciling.reconciliation.status !== "reconciled" && (
+                  <button
+                    disabled={reconciliationDetailsMutation.isPending}
+                    onClick={saveReconciliationDetails}
+                    type="button"
+                  >
+                    {reconciliationDetailsMutation.isPending ? "Saving..." : "Save balance details"}
+                  </button>
+                )}
+                <button
+                  className="add-button"
+                  disabled={!reconciling.reconciliation.canReconcile || reconcileMutation.isPending}
+                  onClick={() => reconcileMutation.mutate(reconciling.id)}
+                  title={
+                    reconciling.reconciliation.canReconcile
+                      ? "Use this verified closing balance"
+                      : "Resolve the highlighted difference before reconciling"
+                  }
+                  type="button"
+                >
+                  {reconcileMutation.isPending
+                    ? "Reconciling..."
+                    : reconciling.reconciliation.status === "reconciled"
+                      ? "Balance reconciled"
+                      : "Reconcile account"}
+                </button>
+              </div>
+            </section>
+          </div>,
+          document.body,
+        )}
       {editing &&
         createPortal(
           <div className="modal-backdrop" role="presentation">

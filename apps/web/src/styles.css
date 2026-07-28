@@ -6511,7 +6511,32 @@ h2 {
   min-width: 0;
 }
 
-.artifact-parse-button {
+.artifact-parser-copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.reconciliation-status {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.reconciliation-status.ready,
+.reconciliation-status.reconciled {
+  color: var(--green);
+}
+
+.reconciliation-status.extraction_mismatch,
+.reconciliation-status.ledger_mismatch {
+  color: var(--red);
+}
+
+.artifact-parse-button,
+.artifact-reconcile-button {
   background: transparent;
   border: 1px solid var(--green);
   color: var(--green);
@@ -6521,6 +6546,11 @@ h2 {
   font-weight: 700;
   padding: 9px 11px;
   text-transform: uppercase;
+}
+
+.artifact-reconcile-button {
+  background: var(--green);
+  color: var(--paper);
 }
 
 .import-review-heading {
@@ -6911,6 +6941,159 @@ h2 {
   max-width: 820px;
 }
 
+.reconciliation-modal {
+  max-width: 980px;
+}
+
+.reconciliation-banner {
+  border-left: 5px solid var(--yellow);
+  display: grid;
+  gap: 5px;
+  margin-top: 18px;
+  padding: 14px 16px;
+}
+
+.reconciliation-banner span {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.reconciliation-banner strong {
+  font-size: 1rem;
+}
+
+.reconciliation-banner.ready,
+.reconciliation-banner.reconciled {
+  background: var(--mint);
+  border-left-color: var(--green);
+}
+
+.reconciliation-banner.extraction_mismatch,
+.reconciliation-banner.ledger_mismatch {
+  background: var(--red-soft);
+  border-left-color: var(--red);
+}
+
+.reconciliation-fields {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.reconciliation-fields label {
+  color: var(--muted);
+  display: grid;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  gap: 7px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.reconciliation-fields .wide {
+  grid-column: 1 / -1;
+}
+
+.reconciliation-fields input,
+.reconciliation-fields select {
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  min-height: 48px;
+  padding: 10px 12px;
+}
+
+.reconciliation-equation {
+  align-items: stretch;
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr) auto);
+  margin-top: 20px;
+  overflow-x: auto;
+  padding: 12px;
+}
+
+.reconciliation-equation article {
+  background: var(--paper-strong);
+  display: grid;
+  gap: 5px;
+  min-width: 145px;
+  padding: 14px;
+}
+
+.reconciliation-equation article.matched {
+  background: var(--mint);
+}
+
+.reconciliation-equation article.unmatched {
+  background: var(--red-soft);
+}
+
+.reconciliation-equation span,
+.reconciliation-checks span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.reconciliation-equation strong {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+}
+
+.reconciliation-equation small {
+  color: var(--muted);
+}
+
+.reconciliation-equation i {
+  align-self: center;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-style: normal;
+}
+
+.reconciliation-checks {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.reconciliation-checks article {
+  border-left: 4px solid var(--line-strong);
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+}
+
+.reconciliation-checks .check-pass {
+  background: var(--mint);
+  border-left-color: var(--green);
+}
+
+.reconciliation-checks .check-fail {
+  background: var(--red-soft);
+  border-left-color: var(--red);
+}
+
+.reconciliation-checks small {
+  color: var(--muted);
+}
+
+.reconciliation-impact {
+  background: var(--paper-strong);
+  border-left: 4px solid var(--yellow);
+  line-height: 1.55;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+}
+
 .import-editor-grid {
   display: grid;
   gap: 16px;
@@ -7215,6 +7398,32 @@ h2 {
   .artifact-counts,
   .artifact-parser {
     grid-column: 1 / -1;
+  }
+
+  .reconciliation-fields,
+  .reconciliation-checks {
+    grid-template-columns: 1fr;
+  }
+
+  .reconciliation-fields .wide {
+    grid-column: auto;
+  }
+
+  .reconciliation-equation {
+    grid-template-columns: 1fr;
+  }
+
+  .reconciliation-equation i {
+    justify-self: center;
+  }
+
+  .reconciliation-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reconciliation-actions button {
+    width: 100%;
   }
 
   .import-bulk-bar {

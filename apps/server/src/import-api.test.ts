@@ -2,6 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  budgetMonthResponseSchema,
+  importArtifactSchema,
   importCandidateSchema,
   importQueueResponseSchema,
   statementUploadResponseSchema,
@@ -85,6 +87,73 @@ describe("statement import API", () => {
     });
     expect(duplicate.statusCode).toBe(200);
     expect(statementUploadResponseSchema.parse(duplicate.json()).duplicate).toBe(true);
+    await app.close();
+  });
+
+  it("extracts, verifies, and applies a statement closing balance to the next month carryover", async () => {
+    const dataDirectory = mkdtempSync(join(tmpdir(), "finance-hero-import-api-"));
+    temporaryDirectories.push(dataDirectory);
+    const app = await buildApp({
+      config: {
+        host: "127.0.0.1",
+        port: 4317,
+        dataDirectory,
+        databaseKey: "server-import-test-key-with-at-least-32-characters",
+      },
+    });
+    const csv = [
+      "Transaction Date,Narration,Debit Amount,Credit Amount,Balance",
+      "10/07/2026,GROCERY STORE,1000,,9000",
+      "12/07/2026,REFUND,,500,9500",
+    ].join("\n");
+    const upload = statementUploadResponseSchema.parse(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/statement-uploads?filename=reconcile.csv&accountId=account-primary-bank",
+          headers: { "content-type": "application/octet-stream" },
+          payload: Buffer.from(csv),
+        })
+      ).json(),
+    );
+    expect(upload.artifact.reconciliation).toMatchObject({
+      status: "review_pending",
+      periodStart: "2026-07-10",
+      periodEnd: "2026-07-12",
+      openingBalancePaise: 1000000,
+      closingBalancePaise: 950000,
+      extractionDifferencePaise: 0,
+    });
+
+    const queue = importQueueResponseSchema.parse((await app.inject({ method: "GET", url: "/api/v1/imports" })).json());
+    const approve = await app.inject({
+      method: "POST",
+      url: "/api/v1/candidate-actions/approve",
+      payload: { ids: queue.candidates.map((candidate) => candidate.id) },
+    });
+    expect(approve.statusCode).toBe(200);
+    const readyQueue = importQueueResponseSchema.parse(approve.json());
+    expect(readyQueue.artifacts[0]?.reconciliation).toMatchObject({ status: "ready", canReconcile: true });
+
+    const reconcile = await app.inject({
+      method: "POST",
+      url: `/api/v1/imports/${upload.artifact.id}/reconcile`,
+    });
+    expect(reconcile.statusCode).toBe(200);
+    expect(importArtifactSchema.parse(reconcile.json()).reconciliation.status).toBe("reconciled");
+
+    const july = budgetMonthResponseSchema.parse(
+      (await app.inject({ method: "GET", url: "/api/v1/budgets/2026-07" })).json(),
+    );
+    const august = budgetMonthResponseSchema.parse(
+      (await app.inject({ method: "GET", url: "/api/v1/budgets/2026-08" })).json(),
+    );
+    expect(july.cashBridge).toMatchObject({
+      statementBalancePaise: 950000,
+      reconciledOn: "2026-07-12",
+      closingBalancePaise: 950000,
+    });
+    expect(august.cashBridge.carryoverPaise).toBe(950000);
     await app.close();
   });
 

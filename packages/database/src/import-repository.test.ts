@@ -64,6 +64,67 @@ describe("import repository", () => {
     database.close();
   });
 
+  it("refreshes missing statement balance metadata on a duplicate upload without replacing posted rows", () => {
+    const { database, repository } = createRepository();
+    const input = {
+      filename: "bank.csv",
+      contentHash: "legacy-parser-hash",
+      mimeType: "text/csv",
+      sizeBytes: 120,
+      accountId: "account-primary-bank",
+      status: "parsed" as const,
+      parserMessage: "1 transaction candidate extracted.",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-20",
+          payee: "Test Cafe",
+          amountPaise: 42500,
+          direction: "debit" as const,
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: { Date: "20/07/2026", Description: "Test Cafe" },
+        },
+      ],
+    };
+
+    const created = repository.createArtifact(input);
+    const candidateId = repository.getQueue().candidates[0]?.id ?? "";
+    repository.approveCandidates([candidateId]);
+
+    const duplicate = repository.createArtifact({
+      ...input,
+      parserMessage: "1 transaction candidate extracted with statement balances.",
+      reconciliation: {
+        periodStart: "2026-07-01",
+        periodEnd: "2026-07-31",
+        openingBalanceAssetPaise: 100000,
+        openingBalanceLiabilityPaise: null,
+        closingBalancePaise: 57500,
+      },
+    });
+
+    expect(duplicate).toMatchObject({
+      duplicate: true,
+      artifact: {
+        id: created.artifact.id,
+        approvedCount: 1,
+        pendingCount: 0,
+        reconciliation: {
+          periodStart: "2026-07-01",
+          periodEnd: "2026-07-31",
+          openingBalancePaise: 100000,
+          closingBalancePaise: 57500,
+          status: "ready",
+          canReconcile: true,
+        },
+      },
+    });
+    expect(repository.getQueue().candidates).toHaveLength(1);
+    database.close();
+  });
+
   it("edits and atomically approves candidates into the balanced ledger", () => {
     const { database, ledger, repository } = createRepository();
     repository.createArtifact({
@@ -469,6 +530,177 @@ describe("import repository", () => {
       categoryId: "category-groceries",
       warnings: expect.arrayContaining(["Merchant rule applied"]),
     });
+    database.close();
+  });
+
+  it("reconciles approved statement movement and makes the closing balance authoritative", () => {
+    const { database, repository } = createRepository();
+    const created = repository.createArtifact({
+      filename: "july-bank.csv",
+      contentHash: "statement-reconciliation-ready",
+      mimeType: "text/csv",
+      sizeBytes: 200,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      reconciliation: {
+        periodStart: "2026-07-01",
+        periodEnd: "2026-07-31",
+        openingBalanceAssetPaise: 1000000,
+        openingBalanceLiabilityPaise: 800000,
+        closingBalancePaise: 950000,
+      },
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-10",
+          payee: "Grocery purchase",
+          amountPaise: 100000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+        {
+          sourceRow: 3,
+          occurredOn: "2026-07-12",
+          payee: "Refund",
+          amountPaise: 50000,
+          direction: "credit",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+
+    expect(created.artifact.reconciliation).toMatchObject({
+      status: "review_pending",
+      extractedMovementPaise: -50000,
+      extractionDifferencePaise: 0,
+      pendingCount: 2,
+    });
+
+    repository.approveCandidates(repository.getQueue().candidates.map((candidate) => candidate.id));
+    expect(
+      repository.getQueue().artifacts.find((artifact) => artifact.id === created.artifact.id)?.reconciliation,
+    ).toMatchObject({
+      status: "ready",
+      recognizedMovementPaise: -50000,
+      expectedClosingBalancePaise: 950000,
+      ledgerDifferencePaise: 0,
+      canReconcile: true,
+    });
+
+    expect(repository.reconcileStatement(created.artifact.id).reconciliation).toMatchObject({
+      status: "reconciled",
+      reconciledAt: expect.any(String),
+    });
+    expect(
+      database.connection
+        .prepare(`
+          SELECT month, account_id AS accountId, statement_balance_paise AS statementBalancePaise,
+                 reconciled_on AS reconciledOn
+          FROM monthly_bank_reconciliations
+          WHERE month = '2026-07'
+        `)
+        .get(),
+    ).toEqual({
+      month: "2026-07",
+      accountId: "account-primary-bank",
+      statementBalancePaise: 950000,
+      reconciledOn: "2026-07-31",
+    });
+    database.close();
+  });
+
+  it("blocks reconciliation when rejected rows leave the approved record short", () => {
+    const { database, repository } = createRepository();
+    const created = repository.createArtifact({
+      filename: "unmatched-bank.csv",
+      contentHash: "statement-reconciliation-mismatch",
+      mimeType: "text/csv",
+      sizeBytes: 120,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      reconciliation: {
+        periodStart: "2026-07-01",
+        periodEnd: "2026-07-31",
+        openingBalanceAssetPaise: 1000000,
+        openingBalanceLiabilityPaise: 800000,
+        closingBalancePaise: 900000,
+      },
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-10",
+          payee: "Unrecognized debit",
+          amountPaise: 100000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    const candidate = repository.getQueue().candidates[0];
+    if (!candidate) throw new Error("Expected reconciliation candidate.");
+
+    repository.rejectCandidates([candidate.id], "Needs investigation");
+    expect(
+      repository.getQueue().artifacts.find((artifact) => artifact.id === created.artifact.id)?.reconciliation,
+    ).toMatchObject({
+      status: "ledger_mismatch",
+      extractionDifferencePaise: 0,
+      ledgerDifferencePaise: -100000,
+      rejectedCount: 1,
+      canReconcile: false,
+    });
+    expect(() => repository.reconcileStatement(created.artifact.id)).toThrow(
+      "Resolve the statement review and balance differences",
+    );
+    database.close();
+  });
+
+  it("allows corrected statement metadata and propagates the selected account to pending rows", () => {
+    const { database, repository } = createRepository();
+    const created = repository.createArtifact({
+      filename: "manual-balance.csv",
+      contentHash: "statement-reconciliation-manual",
+      mimeType: "text/csv",
+      sizeBytes: 90,
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-10",
+          payee: "Coffee",
+          amountPaise: 50000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    expect(created.artifact.reconciliation.status).toBe("account_required");
+
+    const updated = repository.updateStatementReconciliation(created.artifact.id, {
+      accountId: "account-primary-bank",
+      periodStart: "2026-07-01",
+      periodEnd: "2026-07-31",
+      openingBalancePaise: 1000000,
+      closingBalancePaise: 950000,
+    });
+    expect(updated.reconciliation).toMatchObject({
+      status: "review_pending",
+      openingBalancePaise: 1000000,
+      closingBalancePaise: 950000,
+      extractionDifferencePaise: 0,
+    });
+    expect(repository.getQueue().candidates[0]?.accountId).toBe("account-primary-bank");
     database.close();
   });
 

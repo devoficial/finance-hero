@@ -44,6 +44,8 @@ pnpm start:local
 - Import queue: `GET /api/v1/imports`
 - Statement upload: `POST /api/v1/statement-uploads?filename=&accountId=`
 - Retry/unlock statement extraction: `POST /api/v1/imports/:id/parse`
+- Update statement balance details: `PATCH /api/v1/imports/:id/reconciliation`
+- Complete statement reconciliation: `POST /api/v1/imports/:id/reconcile`
 - Candidate edit: `PATCH /api/v1/candidates/:id`
 - Candidate approval/rejection: `POST /api/v1/candidate-actions/approve`, `POST /api/v1/candidate-actions/reject`
 
@@ -105,7 +107,10 @@ before updating it.
 - Scanned PDFs use a fully local macOS PDFKit/Apple Vision helper. Cross-source semantic duplicates require an
   explicit merge-or-keep decision, debit candidates support balanced category splits, and approved detailed rows
   transactionally replace their migrated monthly aggregates. Reviewed merchant mappings can be reused locally.
-- Additional institution-specific fixtures, statement opening/closing-balance reconciliation, Gmail discovery, and
-  iPhone Shortcut ingestion remain pending. Unsupported layouts stay outside the financial record.
+- Statement opening/closing-balance reconciliation is implemented with independent extraction and approved-record
+  checks. The primary salary account's reconciled close drives the next month's carryover; reopening a candidate
+  invalidates the completed reconciliation.
+- Additional institution-specific fixtures, Gmail discovery, and iPhone Shortcut ingestion remain pending.
+  Unsupported layouts stay outside the financial record.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
 - PWA SVG branding is sufficient for development; release-quality iOS PNG icons are pending.

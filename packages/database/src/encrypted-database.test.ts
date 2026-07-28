@@ -34,6 +34,19 @@ describe("encrypted database", () => {
       value: string;
     };
     expect(row.value).toBe("phase-5");
+    const importArtifactColumns = (
+      reopened.connection.prepare("PRAGMA table_info(import_artifacts)").all() as Array<{ name: string }>
+    ).map((column) => column.name);
+    expect(importArtifactColumns).toEqual(
+      expect.arrayContaining([
+        "statement_period_start",
+        "statement_period_end",
+        "opening_balance_asset_paise",
+        "opening_balance_liability_paise",
+        "closing_balance_paise",
+        "reconciled_at",
+      ]),
+    );
     reopened.close();
   });
 });

@@ -18,7 +18,32 @@ export interface ImportArtifactRecord {
   pendingCount: number;
   approvedCount: number;
   rejectedCount: number;
+  reconciliation: ImportArtifactReconciliationRecord;
   createdAt: string;
+}
+
+export interface ImportArtifactReconciliationRecord {
+  periodStart: string | null;
+  periodEnd: string | null;
+  openingBalancePaise: number | null;
+  closingBalancePaise: number | null;
+  extractedMovementPaise: number;
+  recognizedMovementPaise: number;
+  expectedClosingBalancePaise: number | null;
+  extractionDifferencePaise: number | null;
+  ledgerDifferencePaise: number | null;
+  pendingCount: number;
+  rejectedCount: number;
+  status:
+    | "metadata_required"
+    | "account_required"
+    | "review_pending"
+    | "extraction_mismatch"
+    | "ledger_mismatch"
+    | "ready"
+    | "reconciled";
+  reconciledAt: string | null;
+  canReconcile: boolean;
 }
 
 export interface ImportArtifactSource {
@@ -75,6 +100,13 @@ export interface CreateImportArtifactInput {
   accountId?: string;
   status: ImportArtifactStatus;
   parserMessage?: string;
+  reconciliation?: {
+    periodStart: string | null;
+    periodEnd: string | null;
+    openingBalanceAssetPaise: number | null;
+    openingBalanceLiabilityPaise: number | null;
+    closingBalancePaise: number | null;
+  };
   rows: Array<{
     sourceRow: number;
     occurredOn: string | null;
@@ -86,6 +118,14 @@ export interface CreateImportArtifactInput {
     warnings: string[];
     source: Record<string, string>;
   }>;
+}
+
+export interface UpdateStatementReconciliationInput {
+  accountId: string;
+  periodStart: string;
+  periodEnd: string;
+  openingBalancePaise: number;
+  closingBalancePaise: number;
 }
 
 export interface UpdateImportCandidateInput {
@@ -130,6 +170,16 @@ interface CandidateRow {
   duplicateResolution: ImportCandidateRecord["duplicateResolution"];
   splitsJson: string;
   updatedAt: string;
+}
+
+interface ArtifactRow extends Omit<ImportArtifactRecord, "reconciliation"> {
+  accountClass: "asset" | "liability" | null;
+  statementPeriodStart: string | null;
+  statementPeriodEnd: string | null;
+  openingBalanceAssetPaise: number | null;
+  openingBalanceLiabilityPaise: number | null;
+  closingBalancePaise: number | null;
+  reconciledAt: string | null;
 }
 
 function parseJson<T>(value: string, fallback: T): T {
@@ -177,6 +227,83 @@ export class ImportRepository {
         VALUES (?, ?, ?, ?, ?, ?)
       `)
       .run(randomUUID(), action, entityType, entityId, JSON.stringify(detail), now);
+  }
+
+  private invalidateArtifactReconciliation(artifactId: string) {
+    this.database.connection.prepare("UPDATE import_artifacts SET reconciled_at = NULL WHERE id = ?").run(artifactId);
+  }
+
+  private mapArtifact(row: ArtifactRow): ImportArtifactRecord {
+    const accountSign = row.accountClass === "liability" ? -1 : 1;
+    const movement = this.database.connection
+      .prepare(`
+        SELECT
+          COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount_paise ELSE -amount_paise END), 0) AS assetMovement,
+          COALESCE(SUM(CASE
+            WHEN status = 'approved' OR duplicate_resolution = 'merged'
+              THEN CASE WHEN direction = 'credit' THEN amount_paise ELSE -amount_paise END
+            ELSE 0 END), 0) AS recognizedAssetMovement,
+          COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pendingCount,
+          COALESCE(SUM(CASE WHEN status = 'rejected' AND duplicate_resolution <> 'merged' THEN 1 ELSE 0 END), 0)
+            AS rejectedCount,
+          COALESCE(SUM(CASE WHEN account_id IS NULL OR account_id <> ? THEN 1 ELSE 0 END), 0) AS wrongAccountCount
+        FROM import_candidates
+        WHERE artifact_id = ?
+      `)
+      .get(row.accountId ?? "", row.id) as {
+      assetMovement: number;
+      recognizedAssetMovement: number;
+      pendingCount: number;
+      rejectedCount: number;
+      wrongAccountCount: number;
+    };
+    const openingBalancePaise =
+      row.accountClass === "liability" ? row.openingBalanceLiabilityPaise : row.openingBalanceAssetPaise;
+    const extractedMovementPaise = movement.assetMovement * accountSign;
+    const recognizedMovementPaise = movement.recognizedAssetMovement * accountSign;
+    const hasMetadata =
+      row.statementPeriodStart != null &&
+      row.statementPeriodEnd != null &&
+      openingBalancePaise != null &&
+      row.closingBalancePaise != null;
+    const expectedExtractedClosing = hasMetadata ? openingBalancePaise + extractedMovementPaise : null;
+    const expectedClosingBalancePaise = hasMetadata ? openingBalancePaise + recognizedMovementPaise : null;
+    const extractionDifferencePaise =
+      expectedExtractedClosing == null || row.closingBalancePaise == null
+        ? null
+        : row.closingBalancePaise - expectedExtractedClosing;
+    const ledgerDifferencePaise =
+      expectedClosingBalancePaise == null || row.closingBalancePaise == null
+        ? null
+        : row.closingBalancePaise - expectedClosingBalancePaise;
+    let status: ImportArtifactReconciliationRecord["status"];
+    if (!row.accountId || !row.accountClass) status = "account_required";
+    else if (!hasMetadata || row.rowCount === 0) status = "metadata_required";
+    else if (movement.pendingCount > 0) status = "review_pending";
+    else if (extractionDifferencePaise !== 0) status = "extraction_mismatch";
+    else if (ledgerDifferencePaise !== 0 || movement.rejectedCount > 0 || movement.wrongAccountCount > 0)
+      status = "ledger_mismatch";
+    else status = row.reconciledAt ? "reconciled" : "ready";
+    const canReconcile = status === "ready";
+    return {
+      ...row,
+      reconciliation: {
+        periodStart: row.statementPeriodStart,
+        periodEnd: row.statementPeriodEnd,
+        openingBalancePaise,
+        closingBalancePaise: row.closingBalancePaise,
+        extractedMovementPaise,
+        recognizedMovementPaise,
+        expectedClosingBalancePaise,
+        extractionDifferencePaise,
+        ledgerDifferencePaise,
+        pendingCount: movement.pendingCount,
+        rejectedCount: movement.rejectedCount,
+        status,
+        reconciledAt: row.reconciledAt,
+        canReconcile,
+      },
+    };
   }
 
   private applyMerchantRule(input: {
@@ -446,8 +573,15 @@ export class ImportRepository {
     const artifact = this.database.connection
       .prepare(`
         SELECT a.id, a.filename, a.mime_type AS mimeType, a.size_bytes AS sizeBytes,
-               a.account_id AS accountId, account.name AS accountName, a.status,
+               a.account_id AS accountId, account.name AS accountName,
+               account.account_class AS accountClass, a.status,
                a.parser_message AS parserMessage, a.row_count AS rowCount, a.created_at AS createdAt,
+               a.statement_period_start AS statementPeriodStart,
+               a.statement_period_end AS statementPeriodEnd,
+               a.opening_balance_asset_paise AS openingBalanceAssetPaise,
+               a.opening_balance_liability_paise AS openingBalanceLiabilityPaise,
+               a.closing_balance_paise AS closingBalancePaise,
+               a.reconciled_at AS reconciledAt,
                COALESCE(SUM(CASE WHEN c.status = 'pending' THEN 1 ELSE 0 END), 0) AS pendingCount,
                COALESCE(SUM(CASE WHEN c.status = 'approved' THEN 1 ELSE 0 END), 0) AS approvedCount,
                COALESCE(SUM(CASE WHEN c.status = 'rejected' THEN 1 ELSE 0 END), 0) AS rejectedCount
@@ -457,11 +591,11 @@ export class ImportRepository {
         WHERE a.id = ?
         GROUP BY a.id
       `)
-      .get(id) as ImportArtifactRecord | undefined;
+      .get(id) as ArtifactRow | undefined;
     if (!artifact) {
       throw new Error("Statement artifact does not exist.");
     }
-    return artifact;
+    return this.mapArtifact(artifact);
   }
 
   getArtifactSource(id: string): ImportArtifactSource {
@@ -486,8 +620,15 @@ export class ImportRepository {
     const artifacts = this.database.connection
       .prepare(`
         SELECT a.id, a.filename, a.mime_type AS mimeType, a.size_bytes AS sizeBytes,
-               a.account_id AS accountId, account.name AS accountName, a.status,
+               a.account_id AS accountId, account.name AS accountName,
+               account.account_class AS accountClass, a.status,
                a.parser_message AS parserMessage, a.row_count AS rowCount, a.created_at AS createdAt,
+               a.statement_period_start AS statementPeriodStart,
+               a.statement_period_end AS statementPeriodEnd,
+               a.opening_balance_asset_paise AS openingBalanceAssetPaise,
+               a.opening_balance_liability_paise AS openingBalanceLiabilityPaise,
+               a.closing_balance_paise AS closingBalancePaise,
+               a.reconciled_at AS reconciledAt,
                COALESCE(SUM(CASE WHEN c.status = 'pending' THEN 1 ELSE 0 END), 0) AS pendingCount,
                COALESCE(SUM(CASE WHEN c.status = 'approved' THEN 1 ELSE 0 END), 0) AS approvedCount,
                COALESCE(SUM(CASE WHEN c.status = 'rejected' THEN 1 ELSE 0 END), 0) AS rejectedCount
@@ -498,7 +639,7 @@ export class ImportRepository {
         ORDER BY a.created_at DESC
         LIMIT 50
       `)
-      .all() as ImportArtifactRecord[];
+      .all() as ArtifactRow[];
     const rows = this.database.connection
       .prepare(`
         SELECT c.id, c.artifact_id AS artifactId, a.filename, c.source_row AS sourceRow,
@@ -535,7 +676,7 @@ export class ImportRepository {
     const candidates = rows.map((row) => this.mapCandidate(row));
     return {
       ...counts,
-      artifacts,
+      artifacts: artifacts.map((artifact) => this.mapArtifact(artifact)),
       candidates,
     };
   }
@@ -548,6 +689,44 @@ export class ImportRepository {
       .prepare("SELECT id FROM import_artifacts WHERE content_hash = ?")
       .get(input.contentHash) as { id: string } | undefined;
     if (duplicate) {
+      const existing = this.getArtifact(duplicate.id);
+      const reconciliation = input.reconciliation;
+      const needsMetadata =
+        existing.reconciliation.reconciledAt === null &&
+        (existing.reconciliation.periodStart === null ||
+          existing.reconciliation.periodEnd === null ||
+          existing.reconciliation.openingBalancePaise === null ||
+          existing.reconciliation.closingBalancePaise === null);
+      if (reconciliation && needsMetadata) {
+        const now = new Date().toISOString();
+        this.database.connection
+          .prepare(`
+            UPDATE import_artifacts
+            SET parser_message = COALESCE(?, parser_message),
+                statement_period_start = COALESCE(statement_period_start, ?),
+                statement_period_end = COALESCE(statement_period_end, ?),
+                opening_balance_asset_paise = COALESCE(opening_balance_asset_paise, ?),
+                opening_balance_liability_paise = COALESCE(opening_balance_liability_paise, ?),
+                closing_balance_paise = COALESCE(closing_balance_paise, ?)
+            WHERE id = ?
+          `)
+          .run(
+            input.parserMessage ?? null,
+            reconciliation.periodStart,
+            reconciliation.periodEnd,
+            reconciliation.openingBalanceAssetPaise,
+            reconciliation.openingBalanceLiabilityPaise,
+            reconciliation.closingBalancePaise,
+            duplicate.id,
+          );
+        this.audit(
+          "import.reconciliation_metadata_refreshed",
+          "import_artifact",
+          duplicate.id,
+          { filename: input.filename },
+          now,
+        );
+      }
       return { artifact: this.getArtifact(duplicate.id), duplicate: true };
     }
 
@@ -567,8 +746,10 @@ export class ImportRepository {
         .prepare(`
           INSERT INTO import_artifacts
             (id, filename, content_hash, mime_type, size_bytes, account_id, status,
-             parser_message, row_count, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             parser_message, row_count, statement_period_start, statement_period_end,
+             opening_balance_asset_paise, opening_balance_liability_paise,
+             closing_balance_paise, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         .run(
           artifactId,
@@ -580,6 +761,11 @@ export class ImportRepository {
           input.status,
           input.parserMessage ?? null,
           input.rows.length,
+          input.reconciliation?.periodStart ?? null,
+          input.reconciliation?.periodEnd ?? null,
+          input.reconciliation?.openingBalanceAssetPaise ?? null,
+          input.reconciliation?.openingBalanceLiabilityPaise ?? null,
+          input.reconciliation?.closingBalancePaise ?? null,
           now,
         );
       const insertCandidate = this.database.connection.prepare(`
@@ -645,7 +831,7 @@ export class ImportRepository {
 
   replaceArtifactParseResult(
     id: string,
-    input: Pick<CreateImportArtifactInput, "status" | "parserMessage" | "rows">,
+    input: Pick<CreateImportArtifactInput, "status" | "parserMessage" | "rows" | "reconciliation">,
   ): ImportArtifactRecord {
     const artifact = this.getArtifactSource(id);
     if (artifact.approvedCount > 0) {
@@ -657,10 +843,23 @@ export class ImportRepository {
       this.database.connection
         .prepare(`
           UPDATE import_artifacts
-          SET status = ?, parser_message = ?, row_count = ?
+          SET status = ?, parser_message = ?, row_count = ?,
+              statement_period_start = ?, statement_period_end = ?,
+              opening_balance_asset_paise = ?, opening_balance_liability_paise = ?,
+              closing_balance_paise = ?, reconciled_at = NULL
           WHERE id = ?
         `)
-        .run(input.status, input.parserMessage ?? null, input.rows.length, id);
+        .run(
+          input.status,
+          input.parserMessage ?? null,
+          input.rows.length,
+          input.reconciliation?.periodStart ?? null,
+          input.reconciliation?.periodEnd ?? null,
+          input.reconciliation?.openingBalanceAssetPaise ?? null,
+          input.reconciliation?.openingBalanceLiabilityPaise ?? null,
+          input.reconciliation?.closingBalancePaise ?? null,
+          id,
+        );
 
       const insertCandidate = this.database.connection.prepare(`
         INSERT INTO import_candidates
@@ -714,6 +913,119 @@ export class ImportRepository {
         "import_artifact",
         id,
         { rowCount: input.rows.length, status: input.status },
+        now,
+      );
+    });
+    write.immediate();
+    return this.getArtifact(id);
+  }
+
+  updateStatementReconciliation(id: string, input: UpdateStatementReconciliationInput): ImportArtifactRecord {
+    const artifact = this.getArtifact(id);
+    if (input.periodStart > input.periodEnd) {
+      throw new Error("Statement period start must be on or before its end date.");
+    }
+    const account = this.database.connection
+      .prepare("SELECT account_class AS accountClass FROM accounts WHERE id = ? AND is_active = 1")
+      .get(input.accountId) as { accountClass: "asset" | "liability" } | undefined;
+    if (!account) {
+      throw new Error("Selected statement account does not exist.");
+    }
+    const now = new Date().toISOString();
+    this.database.connection
+      .prepare(`
+        UPDATE import_artifacts
+        SET account_id = ?, statement_period_start = ?, statement_period_end = ?,
+            opening_balance_asset_paise = ?, opening_balance_liability_paise = ?,
+            closing_balance_paise = ?, reconciled_at = NULL
+        WHERE id = ?
+      `)
+      .run(
+        input.accountId,
+        input.periodStart,
+        input.periodEnd,
+        input.openingBalancePaise,
+        input.openingBalancePaise,
+        input.closingBalancePaise,
+        id,
+      );
+    this.database.connection
+      .prepare(`
+        UPDATE import_candidates
+        SET account_id = ?, version = version + 1, updated_at = ?
+        WHERE artifact_id = ? AND status = 'pending'
+      `)
+      .run(input.accountId, now, id);
+    this.refreshDuplicateMatches(now);
+    this.audit(
+      "import.reconciliation_updated",
+      "import_artifact",
+      id,
+      { before: artifact.reconciliation, after: input },
+      now,
+    );
+    return this.getArtifact(id);
+  }
+
+  reconcileStatement(id: string): ImportArtifactRecord {
+    const artifact = this.getArtifact(id);
+    if (!artifact.reconciliation.canReconcile || !artifact.accountId) {
+      throw new Error("Resolve the statement review and balance differences before reconciling this account.");
+    }
+    const { periodEnd, closingBalancePaise } = artifact.reconciliation;
+    if (!periodEnd || closingBalancePaise == null) {
+      throw new Error("Statement period and closing balance are required.");
+    }
+    const account = this.database.connection
+      .prepare("SELECT account_class AS accountClass FROM accounts WHERE id = ?")
+      .get(artifact.accountId) as { accountClass: "asset" | "liability" } | undefined;
+    if (!account) {
+      throw new Error("Statement account does not exist.");
+    }
+    const now = new Date().toISOString();
+    const write = this.database.connection.transaction(() => {
+      this.database.connection.prepare("UPDATE import_artifacts SET reconciled_at = ? WHERE id = ?").run(now, id);
+      if (artifact.accountId === "account-primary-bank") {
+        this.database.connection
+          .prepare(`
+            INSERT INTO monthly_bank_reconciliations
+              (month, account_id, statement_balance_paise, reconciled_on, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(month) DO UPDATE SET
+              account_id = excluded.account_id,
+              statement_balance_paise = excluded.statement_balance_paise,
+              reconciled_on = excluded.reconciled_on,
+              updated_at = excluded.updated_at
+            WHERE excluded.reconciled_on >= monthly_bank_reconciliations.reconciled_on
+          `)
+          .run(periodEnd.slice(0, 7), artifact.accountId, closingBalancePaise, periodEnd, now);
+      }
+      if (account.accountClass === "liability") {
+        this.database.connection
+          .prepare(`
+            UPDATE debts
+            SET original_amount_paise = MAX(original_amount_paise, ?),
+                current_principal_paise = ?,
+                status = CASE WHEN ? = 0 THEN 'cleared' ELSE 'active' END,
+                cleared_at = CASE WHEN ? = 0 THEN ? ELSE NULL END,
+                updated_at = ?
+            WHERE account_id = ?
+          `)
+          .run(
+            closingBalancePaise,
+            closingBalancePaise,
+            closingBalancePaise,
+            closingBalancePaise,
+            now,
+            now,
+            artifact.accountId,
+          );
+      }
+      this.audit(
+        "import.statement_reconciled",
+        "import_artifact",
+        id,
+        { accountId: artifact.accountId, periodEnd, closingBalancePaise },
         now,
       );
     });
@@ -815,6 +1127,7 @@ export class ImportRepository {
           now,
           id,
         );
+      this.invalidateArtifactReconciliation(existing.artifactId);
       this.refreshDuplicateMatches(now);
       if (input.rememberMerchantRule) {
         this.saveMerchantRule(this.getCandidateRow(id), now);
@@ -877,6 +1190,7 @@ export class ImportRepository {
             WHERE id = ?
           `)
           .run(transaction.id, now, candidate.id);
+        this.invalidateArtifactReconciliation(candidate.artifactId);
         this.audit(
           "import.candidate_approved",
           "import_candidate",
@@ -913,6 +1227,7 @@ export class ImportRepository {
             WHERE id = ?
           `)
           .run(normalizedReason, now, id);
+        this.invalidateArtifactReconciliation(candidate.artifactId);
         this.audit("import.candidate_rejected", "import_candidate", id, { reason: normalizedReason }, now);
       }
     });
@@ -973,6 +1288,7 @@ export class ImportRepository {
             WHERE id = ?
           `)
           .run(now, candidate.id);
+        this.invalidateArtifactReconciliation(candidate.artifactId);
         this.refreshDuplicateMatches(now);
         this.audit(
           "import.candidate_reset_pending",
@@ -1001,6 +1317,7 @@ export class ImportRepository {
           WHERE id = ?
         `)
         .run(now, id);
+      this.invalidateArtifactReconciliation(candidate.artifactId);
       this.audit(
         "import.duplicate_kept_distinct",
         "import_candidate",
@@ -1019,6 +1336,7 @@ export class ImportRepository {
         WHERE id = ?
       `)
       .run(now, id);
+    this.invalidateArtifactReconciliation(candidate.artifactId);
     this.audit(
       "import.duplicate_merged",
       "import_candidate",

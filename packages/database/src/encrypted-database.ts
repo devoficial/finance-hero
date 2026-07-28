@@ -264,6 +264,12 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       status TEXT NOT NULL CHECK (status IN ('parsed', 'needs_parser', 'failed')),
       parser_message TEXT,
       row_count INTEGER NOT NULL DEFAULT 0 CHECK (row_count >= 0),
+      statement_period_start TEXT CHECK (statement_period_start IS NULL OR length(statement_period_start) = 10),
+      statement_period_end TEXT CHECK (statement_period_end IS NULL OR length(statement_period_end) = 10),
+      opening_balance_asset_paise INTEGER,
+      opening_balance_liability_paise INTEGER,
+      closing_balance_paise INTEGER,
+      reconciled_at TEXT,
       created_at TEXT NOT NULL
     ) STRICT;
 
@@ -373,6 +379,29 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     CREATE INDEX IF NOT EXISTS import_candidates_fingerprint_idx ON import_candidates(fingerprint, status);
     CREATE INDEX IF NOT EXISTS import_candidates_duplicate_idx ON import_candidates(duplicate_of_candidate_id);
   `);
+
+  const importArtifactColumns = database.connection.prepare("PRAGMA table_info(import_artifacts)").all() as Array<{
+    name: string;
+  }>;
+  const artifactColumns: Array<{ name: string; sql: string }> = [
+    { name: "statement_period_start", sql: "ALTER TABLE import_artifacts ADD COLUMN statement_period_start TEXT" },
+    { name: "statement_period_end", sql: "ALTER TABLE import_artifacts ADD COLUMN statement_period_end TEXT" },
+    {
+      name: "opening_balance_asset_paise",
+      sql: "ALTER TABLE import_artifacts ADD COLUMN opening_balance_asset_paise INTEGER",
+    },
+    {
+      name: "opening_balance_liability_paise",
+      sql: "ALTER TABLE import_artifacts ADD COLUMN opening_balance_liability_paise INTEGER",
+    },
+    { name: "closing_balance_paise", sql: "ALTER TABLE import_artifacts ADD COLUMN closing_balance_paise INTEGER" },
+    { name: "reconciled_at", sql: "ALTER TABLE import_artifacts ADD COLUMN reconciled_at TEXT" },
+  ];
+  for (const column of artifactColumns) {
+    if (!importArtifactColumns.some((existing) => existing.name === column.name)) {
+      database.connection.exec(column.sql);
+    }
+  }
   database.connection
     .prepare(`
       UPDATE financial_goals

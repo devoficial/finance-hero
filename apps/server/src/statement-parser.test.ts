@@ -126,6 +126,33 @@ describe("statement delimited parser", () => {
       expect.objectContaining({ payee: "INTEREST", amountPaise: 40800, direction: "credit" }),
       expect.objectContaining({ payee: "RENT", amountPaise: 1643300, direction: "debit" }),
     ]);
+    expect(parsed.reconciliation).toMatchObject({
+      periodStart: "2026-07-01",
+      periodEnd: "2026-07-02",
+      openingBalanceAssetPaise: 24985091,
+      closingBalancePaise: 22882591,
+    });
+  });
+
+  it("derives the same statement balances from newest-first exports", () => {
+    const parsed = parseStatementDelimitedFile(
+      Buffer.from(
+        [
+          "Date,Description,Debit,Credit,Balance",
+          "02/07/2026,REFUND,,500,9500",
+          "01/07/2026,GROCERIES,1000,,9000",
+        ].join("\n"),
+      ),
+      "newest-first.csv",
+    );
+
+    expect(parsed.reconciliation).toEqual({
+      periodStart: "2026-07-01",
+      periodEnd: "2026-07-02",
+      openingBalanceAssetPaise: 1000000,
+      openingBalanceLiabilityPaise: 800000,
+      closingBalancePaise: 950000,
+    });
   });
 
   it("rejects a table without recognizable statement headers", () => {
@@ -220,6 +247,12 @@ describe("statement PDF parser", () => {
       occurredOn: "2026-07-19",
       direction: "credit",
     });
+    expect(parsed.reconciliation).toMatchObject({
+      periodStart: "2026-07-18",
+      periodEnd: "2026-07-19",
+      openingBalanceAssetPaise: 100000000,
+      closingBalancePaise: 129874950,
+    });
   });
 
   it("parses Axis-style Tran Date rows and headerless continuation pages", async () => {
@@ -269,6 +302,12 @@ describe("statement PDF parser", () => {
       payee: "UPI REVERSAL REFERENCE 123",
       amountPaise: 15300,
       direction: "credit",
+    });
+    expect(parsed.reconciliation).toMatchObject({
+      periodStart: "2026-07-10",
+      periodEnd: "2026-07-13",
+      openingBalanceAssetPaise: 50000000,
+      closingBalancePaise: 45957100,
     });
   });
 

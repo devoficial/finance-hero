@@ -84,8 +84,10 @@ views. No historical aggregate is presented as transaction-level evidence.
 Status: underway. The local quarantine, CSV/TSV/PDF/Excel parsing, macOS Vision OCR,
 content-hash and semantic cross-source deduplication, editable split review,
 merchant-mapping rules, multi-select approval/rejection, audited posting, and migrated
-aggregate replacement are implemented. Opening/closing statement reconciliation and a
-larger set of redacted institution fixtures remain.
+aggregate replacement are implemented. Opening/closing balance extraction, editable
+statement metadata, independent extraction/approved-record checks, and primary-account
+carryover reconciliation are also implemented. A larger set of redacted institution
+fixtures remains.
 
 Deliver:
 

@@ -20,6 +20,7 @@ import {
   financialGoalSchema,
   type HealthResponse,
   healthResponseSchema,
+  type ImportArtifact,
   type ImportCandidate,
   type ImportCandidateActionRequest,
   type ImportQueueResponse,
@@ -54,6 +55,7 @@ import {
   type UpdatePersonalBalanceRequest,
   type UpdateProjectCommitmentRequest,
   type UpdateProjectExpenseRequest,
+  type UpdateStatementReconciliationRequest,
   type UpdateWealthAssetRequest,
   type WealthAsset,
   type WealthResponse,
@@ -217,6 +219,31 @@ export async function parseStatementArtifact(id: string, input: StatementParseRe
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return importArtifactSchema.parse(await response.json());
+}
+
+export async function updateStatementReconciliation(
+  id: string,
+  input: UpdateStatementReconciliationRequest,
+): Promise<ImportArtifact> {
+  const response = await fetch(`/api/v1/imports/${encodeURIComponent(id)}/reconciliation`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return importArtifactSchema.parse(await response.json());
+}
+
+export async function reconcileStatement(id: string): Promise<ImportArtifact> {
+  const response = await fetch(`/api/v1/imports/${encodeURIComponent(id)}/reconcile`, { method: "POST" });
   if (!response.ok) {
     const body = (await response.json()) as { error?: { message?: string } };
     throw new Error(body.error?.message ?? `Local API returned ${response.status}`);

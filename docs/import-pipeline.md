@@ -194,17 +194,33 @@ Approval transactionally:
 
 ## 8. Reconciliation
 
-Statement imports can include opening and closing balances. Reconciliation compares:
+Generic CSV, Excel, text-PDF, and local OCR parsing captures the statement period plus
+opening, running, and closing balances when the source exposes them. The source register
+opens a dedicated balance-control modal where the owner can correct the account, dates,
+opening balance, and closing balance before completion.
+
+Two independent checks are required:
 
 ```text
 opening statement balance
-+ approved statement-period ledger movements
++ every extracted statement movement
+= statement closing balance
+
+opening statement balance
++ approved statement-period financial-record movements
 = expected closing balance
 ```
 
-Differences are shown by unmatched rows, amount, and date. The system never inserts
-an unexplained balancing transaction automatically. A user-approved adjustment uses
-a dedicated reconciliation category and records the reason.
+The first check catches parser omissions and sign errors. The second catches pending,
+rejected, reassigned, or missing records. Reconciliation remains disabled until both
+differences are zero and every row has left the pending state. No unexplained balancing
+transaction is inserted.
+
+For the primary salary account, the accepted closing balance becomes the monthly
+statement balance and therefore the next month's carryover. For a liability account,
+the accepted closing balance updates the tracked principal. Reopening any candidate
+invalidates the reconciliation and requires the checks to pass again. The source,
+calculation, selected account, dates, and completion event remain in the audit trail.
 
 ## 9. Security controls
 

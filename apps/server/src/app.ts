@@ -46,6 +46,7 @@ import {
   updatePersonalBalanceRequestSchema,
   updateProjectCommitmentRequestSchema,
   updateProjectExpenseRequestSchema,
+  updateStatementReconciliationRequestSchema,
   updateWealthAssetRequestSchema,
   wealthAssetSchema,
   wealthResponseSchema,
@@ -67,6 +68,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { ServerConfig } from "./config";
 import { parseScannedPdfWithLocalOcr } from "./local-ocr";
 import {
+  type ParsedStatementReconciliation,
   type ParsedStatementRow,
   parseStatementDelimitedFile,
   parseStatementExcelFile,
@@ -370,12 +372,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       const contentHash = createHash("sha256").update(content).digest("hex");
       const fileType = detectStatementType(content, extension);
       let rows: ReturnType<typeof prepareImportRows> = [];
+      let reconciliation: ParsedStatementReconciliation | undefined;
       let status: "parsed" | "needs_parser" | "failed";
       let parserMessage: string;
       if (fileType !== "unknown") {
         try {
           const parsed = await parseStatementContent(content, fileType, filename);
           rows = prepareImportRows(parsed.rows);
+          reconciliation = parsed.reconciliation;
           status = "parsed";
           parserMessage = parsed.message;
         } catch (error) {
@@ -405,6 +409,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         accountId: query.accountId || undefined,
         status,
         parserMessage,
+        reconciliation,
         rows,
       });
       return reply.code(result.duplicate ? 200 : 201).send(statementUploadResponseSchema.parse(result));
@@ -446,6 +451,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       const updated = imports.replaceArtifactParseResult(id, {
         status: "parsed",
         parserMessage: parsed.message,
+        reconciliation: parsed.reconciliation,
         rows: prepareImportRows(parsed.rows),
       });
       return reply.header("cache-control", "no-store").send(importArtifactSchema.parse(updated));
@@ -453,6 +459,35 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       const message = error instanceof Error ? error.message : "Statement could not be parsed.";
       const statusCode = message === "Statement artifact does not exist." ? 404 : 400;
       return reply.code(statusCode).send({ error: { code: "STATEMENT_PARSE_FAILED", message } });
+    }
+  });
+
+  app.patch("/api/v1/imports/:id/reconciliation", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const { id } = request.params as { id: string };
+      const input = updateStatementReconciliationRequestSchema.parse(request.body);
+      return reply.send(importArtifactSchema.parse(imports.updateStatementReconciliation(id, input)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Statement reconciliation could not be updated.";
+      const statusCode = message === "Statement artifact does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_STATEMENT_RECONCILIATION", message } });
+    }
+  });
+
+  app.post("/api/v1/imports/:id/reconcile", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const { id } = request.params as { id: string };
+      return reply.send(importArtifactSchema.parse(imports.reconcileStatement(id)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Statement could not be reconciled.";
+      const statusCode = message === "Statement artifact does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "STATEMENT_RECONCILIATION_FAILED", message } });
     }
   });
 

@@ -15,6 +15,15 @@ export interface ParsedStatementRow {
 export interface ParsedStatement {
   rows: ParsedStatementRow[];
   message: string;
+  reconciliation: ParsedStatementReconciliation;
+}
+
+export interface ParsedStatementReconciliation {
+  periodStart: string | null;
+  periodEnd: string | null;
+  openingBalanceAssetPaise: number | null;
+  openingBalanceLiabilityPaise: number | null;
+  closingBalancePaise: number | null;
 }
 
 export interface OcrStatementPage {
@@ -140,12 +149,58 @@ function parseAmount(value: string): number | null {
 }
 
 function parseBalance(value: string): number | null {
-  const normalized = value.replace(/[₹,\s]/g, "").replace(/\(([^)]+)\)/, "-$1");
+  const normalized = value
+    .replace(/[₹,\s]/g, "")
+    .replace(/\(([^)]+)\)/, "-$1")
+    .replace(/(?:CR|DR)$/i, "");
   if (!normalized) {
     return null;
   }
   const amount = Number(normalized);
   return Number.isFinite(amount) ? Math.round(amount * 100) : null;
+}
+
+interface BalancePoint {
+  occurredOn: string;
+  sourceRow: number;
+  balancePaise: number;
+  amountPaise: number;
+  direction: "debit" | "credit";
+}
+
+function statementReconciliation(
+  rows: ParsedStatementRow[],
+  balancePoints: BalancePoint[],
+  explicitOpeningBalancePaise: number | null = null,
+): ParsedStatementReconciliation {
+  const dates = rows.flatMap((row) => (row.occurredOn ? [row.occurredOn] : [])).sort();
+  const chronological = [...balancePoints].sort(
+    (left, right) => left.occurredOn.localeCompare(right.occurredOn) || left.sourceRow - right.sourceRow,
+  );
+  const first = chronological.at(0);
+  const last = chronological.at(-1);
+  const assetMovement = first ? (first.direction === "credit" ? first.amountPaise : -first.amountPaise) : 0;
+  const liabilityMovement = -assetMovement;
+  return {
+    periodStart: dates.at(0) ?? null,
+    periodEnd: dates.at(-1) ?? null,
+    openingBalanceAssetPaise: explicitOpeningBalancePaise ?? (first ? first.balancePaise - assetMovement : null),
+    openingBalanceLiabilityPaise:
+      explicitOpeningBalancePaise ?? (first ? first.balancePaise - liabilityMovement : null),
+    closingBalancePaise: last?.balancePaise ?? null,
+  };
+}
+
+function findExplicitOpeningBalance(table: string[][]): number | null {
+  for (const row of table.slice(0, 60)) {
+    const label = row.join(" ").toLowerCase();
+    if (!/(opening\s*balance|balance\s*brought\s*forward|balance\s*b\/?f)/i.test(label)) continue;
+    for (const value of [...row].reverse()) {
+      const balance = parseBalance(value);
+      if (balance != null) return balance;
+    }
+  }
+  return null;
 }
 
 function parseDate(value: string): string | null {
@@ -170,6 +225,7 @@ function parseDate(value: string): string | null {
 
 export function parseStatementOcrPages(pages: OcrStatementPage[]): ParsedStatement {
   const rows: ParsedStatementRow[] = [];
+  const balancePoints: BalancePoint[] = [];
   let previousBalance: number | null = null;
   const datedLine = /^(\d{1,2}[-/]\d{1,2}[-/](?:\d{2}|\d{4})|\d{4}[-/]\d{1,2}[-/]\d{1,2})\s+(.+)$/;
   const amountPattern = /(?:₹\s*)?(\d[\d,]*\.\d{2}|\d[\d,]*)(?:\s*(CR|DR))?/gi;
@@ -229,6 +285,15 @@ export function parseStatementOcrPages(pages: OcrStatementPage[]): ParsedStateme
         warnings,
         source: { Source: `Local OCR page ${page.page}`, "OCR line": rawLine },
       });
+      if (balance != null) {
+        balancePoints.push({
+          occurredOn,
+          sourceRow: rows.length,
+          balancePaise: balance,
+          amountPaise: transactionAmount,
+          direction,
+        });
+      }
       pendingDescription = "";
     }
   }
@@ -238,6 +303,7 @@ export function parseStatementOcrPages(pages: OcrStatementPage[]): ParsedStateme
   return {
     rows,
     message: `${rows.length} low-confidence transaction candidate${rows.length === 1 ? "" : "s"} extracted with local Apple Vision OCR. Verify every row before approval.`,
+    reconciliation: statementReconciliation(rows, balancePoints),
   };
 }
 
@@ -287,6 +353,7 @@ export function parseStatementTable(table: string[][], sourceName?: string): Par
   const directionIndex = findColumn(headers, DIRECTION_HEADERS);
   const balanceIndex = findColumn(headers, BALANCE_HEADERS);
   const rows: ParsedStatementRow[] = [];
+  const balancePoints: BalancePoint[] = [];
   let normalDirectionMatches = 0;
   let swappedDirectionMatches = 0;
   let previousBalance: number | null = null;
@@ -358,6 +425,16 @@ export function parseStatementTable(table: string[][], sourceName?: string): Par
       warnings,
       source,
     });
+    const runningBalance = balanceIndex >= 0 ? parseBalance(values[balanceIndex] ?? "") : null;
+    if (runningBalance != null && occurredOn) {
+      balancePoints.push({
+        occurredOn,
+        sourceRow: index + 1,
+        balancePaise: runningBalance,
+        amountPaise: amount,
+        direction,
+      });
+    }
   }
 
   if (rows.length === 0) {
@@ -368,6 +445,7 @@ export function parseStatementTable(table: string[][], sourceName?: string): Par
     message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted.${
       swapDebitCredit ? " Debit and credit labels were corrected from running balance movements." : ""
     }`,
+    reconciliation: statementReconciliation(rows, balancePoints, findExplicitOpeningBalance(table)),
   };
 }
 
@@ -437,6 +515,7 @@ export function parseStatementExcelFile(content: Buffer, filename: string): Pars
 
   const rows: ParsedStatementRow[] = [];
   const parsedSheets: string[] = [];
+  const reconciliations: ParsedStatementReconciliation[] = [];
   for (const sheetName of workbook.SheetNames) {
     const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) continue;
@@ -449,6 +528,7 @@ export function parseStatementExcelFile(content: Buffer, filename: string): Pars
     try {
       const parsed = parseStatementTable(table, `${filename} / ${sheetName}`);
       parsedSheets.push(sheetName);
+      reconciliations.push(parsed.reconciliation);
       for (const row of parsed.rows) {
         rows.push({ ...row, sourceRow: rows.length + 1 });
       }
@@ -462,9 +542,23 @@ export function parseStatementExcelFile(content: Buffer, filename: string): Pars
   if (rows.length === 0) {
     throw new Error("No worksheet with recognizable date, description, and amount columns was found.");
   }
+  const orderedReconciliations = reconciliations
+    .filter((item) => item.periodStart && item.periodEnd)
+    .sort((left, right) => (left.periodStart ?? "").localeCompare(right.periodStart ?? ""));
+  const firstReconciliation = orderedReconciliations.at(0);
+  const lastReconciliation = [...orderedReconciliations]
+    .sort((left, right) => (left.periodEnd ?? "").localeCompare(right.periodEnd ?? ""))
+    .at(-1);
   return {
     rows,
     message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted from ${parsedSheets.length} worksheet${parsedSheets.length === 1 ? "" : "s"}.`,
+    reconciliation: {
+      periodStart: firstReconciliation?.periodStart ?? null,
+      periodEnd: lastReconciliation?.periodEnd ?? null,
+      openingBalanceAssetPaise: firstReconciliation?.openingBalanceAssetPaise ?? null,
+      openingBalanceLiabilityPaise: firstReconciliation?.openingBalanceLiabilityPaise ?? null,
+      closingBalancePaise: lastReconciliation?.closingBalancePaise ?? null,
+    },
   };
 }
 
@@ -600,6 +694,7 @@ export async function parseStatementPdfFile(content: Buffer, password?: string):
     }
 
     const rows: ParsedStatementRow[] = [];
+    const reconciliations: ParsedStatementReconciliation[] = [];
     let extractedTextItems = 0;
     let inheritedColumns: Array<{ name: string; x: number }> | undefined;
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
@@ -621,6 +716,7 @@ export async function parseStatementPdfFile(content: Buffer, password?: string):
         const reconstructed = pdfLinesToTable(groupPdfLines(tokens), inheritedColumns);
         inheritedColumns = reconstructed.columns;
         const parsed = parseStatementTable(reconstructed.table, `PDF page ${pageNumber}`);
+        reconciliations.push(parsed.reconciliation);
         for (const row of parsed.rows) {
           rows.push({ ...row, sourceRow: rows.length + 1 });
         }
@@ -637,7 +733,24 @@ export async function parseStatementPdfFile(content: Buffer, password?: string):
     if (rows.length === 0) {
       throw new Error("No transaction table was detected. If this is a scanned PDF, OCR is required.");
     }
-    return { rows, message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted from PDF.` };
+    const orderedReconciliations = reconciliations
+      .filter((item) => item.periodStart && item.periodEnd)
+      .sort((left, right) => (left.periodStart ?? "").localeCompare(right.periodStart ?? ""));
+    const firstReconciliation = orderedReconciliations.at(0);
+    const lastReconciliation = [...orderedReconciliations]
+      .sort((left, right) => (left.periodEnd ?? "").localeCompare(right.periodEnd ?? ""))
+      .at(-1);
+    return {
+      rows,
+      message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted from PDF.`,
+      reconciliation: {
+        periodStart: firstReconciliation?.periodStart ?? null,
+        periodEnd: lastReconciliation?.periodEnd ?? null,
+        openingBalanceAssetPaise: firstReconciliation?.openingBalanceAssetPaise ?? null,
+        openingBalanceLiabilityPaise: firstReconciliation?.openingBalanceLiabilityPaise ?? null,
+        closingBalancePaise: lastReconciliation?.closingBalancePaise ?? null,
+      },
+    };
   } catch (error) {
     if (error instanceof PasswordException) {
       if (error.code === PasswordResponses.INCORRECT_PASSWORD) {
