@@ -1555,7 +1555,7 @@ h2 {
   margin-bottom: 2px;
 }
 .expense-period-panel .panel-heading small {
-  color: var(--muted);
+  color: var(--ink);
   font-size: 10px;
 }
 .expense-month-tabs {
@@ -1612,7 +1612,7 @@ h2 {
 }
 .expense-month-tab header small,
 .expense-month-tab footer {
-  color: var(--muted);
+  color: var(--ink);
   font:
     8px "DM Mono",
     monospace;
@@ -3002,7 +3002,7 @@ h2 {
 .expense-sheet-heading small {
   display: block;
   margin-top: 6px;
-  color: var(--muted);
+  color: var(--ink);
   font:
     8px "DM Mono",
     monospace;
@@ -3015,7 +3015,7 @@ h2 {
 }
 .expense-sheet-actions span {
   margin-right: 5px;
-  color: var(--muted);
+  color: var(--ink);
   font:
     8px "DM Mono",
     monospace;
@@ -3087,7 +3087,7 @@ h2 {
 .cash-overview-signal span,
 .plan-overview label > span,
 .plan-overview-metrics span {
-  color: #62716a;
+  color: var(--ink);
   font:
     6.5px "DM Mono",
     monospace;
@@ -3102,7 +3102,7 @@ h2 {
     serif;
 }
 .register-metric-grid small {
-  color: var(--muted);
+  color: var(--ink);
   font-size: 7px;
 }
 .register-metric-grid .negative,
@@ -3152,7 +3152,7 @@ h2 {
 .cash-overview-formula > b {
   display: grid;
   place-items: center;
-  color: #89938e;
+  color: var(--ink);
   font:
     10px "DM Mono",
     monospace;
@@ -3211,7 +3211,7 @@ h2 {
   border-left: 1px solid var(--line);
 }
 .plan-overview-metrics .unknown {
-  color: var(--muted);
+  color: var(--ink);
 }
 .overview-details {
   margin: -10px 0 10px;
@@ -3255,14 +3255,14 @@ h2 {
 .cash-bridge-formula > b {
   display: grid;
   place-items: center;
-  color: #89938e;
+  color: var(--ink);
   font:
     13px "DM Mono",
     monospace;
 }
 .cash-bridge-formula span,
 .cash-bridge-signal span {
-  color: #607169;
+  color: var(--ink);
   font:
     7px "DM Mono",
     monospace;
@@ -3349,12 +3349,12 @@ h2 {
   font-size: 16px;
 }
 .bank-reconciliation small {
-  color: var(--muted);
+  color: var(--ink);
 }
 .bank-reconciliation label {
   display: grid;
   gap: 6px;
-  color: #607169;
+  color: var(--ink);
   font:
     8px "DM Mono",
     monospace;
@@ -3371,7 +3371,7 @@ h2 {
   gap: 4px;
 }
 .reconciliation-result > span {
-  color: #607169;
+  color: var(--ink);
   font:
     8px "DM Mono",
     monospace;
@@ -3439,7 +3439,7 @@ h2 {
   border-right: 1px solid var(--line);
 }
 .expense-sheet-strip > label > span {
-  color: #607169;
+  color: var(--ink);
   text-transform: uppercase;
   font:
     8px "DM Mono",
@@ -3452,7 +3452,7 @@ h2 {
   border-left: 4px solid var(--green-bright);
   background: #e3ece6;
   padding: 9px 12px;
-  color: #52665e;
+  color: var(--ink);
   font-size: 9px;
 }
 .expense-ledger-heading {
@@ -3469,7 +3469,7 @@ h2 {
   margin: 3px 0 0;
 }
 .expense-ledger-heading small {
-  color: var(--muted);
+  color: var(--ink);
   text-align: right;
 }
 .expense-sheet-note strong {
@@ -3664,14 +3664,14 @@ h2 {
   color: var(--red);
 }
 .sheet-not-applicable {
-  color: #89938e;
+  color: var(--ink);
   font:
     8px "DM Mono",
     monospace;
   text-transform: uppercase;
 }
 .sheet-updated {
-  color: #62716a;
+  color: var(--ink);
   white-space: nowrap;
   font:
     8px "DM Mono",
@@ -3700,7 +3700,7 @@ h2 {
   border-right: 0;
 }
 .expense-sheet-summary span {
-  color: #62716a;
+  color: var(--ink);
   font:
     7px "DM Mono",
     monospace;
