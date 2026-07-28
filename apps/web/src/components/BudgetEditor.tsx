@@ -23,6 +23,8 @@ interface ExpenseSheetDraft {
   comment: string;
 }
 
+type BudgetLineUpdate = NonNullable<UpdateBudgetMonthRequest["lines"]>[number];
+
 interface CashAdjustmentDraft {
   id?: string;
   occurredOn: string;
@@ -94,6 +96,25 @@ function draftFor(line: BudgetLine): ExpenseSheetDraft {
     actual: rupeeInput(line.spentPaise),
     limit: rupeeInput(line.plannedPaise),
     comment: line.comment,
+  };
+}
+
+export function changedBudgetLine(
+  line: BudgetLine,
+  actualPaise: number,
+  plannedPaise: number,
+  comment: string,
+): BudgetLineUpdate | null {
+  const changedActual = actualPaise !== line.spentPaise;
+  const changedLimit = line.budgetEligible && plannedPaise !== line.plannedPaise;
+  const changedComment = comment !== line.comment;
+  if (!changedActual && !changedLimit && !changedComment) return null;
+
+  return {
+    categoryId: line.categoryId,
+    ...(changedActual ? { actualPaise } : {}),
+    ...(changedLimit ? { plannedPaise } : {}),
+    ...(changedComment ? { comment } : {}),
   };
 }
 
@@ -400,16 +421,8 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         return;
       }
       const comment = draft.comment.trim();
-      const changedActual = actualPaise !== line.spentPaise;
-      const changedLimit = line.budgetEligible && plannedPaise !== line.plannedPaise;
-      const changedComment = comment !== line.comment;
-      if (changedActual || changedLimit || changedComment) {
-        changedLines.push({
-          categoryId: line.categoryId,
-          ...(changedActual ? { actualPaise } : {}),
-          ...(changedComment ? { comment } : {}),
-        });
-      }
+      const changedLine = changedBudgetLine(line, actualPaise, plannedPaise ?? 0, comment);
+      if (changedLine) changedLines.push(changedLine);
     }
 
     const normalizedAdjustments: NonNullable<UpdateBudgetMonthRequest["cashAdjustments"]> = [];
