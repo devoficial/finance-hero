@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createJournalTransaction, Money, type PostingInput } from "@finance-hero/domain";
+import { BudgetRepository } from "./budget-repository";
 import type { FinanceHeroDatabase } from "./encrypted-database";
 
 export interface ManualTransactionInput {
@@ -48,6 +49,9 @@ export interface DashboardRecord {
   totalEmiPaise: number;
   debtPrincipalPaise: number;
   availableAfterPlanPaise: number;
+  cashBalancePaise: number;
+  cashBalanceSource: "bank_statement" | "calculated";
+  cashBalanceAsOf: string | null;
   budgetUsedPercentage: number;
   dangerAlert: boolean;
   transactionCount: number;
@@ -692,6 +696,7 @@ export class LedgerRepository {
 
     const plannedIncomePaise = period?.plannedIncomePaise ?? 0;
     const regularBudgetPaise = period?.regularBudgetPaise ?? 0;
+    const cashBridge = new BudgetRepository(this.database).getMonth(month).cashBridge;
     const budgetUsedPercentage =
       regularBudgetPaise > 0 ? Math.round((totals.regularExpensePaise / regularBudgetPaise) * 100) : 0;
 
@@ -708,6 +713,9 @@ export class LedgerRepository {
       totalEmiPaise: debtTotals.totalEmiPaise,
       debtPrincipalPaise: debtTotals.debtPrincipalPaise,
       availableAfterPlanPaise: plannedIncomePaise - totals.cashOutflowPaise,
+      cashBalancePaise: cashBridge.closingBalancePaise,
+      cashBalanceSource: cashBridge.statementBalancePaise == null ? "calculated" : "bank_statement",
+      cashBalanceAsOf: cashBridge.reconciledOn,
       budgetUsedPercentage,
       dangerAlert: localDay < 20 && budgetUsedPercentage >= 60,
       transactionCount: totals.transactionCount,

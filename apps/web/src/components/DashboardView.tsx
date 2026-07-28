@@ -26,6 +26,16 @@ function monthLabel(month: string, style: "short" | "long" = "short") {
   return new Intl.DateTimeFormat("en-IN", { month: style, timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
 }
 
+function dateLabel(date: string | null) {
+  if (!date) return "from tracked cash movement";
+  return `as of ${new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T00:00:00Z`))}`;
+}
+
 function currentMonth(): string {
   return new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -97,7 +107,7 @@ export function DashboardView({
       share: assetBuildingShare,
       color: "#2f6f8f",
     },
-    { label: "Available", amountPaise: available, share: surplusRate, color: "var(--green-bright)" },
+    { label: "Income plan remaining", amountPaise: available, share: surplusRate, color: "var(--green-bright)" },
   ];
   const allocationTotal = Math.max(1, income, dashboard.cashOutflowPaise + available);
   const expenseAngle = (dashboard.totalExpensePaise / allocationTotal) * 360;
@@ -117,7 +127,9 @@ export function DashboardView({
         <p>
           {dashboard.dangerAlert
             ? `${dashboard.budgetUsedPercentage}% of the regular budget is already consumed before day 20.`
-            : `${dashboard.budgetUsedPercentage}% of the regular budget is used with ${money(available)} still available.`}
+            : `${dashboard.budgetUsedPercentage}% of the regular budget is used. Axis cash is ${money(
+                dashboard.cashBalancePaise,
+              )}; ${money(available)} remains in the income plan.`}
         </p>
         <button onClick={onOpenExpenses} type="button">
           Open expense register
@@ -126,11 +138,11 @@ export function DashboardView({
 
       <section className="finance-kpi-grid" aria-label="Core financial indicators">
         <article className="finance-kpi primary">
-          <span>Cash remaining</span>
-          <strong>{money(dashboard.availableAfterPlanPaise)}</strong>
+          <span>Current Axis balance</span>
+          <strong>{money(dashboard.cashBalancePaise)}</strong>
           <div>
-            <b>{surplusRate}%</b>
-            <small>of planned income remains</small>
+            <b>{dashboard.cashBalanceSource === "bank_statement" ? "Bank confirmed" : "Calculated"}</b>
+            <small>{dateLabel(dashboard.cashBalanceAsOf)}</small>
           </div>
         </article>
         <article className={`finance-kpi ${emiBurden >= 40 ? "critical" : ""}`}>
@@ -193,7 +205,7 @@ export function DashboardView({
             <div className="allocation-donut" style={allocationStyle} role="img" aria-label="Monthly income allocation">
               <div>
                 <strong>{surplusRate}%</strong>
-                <span>available</span>
+                <span>plan left</span>
               </div>
             </div>
             <div className="allocation-legend">

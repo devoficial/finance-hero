@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { BudgetRepository } from "./budget-repository";
 import { initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
 import { LedgerRepository } from "./ledger-repository";
 import { seedAcceptedOpeningSnapshot } from "./opening-seed";
@@ -42,6 +43,9 @@ describe("ledger repository", () => {
     expect(dashboard.totalEmiPaise).toBe(12745100);
     expect(dashboard.debtPrincipalPaise).toBe(724854600);
     expect(dashboard.availableAfterPlanPaise).toBe(9630100);
+    expect(dashboard.cashBalancePaise).toBe(4566600);
+    expect(dashboard.cashBalanceSource).toBe("calculated");
+    expect(dashboard.cashBalanceAsOf).toBeNull();
     expect(dashboard.transactionCount).toBe(14);
 
     const expenseYear = repository.getExpenseYear("2026");
@@ -99,6 +103,23 @@ describe("ledger repository", () => {
     expect(liabilities.otherLiabilities).toHaveLength(4);
     expect(liabilities.receivables).toHaveLength(2);
     expect(liabilities.liabilities.find((item) => item.name === "Two-wheeler loan")?.status).toBe("cleared");
+    database.close();
+  });
+
+  it("uses the bank-confirmed closing balance as dashboard cash", () => {
+    const { database, repository } = createRepository();
+    new BudgetRepository(database).updateMonth("2026-07", {
+      reconciliation: {
+        statementBalancePaise: 368768,
+        reconciledOn: "2026-07-28",
+      },
+    });
+
+    expect(repository.getDashboard("2026-07", 28)).toMatchObject({
+      cashBalancePaise: 368768,
+      cashBalanceSource: "bank_statement",
+      cashBalanceAsOf: "2026-07-28",
+    });
     database.close();
   });
 
