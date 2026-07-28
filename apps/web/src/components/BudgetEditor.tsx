@@ -130,6 +130,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [creditToRemove, setCreditToRemove] = useState<CashAdjustmentDraft | null>(null);
+  const [cashBridgeOpen, setCashBridgeOpen] = useState(false);
 
   const loadDraft = useCallback((currentBudget: BudgetMonthResponse) => {
     const snapshot = {
@@ -535,6 +536,181 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         </div>
       </section>
 
+      <section
+        aria-label="Monthly cash position"
+        className={`cash-bridge cash-bridge-compact ${cashBridgeOpen ? "expanded" : ""}`}
+      >
+        <div className="cash-bridge-compact-row">
+          <div className="cash-bridge-title">
+            <p className="eyebrow">MONTHLY CASH POSITION</p>
+            <h3>Carryover to closing</h3>
+          </div>
+
+          <div className="cash-bridge-formula">
+            <article className={budget.cashBridge.carryoverPaise < 0 ? "negative" : ""}>
+              <span>Carryover</span>
+              <strong>{money(budget.cashBridge.carryoverPaise)}</strong>
+            </article>
+            <b aria-hidden="true">+</b>
+            <article className={adjustmentTotal < 0 ? "negative" : ""}>
+              <span>Receipts</span>
+              <strong>{money(adjustmentTotal)}</strong>
+            </article>
+            <b aria-hidden="true">−</b>
+            <article>
+              <span>Outflow</span>
+              <strong>{money(draftCashOutflow)}</strong>
+            </article>
+            <b aria-hidden="true">=</b>
+            <article className={`closing ${closingBalance < 0 ? "negative" : ""}`}>
+              <span>{parsedStatementBalance == null ? "Estimated closing" : "Bank closing"}</span>
+              <strong>{money(closingBalance)}</strong>
+            </article>
+          </div>
+
+          <div className={`cash-bridge-signal ${reconciliationDifference === 0 ? "reconciled" : "attention"}`}>
+            <span>{reconciliationDifference === 0 ? "Reconciled" : "Difference"}</span>
+            <strong>
+              {reconciliationDifference > 0 ? "+" : ""}
+              {money(reconciliationDifference)}
+            </strong>
+          </div>
+
+          <div className="cash-bridge-actions">
+            <button
+              aria-controls="cash-bridge-details"
+              aria-expanded={cashBridgeOpen}
+              onClick={() => setCashBridgeOpen((current) => !current)}
+              type="button"
+            >
+              {cashBridgeOpen ? "Hide details" : "Review details"}
+            </button>
+            <button
+              onClick={() => {
+                setCashBridgeOpen(true);
+                addCashAdjustment();
+              }}
+              type="button"
+            >
+              + Add cash
+            </button>
+          </div>
+        </div>
+
+        {cashBridgeOpen && (
+          <div className="cash-bridge-details" id="cash-bridge-details">
+            <div className={`bank-reconciliation ${reconciliationDifference === 0 ? "reconciled" : "unreconciled"}`}>
+              <div>
+                <p className="eyebrow">BANK RECONCILIATION</p>
+                <h4>
+                  {parsedStatementBalance == null
+                    ? "Confirm the real bank balance"
+                    : "Statement balance overrides the estimate"}
+                </h4>
+                <small>
+                  The expense sheet calculates {money(calculatedClosingBalance)}. Compare it with the bank balance to
+                  expose missing, duplicated or pending transactions.
+                </small>
+              </div>
+              <label>
+                <span>Statement balance</span>
+                <div className="sheet-money-input">
+                  <b>₹</b>
+                  <input
+                    aria-label="Bank statement closing balance"
+                    inputMode="decimal"
+                    onChange={(event) => {
+                      checkpoint();
+                      setStatementBalance(event.target.value);
+                      setDirty(true);
+                    }}
+                    placeholder="12160.50"
+                    type="text"
+                    value={statementBalance}
+                  />
+                </div>
+              </label>
+              <label>
+                <span>Balance as of</span>
+                <input
+                  aria-label="Bank statement balance date"
+                  onChange={(event) => {
+                    checkpoint();
+                    setReconciliationDate(event.target.value);
+                    setDirty(true);
+                  }}
+                  type="date"
+                  value={reconciliationDate}
+                />
+              </label>
+              <div className="reconciliation-result">
+                <span>Difference to investigate</span>
+                <strong>
+                  {reconciliationDifference >= 0 ? "+" : ""}
+                  {money(reconciliationDifference)}
+                </strong>
+                <small>{reconciliationDifference === 0 ? "Reconciled" : "Sheet estimate versus bank statement"}</small>
+              </div>
+            </div>
+            <div className="cash-adjustment-list">
+              <div className="cash-adjustment-list-heading">
+                <div>
+                  <p className="eyebrow">RECEIPTS AND ADJUSTMENTS</p>
+                  <strong>{cashAdjustments.length} dated entries</strong>
+                </div>
+                <span>{money(adjustmentTotal)} net receipts</span>
+              </div>
+              {cashAdjustments.map((adjustment, index) => (
+                <div className="cash-adjustment-row" key={adjustment.id ?? `new-${index}`}>
+                  <input
+                    aria-label={`Cash entry ${index + 1} date`}
+                    onChange={(event) => updateCashAdjustment(index, "occurredOn", event.target.value)}
+                    type="date"
+                    value={adjustment.occurredOn}
+                  />
+                  <input
+                    aria-label={`Cash entry ${index + 1} label`}
+                    onChange={(event) => updateCashAdjustment(index, "label", event.target.value)}
+                    placeholder="Salary, extra income, correction"
+                    type="text"
+                    value={adjustment.label}
+                  />
+                  <div className="sheet-money-input">
+                    <b>₹</b>
+                    <input
+                      aria-label={`Cash entry ${index + 1} amount`}
+                      inputMode="decimal"
+                      onChange={(event) => updateCashAdjustment(index, "amount", event.target.value)}
+                      placeholder="+300893 or -500"
+                      type="text"
+                      value={adjustment.amount}
+                    />
+                  </div>
+                  <button
+                    aria-label={`Remove cash entry ${index + 1}`}
+                    disabled={removeImportedCreditMutation.isPending}
+                    onClick={() =>
+                      adjustment.source === "imported_credit"
+                        ? requestImportedCreditRemoval(adjustment)
+                        : removeCashAdjustment(index)
+                    }
+                    title={
+                      adjustment.source === "imported_credit"
+                        ? "Remove this credit and return it to Imports"
+                        : undefined
+                    }
+                    type="button"
+                  >
+                    {adjustment.source === "imported_credit" ? "Remove credit" : "Remove"}
+                  </button>
+                </div>
+              ))}
+              {cashAdjustments.length === 0 && <p>No salary or extra cash recorded for this month yet.</p>}
+            </div>
+          </div>
+        )}
+      </section>
+
       <div className="budget-plan-strip expense-sheet-strip">
         <label>
           <span>Expected monthly salary plan</span>
@@ -686,147 +862,6 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
           </tbody>
         </table>
       </div>
-
-      <section className="cash-bridge" aria-label="Monthly cash bridge">
-        <div className="cash-bridge-heading">
-          <div>
-            <p className="eyebrow">CARRYOVER + RECEIPTS - OUTFLOW</p>
-            <h3>Monthly cash bridge</h3>
-            <small>Positive entries add cash. Negative entries subtract cash.</small>
-          </div>
-          <button onClick={addCashAdjustment} type="button">
-            + Add cash entry
-          </button>
-        </div>
-        <div className="cash-bridge-equation">
-          <article className={budget.cashBridge.carryoverPaise < 0 ? "negative" : ""}>
-            <span>Previous month carryover</span>
-            <strong>{money(budget.cashBridge.carryoverPaise)}</strong>
-            <small>Automatic from the prior closing balance</small>
-          </article>
-          <article className={adjustmentTotal < 0 ? "negative" : ""}>
-            <span>Salary + extra adjustments</span>
-            <strong>{money(adjustmentTotal)}</strong>
-            <small>{cashAdjustments.length} dated cash entries</small>
-          </article>
-          <article className={fundsAvailable < 0 ? "negative" : ""}>
-            <span>Funds available</span>
-            <strong>{money(fundsAvailable)}</strong>
-            <small>Carryover plus signed entries</small>
-          </article>
-          <article>
-            <span>Tracked cash outflow</span>
-            <strong>-{money(draftCashOutflow)}</strong>
-            <small>Updates with the expense sheet</small>
-          </article>
-          <article className={`closing ${closingBalance < 0 ? "negative" : ""}`}>
-            <span>
-              {parsedStatementBalance == null ? "Calculated closing balance" : "Bank-confirmed closing balance"}
-            </span>
-            <strong>{money(closingBalance)}</strong>
-            <small>Becomes next month’s carryover</small>
-          </article>
-        </div>
-        <div className={`bank-reconciliation ${reconciliationDifference === 0 ? "reconciled" : "unreconciled"}`}>
-          <div>
-            <p className="eyebrow">BANK RECONCILIATION</p>
-            <h4>
-              {parsedStatementBalance == null
-                ? "Confirm the real bank balance"
-                : "Statement balance overrides the estimate"}
-            </h4>
-            <small>
-              The expense sheet calculates {money(calculatedClosingBalance)}. Enter the Axis statement balance to expose
-              missing, duplicated, or pending transactions without hiding the difference.
-            </small>
-          </div>
-          <label>
-            <span>Statement balance</span>
-            <div className="sheet-money-input">
-              <b>₹</b>
-              <input
-                aria-label="Bank statement closing balance"
-                inputMode="decimal"
-                onChange={(event) => {
-                  checkpoint();
-                  setStatementBalance(event.target.value);
-                  setDirty(true);
-                }}
-                placeholder="12160.50"
-                type="text"
-                value={statementBalance}
-              />
-            </div>
-          </label>
-          <label>
-            <span>Balance as of</span>
-            <input
-              aria-label="Bank statement balance date"
-              onChange={(event) => {
-                checkpoint();
-                setReconciliationDate(event.target.value);
-                setDirty(true);
-              }}
-              type="date"
-              value={reconciliationDate}
-            />
-          </label>
-          <div className="reconciliation-result">
-            <span>Difference to investigate</span>
-            <strong>
-              {reconciliationDifference >= 0 ? "+" : ""}
-              {money(reconciliationDifference)}
-            </strong>
-            <small>{reconciliationDifference === 0 ? "Reconciled" : "Sheet estimate versus bank statement"}</small>
-          </div>
-        </div>
-        <div className="cash-adjustment-list">
-          {cashAdjustments.map((adjustment, index) => (
-            <div className="cash-adjustment-row" key={adjustment.id ?? `new-${index}`}>
-              <input
-                aria-label={`Cash entry ${index + 1} date`}
-                onChange={(event) => updateCashAdjustment(index, "occurredOn", event.target.value)}
-                type="date"
-                value={adjustment.occurredOn}
-              />
-              <input
-                aria-label={`Cash entry ${index + 1} label`}
-                onChange={(event) => updateCashAdjustment(index, "label", event.target.value)}
-                placeholder="Salary, extra income, correction"
-                type="text"
-                value={adjustment.label}
-              />
-              <div className="sheet-money-input">
-                <b>₹</b>
-                <input
-                  aria-label={`Cash entry ${index + 1} amount`}
-                  inputMode="decimal"
-                  onChange={(event) => updateCashAdjustment(index, "amount", event.target.value)}
-                  placeholder="+300893 or -500"
-                  type="text"
-                  value={adjustment.amount}
-                />
-              </div>
-              <button
-                aria-label={`Remove cash entry ${index + 1}`}
-                disabled={removeImportedCreditMutation.isPending}
-                onClick={() =>
-                  adjustment.source === "imported_credit"
-                    ? requestImportedCreditRemoval(adjustment)
-                    : removeCashAdjustment(index)
-                }
-                title={
-                  adjustment.source === "imported_credit" ? "Remove this credit and return it to Imports" : undefined
-                }
-                type="button"
-              >
-                {adjustment.source === "imported_credit" ? "Remove credit" : "Remove"}
-              </button>
-            </div>
-          ))}
-          {cashAdjustments.length === 0 && <p>No salary or extra cash recorded for this month yet.</p>}
-        </div>
-      </section>
 
       {creditToRemove && (
         <div className="modal-backdrop" role="presentation">

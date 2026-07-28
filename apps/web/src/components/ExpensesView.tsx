@@ -143,6 +143,7 @@ export function ExpensesView({
           budget={budget}
           emiPaise={historical ? recordedEmiPaise : selectedDashboard.totalEmiPaise}
           historical={historical}
+          key={selectedMonth}
           loading={budgetLoading}
           money={money}
         />

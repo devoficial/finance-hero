@@ -3050,66 +3050,111 @@ h2 {
   border: 1px solid var(--line);
   background: #f8f5ed;
 }
-.cash-bridge-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--line);
-}
-.cash-bridge-heading h3 {
-  margin: 2px 0 0;
-}
-.cash-bridge-heading small,
-.cash-bridge-equation small {
-  color: var(--muted);
-}
-.cash-bridge-heading button,
-.cash-adjustment-row > button {
-  min-height: 36px;
-  border: 1px solid var(--green);
-  background: transparent;
-  color: var(--green);
-  padding: 7px 12px;
-  cursor: pointer;
-  font-weight: 800;
-}
-.cash-bridge-equation {
+.cash-bridge-compact-row {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: 150px minmax(440px, 1fr) 100px auto;
+  min-height: 82px;
 }
-.cash-bridge-equation article {
+.cash-bridge-title {
   display: grid;
-  align-content: start;
-  gap: 6px;
-  min-width: 0;
-  padding: 16px;
+  align-content: center;
+  padding: 12px 14px;
   border-right: 1px solid var(--line);
 }
-.cash-bridge-equation article:last-child {
-  border-right: 0;
+.cash-bridge-title h3 {
+  margin: 3px 0 0;
+  font-size: 16px;
 }
-.cash-bridge-equation span {
+.cash-bridge-formula {
+  display: grid;
+  grid-template-columns: minmax(105px, 1fr) 18px minmax(100px, 1fr) 18px minmax(105px, 1fr) 18px minmax(115px, 1.1fr);
+  align-items: stretch;
+  min-width: 0;
+}
+.cash-bridge-formula article {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 8px;
+}
+.cash-bridge-formula > b {
+  display: grid;
+  place-items: center;
+  color: #89938e;
+  font:
+    13px "DM Mono",
+    monospace;
+}
+.cash-bridge-formula span,
+.cash-bridge-signal span {
   color: #607169;
   font:
-    8px "DM Mono",
+    7px "DM Mono",
     monospace;
   text-transform: uppercase;
 }
-.cash-bridge-equation strong {
+.cash-bridge-formula strong {
   overflow-wrap: anywhere;
   font:
-    24px "Newsreader",
+    17px "Newsreader",
     serif;
 }
-.cash-bridge-equation .closing {
+.cash-bridge-formula .closing {
   background: #d8e5dc;
   color: var(--green);
 }
-.cash-bridge-equation .negative {
-  background: #f1d7cf;
+.cash-bridge-formula .negative {
   color: var(--red);
+}
+.cash-bridge-signal {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 10px 12px;
+  border-left: 1px solid var(--line);
+}
+.cash-bridge-signal strong {
+  font:
+    16px "Newsreader",
+    serif;
+}
+.cash-bridge-signal.attention {
+  background: #fff2d2;
+  color: #b6422d;
+}
+.cash-bridge-signal.reconciled {
+  background: #e3eee8;
+  color: var(--green);
+}
+.cash-bridge-actions {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 9px;
+  border-left: 1px solid var(--line);
+}
+.cash-bridge-actions button,
+.cash-adjustment-row > button {
+  min-height: 30px;
+  border: 1px solid var(--green);
+  background: transparent;
+  color: var(--green);
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 8px;
+  font-weight: 800;
+}
+.cash-bridge-actions button:last-child {
+  background: var(--green);
+  color: white;
+}
+.cash-bridge-details {
+  border-top: 1px solid var(--line);
+}
+.cash-bridge-details .bank-reconciliation {
+  border-top: 0;
 }
 .bank-reconciliation {
   display: grid;
@@ -3172,6 +3217,23 @@ h2 {
   gap: 8px;
   padding: 14px 18px 18px;
   border-top: 1px solid var(--line);
+}
+.cash-adjustment-list-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 4px;
+}
+.cash-adjustment-list-heading strong {
+  display: block;
+  margin-top: 3px;
+}
+.cash-adjustment-list-heading > span {
+  color: var(--green);
+  font:
+    9px "DM Mono",
+    monospace;
 }
 .cash-adjustment-list > p {
   margin: 0;
@@ -3244,9 +3306,6 @@ h2 {
   overflow-x: auto;
   border: 1px solid #b9bdb6;
   background: #f8f5ed;
-}
-.expense-sheet-scroll + .cash-bridge {
-  margin-top: 14px;
 }
 .expense-sheet table {
   width: 100%;
@@ -5614,18 +5673,25 @@ h2 {
   .expense-sheet-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .cash-bridge-equation {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .cash-bridge-compact-row {
+    grid-template-columns: minmax(150px, 1fr) auto auto;
   }
-  .cash-bridge-equation article {
-    border-bottom: 1px solid var(--line);
+  .cash-bridge-title {
+    grid-column: 1;
+    grid-row: 1;
   }
-  .cash-bridge-equation article:nth-child(even) {
-    border-right: 0;
-  }
-  .cash-bridge-equation article:last-child {
+  .cash-bridge-formula {
     grid-column: 1 / -1;
-    border-bottom: 0;
+    grid-row: 2;
+    border-top: 1px solid var(--line);
+  }
+  .cash-bridge-signal {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .cash-bridge-actions {
+    grid-column: 3;
+    grid-row: 1;
   }
   .cash-adjustment-row {
     grid-template-columns: 140px minmax(180px, 1fr) 180px;
@@ -5785,23 +5851,29 @@ h2 {
   .expense-sheet-actions button {
     flex: 1;
   }
-  .cash-bridge-heading {
-    display: grid;
-    align-items: start;
+  .cash-bridge-compact-row {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
-  .cash-bridge-heading button {
-    width: 100%;
+  .cash-bridge-formula {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    grid-template-columns: minmax(92px, 1fr) 16px minmax(88px, 1fr) 16px minmax(92px, 1fr) 16px minmax(105px, 1fr);
+    overflow-x: auto;
   }
-  .cash-bridge-equation {
-    grid-template-columns: 1fr;
+  .cash-bridge-signal {
+    grid-column: 2;
+    grid-row: 1;
+    border-left: 1px solid var(--line);
   }
-  .cash-bridge-equation article,
-  .cash-bridge-equation article:nth-child(even) {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+  .cash-bridge-actions {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
-  .cash-bridge-equation article:last-child {
-    grid-column: auto;
+  .cash-bridge-actions button {
+    flex: 1;
   }
   .cash-adjustment-row {
     grid-template-columns: 1fr;
