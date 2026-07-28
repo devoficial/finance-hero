@@ -972,7 +972,7 @@ export class ImportRepository {
     if (!artifact.reconciliation.canReconcile || !artifact.accountId) {
       throw new Error("Resolve the statement review and balance differences before reconciling this account.");
     }
-    const { periodEnd, closingBalancePaise } = artifact.reconciliation;
+    const { periodStart, periodEnd, openingBalancePaise, closingBalancePaise } = artifact.reconciliation;
     if (!periodEnd || closingBalancePaise == null) {
       throw new Error("Statement period and closing balance are required.");
     }
@@ -986,6 +986,19 @@ export class ImportRepository {
     const write = this.database.connection.transaction(() => {
       this.database.connection.prepare("UPDATE import_artifacts SET reconciled_at = ? WHERE id = ?").run(now, id);
       if (artifact.accountId === "account-primary-bank") {
+        if (periodStart?.endsWith("-01") && openingBalancePaise != null) {
+          this.database.connection
+            .prepare(`
+              INSERT INTO monthly_cash_carryover_overrides
+                (month, amount_paise, source_ref, updated_at)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT(month) DO UPDATE SET
+                amount_paise = excluded.amount_paise,
+                source_ref = excluded.source_ref,
+                updated_at = excluded.updated_at
+            `)
+            .run(periodStart.slice(0, 7), openingBalancePaise, `statement:${id}`, now);
+        }
         this.database.connection
           .prepare(`
             INSERT INTO monthly_bank_reconciliations

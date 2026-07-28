@@ -3045,6 +3045,180 @@ h2 {
   cursor: not-allowed;
   opacity: 0.42;
 }
+.expense-register-overview {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.05fr) minmax(500px, 1.45fr) minmax(260px, 0.75fr);
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  background: #f8f5ed;
+}
+.register-overview-group {
+  min-width: 0;
+  padding: 10px 12px;
+  border-right: 1px solid var(--line);
+}
+.register-overview-group:last-child {
+  border-right: 0;
+}
+.register-overview-group > .eyebrow,
+.register-group-title > .eyebrow {
+  margin-bottom: 7px;
+  font-size: 7px;
+}
+.register-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.register-metric-grid article {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 4px 8px;
+  border-left: 1px solid var(--line);
+}
+.register-metric-grid article:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.register-metric-grid span,
+.cash-overview-formula span,
+.cash-overview-signal span,
+.plan-overview label > span,
+.plan-overview-metrics span {
+  color: #62716a;
+  font:
+    6.5px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.register-metric-grid strong,
+.cash-overview-formula strong,
+.plan-overview-metrics strong {
+  overflow-wrap: anywhere;
+  font:
+    14px "Newsreader",
+    serif;
+}
+.register-metric-grid small {
+  color: var(--muted);
+  font-size: 7px;
+}
+.register-metric-grid .negative,
+.cash-overview-formula .negative,
+.plan-overview-metrics .negative {
+  color: var(--red);
+}
+.register-metric-grid .overall {
+  color: var(--green);
+}
+.register-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cash-overview-actions {
+  display: flex;
+  gap: 4px;
+}
+.cash-overview-actions button {
+  min-height: 24px;
+  border: 1px solid var(--green);
+  background: transparent;
+  color: var(--green);
+  padding: 3px 7px;
+  cursor: pointer;
+  font-size: 7px;
+  font-weight: 800;
+}
+.cash-overview-actions button:last-child {
+  background: var(--green);
+  color: white;
+}
+.cash-overview-formula {
+  display: grid;
+  grid-template-columns: minmax(78px, 1fr) 12px minmax(78px, 1fr) 12px minmax(86px, 1fr) 12px minmax(92px, 1.1fr);
+  align-items: stretch;
+}
+.cash-overview-formula article {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 5px;
+}
+.cash-overview-formula > b {
+  display: grid;
+  place-items: center;
+  color: #89938e;
+  font:
+    10px "DM Mono",
+    monospace;
+}
+.cash-overview-formula .closing {
+  color: var(--green);
+}
+.cash-overview-signal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 4px 6px;
+  background: #e3eee8;
+}
+.cash-overview-signal.attention {
+  background: #fff2d2;
+  color: #b6422d;
+}
+.cash-overview-signal strong {
+  font:
+    11px "DM Mono",
+    monospace;
+}
+.plan-overview {
+  display: grid;
+  align-content: start;
+}
+.plan-overview label {
+  display: grid;
+  gap: 4px;
+}
+.plan-overview .sheet-money-input {
+  min-height: 29px;
+}
+.plan-overview .sheet-money-input input {
+  height: 27px;
+  font-size: 9px;
+}
+.plan-overview-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.plan-overview-metrics article {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-right: 7px;
+}
+.plan-overview-metrics article + article {
+  padding-left: 7px;
+  border-left: 1px solid var(--line);
+}
+.plan-overview-metrics .unknown {
+  color: var(--muted);
+}
+.overview-details {
+  margin: -10px 0 10px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  background: #f8f5ed;
+}
 .cash-bridge {
   margin-bottom: 14px;
   border: 1px solid var(--line);
@@ -5355,6 +5529,27 @@ h2 {
 }
 
 @media (max-width: 1400px) {
+  .expense-register-overview {
+    grid-template-columns: minmax(340px, 0.95fr) minmax(470px, 1.25fr);
+  }
+  .cash-overview {
+    border-right: 0;
+  }
+  .plan-overview {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(180px, 0.6fr) minmax(280px, 1fr);
+    gap: 8px 14px;
+    border-top: 1px solid var(--line);
+  }
+  .plan-overview > .eyebrow {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+  .plan-overview-metrics {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
   .ledger-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -5850,6 +6045,39 @@ h2 {
   }
   .expense-sheet-actions button {
     flex: 1;
+  }
+  .expense-register-overview {
+    grid-template-columns: 1fr;
+  }
+  .register-overview-group {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .register-overview-group:last-child {
+    border-bottom: 0;
+  }
+  .register-metric-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .register-metric-grid article:nth-child(3) {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .cash-overview-formula {
+    grid-template-columns: minmax(80px, 1fr) 12px minmax(80px, 1fr) 12px minmax(84px, 1fr) 12px minmax(92px, 1fr);
+    overflow-x: auto;
+  }
+  .plan-overview {
+    grid-column: auto;
+    grid-template-columns: 1fr;
+  }
+  .plan-overview > .eyebrow {
+    grid-column: auto;
+  }
+  .plan-overview-metrics {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
   }
   .cash-bridge-compact-row {
     grid-template-columns: minmax(0, 1fr) auto;

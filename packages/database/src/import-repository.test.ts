@@ -611,6 +611,19 @@ describe("import repository", () => {
       statementBalancePaise: 950000,
       reconciledOn: "2026-07-31",
     });
+    expect(
+      database.connection
+        .prepare(`
+          SELECT month, amount_paise AS amountPaise, source_ref AS sourceRef
+          FROM monthly_cash_carryover_overrides
+          WHERE month = '2026-07'
+        `)
+        .get(),
+    ).toEqual({
+      month: "2026-07",
+      amountPaise: 1000000,
+      sourceRef: `statement:${created.artifact.id}`,
+    });
     database.close();
   });
 
