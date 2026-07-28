@@ -603,6 +603,107 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
         </article>
       )}
 
+      <article className="panel liabilities-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">LIABILITY SHEET / SNOWBALL ORDER</p>
+            <h2>Loans and credit cards</h2>
+          </div>
+          <div className="liabilities-heading-actions">
+            <span className="live-pill">{data.liabilities.length} ACCOUNTS</span>
+            <button className="add-liability-button" onClick={beginAddLiability} type="button">
+              + Add loan or card
+            </button>
+          </div>
+        </div>
+
+        <div className="table-scroll">
+          <table className="liabilities-table">
+            <thead>
+              <tr>
+                <th>Liability</th>
+                <th>Original</th>
+                <th>Current principal</th>
+                <th>Repaid</th>
+                <th>EMI</th>
+                <th>Rate</th>
+                <th>Status</th>
+                <th>Snowball</th>
+                <th aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {data.liabilities.map((liability) => {
+                const paidPercentage =
+                  liability.originalAmountPaise > 0
+                    ? Math.min(100, Math.round((liability.paidPaise / liability.originalAmountPaise) * 100))
+                    : 0;
+                return (
+                  <tr
+                    className={`${liability.status} ${editingId === liability.id ? "editing" : ""}`}
+                    key={liability.id}
+                  >
+                    <td>
+                      <strong>{liability.name}</strong>
+                      <small>{productName(liability.productType)}</small>
+                      <div className="liability-progress">
+                        <i style={{ width: `${paidPercentage}%` }} />
+                      </div>
+                    </td>
+                    <td>{money(liability.originalAmountPaise)}</td>
+                    <td className="principal-cell">{money(liability.currentPrincipalPaise)}</td>
+                    <td>{money(liability.paidPaise)}</td>
+                    <td>{money(liability.emiPaise)}</td>
+                    <td>{liability.annualRateBps == null ? "—" : `${(liability.annualRateBps / 100).toFixed(2)}%`}</td>
+                    <td>
+                      <span className={`status-pill ${liability.status}`}>{liability.status}</span>
+                    </td>
+                    <td>
+                      {liability.snowballRank == null ? (
+                        "—"
+                      ) : (
+                        <span className="rank-pill">#{liability.snowballRank}</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="liability-row-actions">
+                        {liability.status === "active" && (
+                          <button
+                            className="clear-liability-button"
+                            disabled={mutation.isPending}
+                            onClick={() => markCleared(liability)}
+                            type="button"
+                          >
+                            {mutation.isPending && mutation.variables?.id === liability.id
+                              ? "Clearing..."
+                              : "Mark cleared"}
+                          </button>
+                        )}
+                        {liability.status === "cleared" && liability.canUndoClear && (
+                          <button
+                            className="undo-clear-button"
+                            disabled={undoClearMutation.isPending}
+                            onClick={() => undoClear(liability)}
+                            type="button"
+                          >
+                            {undoClearMutation.isPending && undoClearMutation.variables === liability.id
+                              ? "Restoring..."
+                              : "Undo clear"}
+                          </button>
+                        )}
+                        <button className="edit-liability-button" onClick={() => beginEdit(liability)} type="button">
+                          Edit
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
       <section className="liability-metrics" aria-label="Liability summary">
         <article className="metric-card liability-metric-card warning">
           <span>Current principal</span>
@@ -1113,106 +1214,6 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
         </div>
       )}
 
-      <article className="panel liabilities-panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">LIABILITY SHEET / SNOWBALL ORDER</p>
-            <h2>Loans and credit cards</h2>
-          </div>
-          <div className="liabilities-heading-actions">
-            <span className="live-pill">{data.liabilities.length} ACCOUNTS</span>
-            <button className="add-liability-button" onClick={beginAddLiability} type="button">
-              + Add loan or card
-            </button>
-          </div>
-        </div>
-
-        <div className="table-scroll">
-          <table className="liabilities-table">
-            <thead>
-              <tr>
-                <th>Liability</th>
-                <th>Original</th>
-                <th>Current principal</th>
-                <th>Repaid</th>
-                <th>EMI</th>
-                <th>Rate</th>
-                <th>Status</th>
-                <th>Snowball</th>
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {data.liabilities.map((liability) => {
-                const paidPercentage =
-                  liability.originalAmountPaise > 0
-                    ? Math.min(100, Math.round((liability.paidPaise / liability.originalAmountPaise) * 100))
-                    : 0;
-                return (
-                  <tr
-                    className={`${liability.status} ${editingId === liability.id ? "editing" : ""}`}
-                    key={liability.id}
-                  >
-                    <td>
-                      <strong>{liability.name}</strong>
-                      <small>{productName(liability.productType)}</small>
-                      <div className="liability-progress">
-                        <i style={{ width: `${paidPercentage}%` }} />
-                      </div>
-                    </td>
-                    <td>{money(liability.originalAmountPaise)}</td>
-                    <td className="principal-cell">{money(liability.currentPrincipalPaise)}</td>
-                    <td>{money(liability.paidPaise)}</td>
-                    <td>{money(liability.emiPaise)}</td>
-                    <td>{liability.annualRateBps == null ? "—" : `${(liability.annualRateBps / 100).toFixed(2)}%`}</td>
-                    <td>
-                      <span className={`status-pill ${liability.status}`}>{liability.status}</span>
-                    </td>
-                    <td>
-                      {liability.snowballRank == null ? (
-                        "—"
-                      ) : (
-                        <span className="rank-pill">#{liability.snowballRank}</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="liability-row-actions">
-                        {liability.status === "active" && (
-                          <button
-                            className="clear-liability-button"
-                            disabled={mutation.isPending}
-                            onClick={() => markCleared(liability)}
-                            type="button"
-                          >
-                            {mutation.isPending && mutation.variables?.id === liability.id
-                              ? "Clearing..."
-                              : "Mark cleared"}
-                          </button>
-                        )}
-                        {liability.status === "cleared" && liability.canUndoClear && (
-                          <button
-                            className="undo-clear-button"
-                            disabled={undoClearMutation.isPending}
-                            onClick={() => undoClear(liability)}
-                            type="button"
-                          >
-                            {undoClearMutation.isPending && undoClearMutation.variables === liability.id
-                              ? "Restoring..."
-                              : "Undo clear"}
-                          </button>
-                        )}
-                        <button className="edit-liability-button" onClick={() => beginEdit(liability)} type="button">
-                          Edit
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </article>
     </>
   );
 }
