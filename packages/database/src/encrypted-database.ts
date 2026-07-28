@@ -329,8 +329,6 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     CREATE INDEX IF NOT EXISTS import_artifacts_created_idx ON import_artifacts(created_at DESC);
     CREATE INDEX IF NOT EXISTS import_candidates_status_idx ON import_candidates(status, updated_at DESC);
     CREATE INDEX IF NOT EXISTS import_candidates_artifact_idx ON import_candidates(artifact_id, source_row);
-    CREATE INDEX IF NOT EXISTS import_candidates_fingerprint_idx ON import_candidates(fingerprint, status);
-    CREATE INDEX IF NOT EXISTS import_candidates_duplicate_idx ON import_candidates(duplicate_of_candidate_id);
     CREATE INDEX IF NOT EXISTS merchant_rules_match_idx ON merchant_rules(normalized_payee, direction);
   `);
 

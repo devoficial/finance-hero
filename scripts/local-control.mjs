@@ -326,6 +326,9 @@ async function start() {
   chmodSync(LOG_PATH, 0o600);
   const environment = { ...process.env };
   delete environment.FINANCE_HERO_DATABASE_KEY;
+  // Turbo runs each workspace task from its package directory. Keep every
+  // process pinned to the single canonical encrypted database at the repo root.
+  environment.FINANCE_HERO_DATA_DIR = DATA_DIRECTORY;
   const child = spawn(process.execPath, [join(ROOT, "node_modules/turbo/bin/turbo"), "dev"], {
     cwd: ROOT,
     detached: true,
