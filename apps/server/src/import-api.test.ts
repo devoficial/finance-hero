@@ -214,4 +214,67 @@ describe("statement import API", () => {
     });
     await app.close();
   });
+
+  it("holds semantic cross-file duplicates until the user resolves them", async () => {
+    const dataDirectory = mkdtempSync(join(tmpdir(), "finance-hero-import-api-"));
+    temporaryDirectories.push(dataDirectory);
+    const app = await buildApp({
+      config: {
+        host: "127.0.0.1",
+        port: 4317,
+        dataDirectory,
+        databaseKey: "server-import-test-key-with-at-least-32-characters",
+      },
+    });
+    const firstUpload = await app.inject({
+      method: "POST",
+      url: "/api/v1/statement-uploads?filename=bank.csv&accountId=account-primary-bank",
+      headers: { "content-type": "application/octet-stream" },
+      payload: Buffer.from(
+        ["Transaction Date,Narration,Debit Amount,Credit Amount", "20/07/2026,SWIGGY ORDER,1250,"].join("\n"),
+      ),
+    });
+    expect(firstUpload.statusCode).toBe(201);
+
+    const secondUpload = await app.inject({
+      method: "POST",
+      url: "/api/v1/statement-uploads?filename=card.csv&accountId=account-primary-bank",
+      headers: { "content-type": "application/octet-stream" },
+      payload: Buffer.from(["Date,Description,Debit,Credit", "21/07/2026,swiggy order,1250,"].join("\n")),
+    });
+    expect(secondUpload.statusCode).toBe(201);
+
+    const queue = importQueueResponseSchema.parse((await app.inject({ method: "GET", url: "/api/v1/imports" })).json());
+    const duplicate = queue.candidates.find((candidate) => candidate.duplicateResolution === "suspected");
+    expect(duplicate).toMatchObject({
+      duplicateConfidence: 92,
+      duplicateFilename: "bank.csv",
+    });
+
+    const blockedApproval = await app.inject({
+      method: "POST",
+      url: "/api/v1/candidate-actions/approve",
+      payload: { ids: [duplicate?.id] },
+    });
+    expect(blockedApproval.statusCode).toBe(400);
+
+    const keepSeparate = await app.inject({
+      method: "POST",
+      url: `/api/v1/candidates/${duplicate?.id}/duplicate-resolution`,
+      payload: { action: "keep_distinct" },
+    });
+    expect(keepSeparate.statusCode).toBe(200);
+    const resolved = importQueueResponseSchema
+      .parse(keepSeparate.json())
+      .candidates.find((candidate) => candidate.id === duplicate?.id);
+    expect(resolved?.duplicateResolution).toBe("distinct");
+
+    const approval = await app.inject({
+      method: "POST",
+      url: "/api/v1/candidate-actions/approve",
+      payload: { ids: [duplicate?.id] },
+    });
+    expect(approval.statusCode).toBe(200);
+    await app.close();
+  });
 });

@@ -40,6 +40,7 @@ import {
   projectSummaryResponseSchema,
   type ReferenceDataResponse,
   type RejectImportCandidatesRequest,
+  type ResolveImportDuplicateRequest,
   referenceDataResponseSchema,
   type StatementParseRequest,
   type StatementUploadResponse,
@@ -266,6 +267,22 @@ export async function resetImportCandidatesToPending(
   input: ImportCandidateActionRequest,
 ): Promise<ImportQueueResponse> {
   const response = await fetch("/api/v1/candidate-actions/reset-pending", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return importQueueResponseSchema.parse(await response.json());
+}
+
+export async function resolveImportDuplicate(
+  id: string,
+  input: ResolveImportDuplicateRequest,
+): Promise<ImportQueueResponse> {
+  const response = await fetch(`/api/v1/candidates/${encodeURIComponent(id)}/duplicate-resolution`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),

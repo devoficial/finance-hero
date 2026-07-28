@@ -6798,6 +6798,24 @@ h2 {
   color: var(--green);
 }
 
+.import-table .candidate-action-group .candidate-merge {
+  background: var(--yellow);
+  border-color: var(--yellow-dark);
+  color: var(--ink);
+}
+
+.import-table .candidate-action-group .candidate-distinct {
+  border-color: var(--yellow-dark);
+  color: var(--ink);
+}
+
+.duplicate-warning {
+  color: var(--red);
+  display: block;
+  font-weight: 700;
+  margin-top: 6px;
+}
+
 .candidate-action-group button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -6902,6 +6920,50 @@ h2 {
 
 .import-editor-grid .wide {
   grid-column: 1 / -1;
+}
+
+.split-editor {
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.split-editor-heading,
+.split-editor-row {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+}
+
+.split-editor-heading {
+  grid-template-columns: 1fr auto;
+}
+
+.split-editor-row {
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 0.45fr) auto;
+}
+
+.split-editor button {
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.split-add-line {
+  justify-self: start;
+}
+
+.import-editor-grid .remember-rule {
+  align-items: center;
+  display: flex;
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.import-editor-grid .remember-rule input {
+  min-height: auto;
+  width: auto;
 }
 
 .source-evidence {

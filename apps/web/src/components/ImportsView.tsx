@@ -12,6 +12,7 @@ import {
   parseStatementArtifact,
   rejectImportCandidates,
   resetImportCandidatesToPending,
+  resolveImportDuplicate,
   updateImportCandidate,
   uploadStatement,
 } from "../lib/api";
@@ -48,6 +49,8 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const [editDirection, setEditDirection] = useState<"debit" | "credit">("debit");
   const [editAccountId, setEditAccountId] = useState("");
   const [editCategoryId, setEditCategoryId] = useState("");
+  const [editSplits, setEditSplits] = useState<Array<{ id: string; categoryId: string; amount: string }>>([]);
+  const [rememberMerchantRule, setRememberMerchantRule] = useState(false);
   const [rejectRequest, setRejectRequest] = useState<{ ids: string[]; label: string } | null>(null);
   const [rejectReason, setRejectReason] = useState("Not a valid transaction");
   const [resetRequest, setResetRequest] = useState<ImportCandidate | null>(null);
@@ -170,6 +173,15 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : "Candidate reset failed."),
   });
+  const duplicateMutation = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: "keep_distinct" | "merge" }) =>
+      resolveImportDuplicate(id, { action }),
+    onSuccess: async () => {
+      setActionError(null);
+      await refresh();
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : "Duplicate resolution failed."),
+  });
 
   const candidates = useMemo(
     () =>
@@ -185,7 +197,8 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     candidate.status === "pending" &&
     candidate.occurredOn != null &&
     candidateAccountId(candidate) != null &&
-    (candidate.direction === "credit" || candidate.categoryId != null);
+    (candidate.direction === "credit" || candidate.categoryId != null || candidate.splits.length >= 2) &&
+    candidate.duplicateResolution !== "suspected";
   const readyPendingVisible = pendingVisible.filter(candidateIsReady);
   const allReadySelected =
     readyPendingVisible.length > 0 && readyPendingVisible.every((candidate) => selected.has(candidate.id));
@@ -204,6 +217,14 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     setEditDirection(candidate.direction);
     setEditAccountId(candidateAccountId(candidate) ?? "");
     setEditCategoryId(candidate.categoryId ?? "");
+    setEditSplits(
+      candidate.splits.map((split) => ({
+        id: crypto.randomUUID(),
+        categoryId: split.categoryId,
+        amount: String(split.amountPaise / 100),
+      })),
+    );
+    setRememberMerchantRule(false);
     setActionError(null);
   }
 
@@ -214,8 +235,21 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
       setActionError("Date, payee, positive amount, and account are required.");
       return;
     }
-    if (editDirection === "debit" && !editCategoryId) {
+    const splits = editSplits.map((split) => ({
+      categoryId: split.categoryId,
+      amountPaise: rupeesToPaise(split.amount) ?? 0,
+    }));
+    if (editDirection === "debit" && !editCategoryId && splits.length === 0) {
       setActionError("Debit transactions require an expense category.");
+      return;
+    }
+    if (
+      splits.length > 0 &&
+      (splits.length < 2 ||
+        splits.some((split) => !split.categoryId || split.amountPaise <= 0) ||
+        splits.reduce((sum, split) => sum + split.amountPaise, 0) !== amountPaise)
+    ) {
+      setActionError("Use at least two complete split lines whose amounts equal the transaction total.");
       return;
     }
     editMutation.mutate({
@@ -226,7 +260,9 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
         amountPaise,
         direction: editDirection,
         accountId: editAccountId,
-        categoryId: editDirection === "debit" ? editCategoryId : null,
+        categoryId: editDirection === "debit" && splits.length === 0 ? editCategoryId : null,
+        splits: editDirection === "debit" && splits.length > 0 ? splits : null,
+        rememberMerchantRule,
       },
     });
   }
@@ -290,7 +326,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
         <div className="import-safety">
           <span>LOCAL-ONLY EVIDENCE</span>
           <strong>Files stay on this Mac</strong>
-          <small>CSV, TSV, text PDFs, XLS and XLSX extract locally. Scanned PDFs are held for OCR.</small>
+          <small>CSV, TSV, PDF, XLS and XLSX extract locally. Scanned PDFs use Apple Vision OCR on this Mac.</small>
         </div>
       </section>
 
@@ -608,7 +644,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                                 onChange={(event) =>
                                   assignmentMutation.mutate({
                                     id: candidate.id,
-                                    input: { categoryId: event.target.value || null },
+                                    input: { categoryId: event.target.value || null, splits: null },
                                   })
                                 }
                               >
@@ -626,10 +662,20 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                           <small>
                             {assignmentIsPending(candidate.id)
                               ? "Saving selection..."
-                              : candidateIsReady(candidate)
-                                ? "Ready to approve"
-                                : "Choose required fields"}
+                              : candidate.duplicateResolution === "suspected"
+                                ? "Resolve duplicate before approval"
+                                : candidateIsReady(candidate)
+                                  ? "Ready to approve"
+                                  : "Choose required fields"}
                           </small>
+                          {candidate.splits.length > 0 && (
+                            <small>
+                              Split:{" "}
+                              {candidate.splits
+                                .map((split) => `${split.categoryName ?? "Category"} ${money(split.amountPaise)}`)
+                                .join(" + ")}
+                            </small>
+                          )}
                         </>
                       ) : (
                         <>
@@ -648,6 +694,12 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                         {candidate.confidence}%
                       </span>
                       <small>{candidate.warnings[0] ?? candidate.status}</small>
+                      {candidate.duplicateResolution === "suspected" && (
+                        <small className="duplicate-warning">
+                          Exact match in {candidate.duplicateFilename ?? "another source"}:{" "}
+                          {candidate.duplicatePayee ?? "same transaction"}
+                        </small>
+                      )}
                     </td>
                     <td className="candidate-actions">
                       {candidate.status === "pending" ? (
@@ -675,6 +727,26 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                           >
                             Edit details
                           </button>
+                          {candidate.duplicateResolution === "suspected" && (
+                            <>
+                              <button
+                                className="candidate-merge"
+                                disabled={duplicateMutation.isPending}
+                                onClick={() => duplicateMutation.mutate({ id: candidate.id, action: "merge" })}
+                                type="button"
+                              >
+                                Merge duplicate
+                              </button>
+                              <button
+                                className="candidate-distinct"
+                                disabled={duplicateMutation.isPending}
+                                onClick={() => duplicateMutation.mutate({ id: candidate.id, action: "keep_distinct" })}
+                                type="button"
+                              >
+                                Keep separate
+                              </button>
+                            </>
+                          )}
                           <button
                             className="candidate-reject"
                             disabled={approveMutation.isPending || rejectMutation.isPending}
@@ -771,8 +843,12 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                 </label>
                 {editDirection === "debit" && (
                   <label className="wide">
-                    Expense category
-                    <select onChange={(event) => setEditCategoryId(event.target.value)} value={editCategoryId}>
+                    {editSplits.length > 0 ? "Split expense" : "Expense category"}
+                    <select
+                      disabled={editSplits.length > 0}
+                      onChange={(event) => setEditCategoryId(event.target.value)}
+                      value={editCategoryId}
+                    >
                       <option value="">Choose category</option>
                       {categories.map((category) => (
                         <option key={category.id} value={category.id}>
@@ -780,6 +856,97 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
                         </option>
                       ))}
                     </select>
+                  </label>
+                )}
+                {editDirection === "debit" && (
+                  <div className="wide split-editor">
+                    <div className="split-editor-heading">
+                      <strong>Category split</strong>
+                      <button
+                        onClick={() => {
+                          if (editSplits.length > 0) {
+                            setEditSplits([]);
+                          } else {
+                            setEditCategoryId("");
+                            setEditSplits([
+                              { id: crypto.randomUUID(), categoryId: "", amount: "" },
+                              { id: crypto.randomUUID(), categoryId: "", amount: "" },
+                            ]);
+                          }
+                        }}
+                        type="button"
+                      >
+                        {editSplits.length > 0 ? "Use one category" : "Split transaction"}
+                      </button>
+                    </div>
+                    {editSplits.map((split, index) => (
+                      <div className="split-editor-row" key={split.id}>
+                        <select
+                          aria-label={`Split ${index + 1} category`}
+                          onChange={(event) =>
+                            setEditSplits((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, categoryId: event.target.value } : item,
+                              ),
+                            )
+                          }
+                          value={split.categoryId}
+                        >
+                          <option value="">Choose category</option>
+                          {categories.map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.name}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          aria-label={`Split ${index + 1} amount in INR`}
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            setEditSplits((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, amount: event.target.value } : item,
+                              ),
+                            )
+                          }
+                          placeholder="Amount in INR"
+                          value={split.amount}
+                        />
+                        <button
+                          disabled={editSplits.length <= 2}
+                          onClick={() =>
+                            setEditSplits((current) => current.filter((_, itemIndex) => itemIndex !== index))
+                          }
+                          type="button"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    {editSplits.length > 0 && editSplits.length < 20 && (
+                      <button
+                        className="split-add-line"
+                        onClick={() =>
+                          setEditSplits((current) => [
+                            ...current,
+                            { id: crypto.randomUUID(), categoryId: "", amount: "" },
+                          ])
+                        }
+                        type="button"
+                      >
+                        + Add split line
+                      </button>
+                    )}
+                  </div>
+                )}
+                {editDirection === "debit" && editSplits.length === 0 && (
+                  <label className="wide remember-rule">
+                    <input
+                      checked={rememberMerchantRule}
+                      onChange={(event) => setRememberMerchantRule(event.target.checked)}
+                      type="checkbox"
+                    />
+                    Remember this merchant’s account and category for future imports
                   </label>
                 )}
               </div>

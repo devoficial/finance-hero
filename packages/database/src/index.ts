@@ -20,6 +20,7 @@ export {
   type ImportCandidateStatus,
   type ImportQueueRecord,
   ImportRepository,
+  type ResolveImportDuplicateAction,
   type UpdateImportCandidateInput,
 } from "./import-repository";
 export {

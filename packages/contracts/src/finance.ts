@@ -124,6 +124,18 @@ export const importCandidateSchema = z.object({
   source: z.record(z.string(), z.string()),
   transactionId: z.string().nullable(),
   rejectionReason: z.string().nullable(),
+  duplicateOfCandidateId: z.string().nullable(),
+  duplicatePayee: z.string().nullable(),
+  duplicateFilename: z.string().nullable(),
+  duplicateConfidence: z.number().int().min(0).max(100).nullable(),
+  duplicateResolution: z.enum(["none", "suspected", "distinct", "merged"]),
+  splits: z.array(
+    z.object({
+      categoryId: z.string(),
+      categoryName: z.string().nullable(),
+      amountPaise: paiseSchema.positive(),
+    }),
+  ),
   updatedAt: z.string().datetime(),
 });
 
@@ -152,6 +164,13 @@ export const updateImportCandidateRequestSchema = z
     direction: z.enum(["debit", "credit"]).optional(),
     accountId: z.string().min(1).nullable().optional(),
     categoryId: z.string().min(1).nullable().optional(),
+    splits: z
+      .array(z.object({ categoryId: z.string().min(1), amountPaise: paiseSchema.positive() }))
+      .min(2)
+      .max(20)
+      .nullable()
+      .optional(),
+    rememberMerchantRule: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, { message: "At least one candidate field is required." });
 
@@ -161,6 +180,10 @@ export const importCandidateActionRequestSchema = z.object({
 
 export const rejectImportCandidatesRequestSchema = importCandidateActionRequestSchema.extend({
   reason: z.string().trim().min(3).max(500),
+});
+
+export const resolveImportDuplicateRequestSchema = z.object({
+  action: z.enum(["keep_distinct", "merge"]),
 });
 
 export const financialAccountSchema = z.object({
@@ -629,6 +652,7 @@ export type StatementParseRequest = z.infer<typeof statementParseRequestSchema>;
 export type UpdateImportCandidateRequest = z.infer<typeof updateImportCandidateRequestSchema>;
 export type ImportCandidateActionRequest = z.infer<typeof importCandidateActionRequestSchema>;
 export type RejectImportCandidatesRequest = z.infer<typeof rejectImportCandidatesRequestSchema>;
+export type ResolveImportDuplicateRequest = z.infer<typeof resolveImportDuplicateRequestSchema>;
 export type FinancialAccount = z.infer<typeof financialAccountSchema>;
 export type FinancialAccountsResponse = z.infer<typeof financialAccountsResponseSchema>;
 export type CreateFinancialAccountRequest = z.infer<typeof createFinancialAccountRequestSchema>;

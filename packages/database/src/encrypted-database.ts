@@ -284,9 +284,29 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       source_json TEXT NOT NULL,
       transaction_id TEXT REFERENCES journal_transactions(id),
       rejection_reason TEXT,
+      normalized_payee TEXT NOT NULL DEFAULT '',
+      fingerprint TEXT NOT NULL DEFAULT '',
+      duplicate_of_candidate_id TEXT REFERENCES import_candidates(id),
+      duplicate_confidence INTEGER CHECK (duplicate_confidence IS NULL OR duplicate_confidence BETWEEN 0 AND 100),
+      duplicate_resolution TEXT NOT NULL DEFAULT 'none'
+        CHECK (duplicate_resolution IN ('none', 'suspected', 'distinct', 'merged')),
+      splits_json TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       UNIQUE (artifact_id, source_row)
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS merchant_rules (
+      id TEXT PRIMARY KEY NOT NULL,
+      normalized_payee TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK (direction IN ('debit', 'credit')),
+      account_id TEXT REFERENCES accounts(id),
+      category_id TEXT REFERENCES categories(id),
+      source_candidate_id TEXT REFERENCES import_candidates(id),
+      times_applied INTEGER NOT NULL DEFAULT 0 CHECK (times_applied >= 0),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (normalized_payee, direction)
     ) STRICT;
 
     CREATE INDEX IF NOT EXISTS postings_transaction_idx ON postings(transaction_id);
@@ -303,6 +323,9 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     CREATE INDEX IF NOT EXISTS import_artifacts_created_idx ON import_artifacts(created_at DESC);
     CREATE INDEX IF NOT EXISTS import_candidates_status_idx ON import_candidates(status, updated_at DESC);
     CREATE INDEX IF NOT EXISTS import_candidates_artifact_idx ON import_candidates(artifact_id, source_row);
+    CREATE INDEX IF NOT EXISTS import_candidates_fingerprint_idx ON import_candidates(fingerprint, status);
+    CREATE INDEX IF NOT EXISTS import_candidates_duplicate_idx ON import_candidates(duplicate_of_candidate_id);
+    CREATE INDEX IF NOT EXISTS merchant_rules_match_idx ON merchant_rules(normalized_payee, direction);
   `);
 
   const debtColumns = database.connection.prepare("PRAGMA table_info(debts)").all() as Array<{ name: string }>;
@@ -322,6 +345,34 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
   if (!goalColumns.some((column) => column.name === "coverage_months")) {
     database.connection.exec("ALTER TABLE financial_goals ADD COLUMN coverage_months INTEGER");
   }
+
+  const importCandidateColumns = database.connection.prepare("PRAGMA table_info(import_candidates)").all() as Array<{
+    name: string;
+  }>;
+  if (!importCandidateColumns.some((column) => column.name === "normalized_payee")) {
+    database.connection.exec("ALTER TABLE import_candidates ADD COLUMN normalized_payee TEXT NOT NULL DEFAULT ''");
+  }
+  if (!importCandidateColumns.some((column) => column.name === "fingerprint")) {
+    database.connection.exec("ALTER TABLE import_candidates ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''");
+  }
+  if (!importCandidateColumns.some((column) => column.name === "duplicate_of_candidate_id")) {
+    database.connection.exec("ALTER TABLE import_candidates ADD COLUMN duplicate_of_candidate_id TEXT");
+  }
+  if (!importCandidateColumns.some((column) => column.name === "duplicate_confidence")) {
+    database.connection.exec("ALTER TABLE import_candidates ADD COLUMN duplicate_confidence INTEGER");
+  }
+  if (!importCandidateColumns.some((column) => column.name === "duplicate_resolution")) {
+    database.connection.exec(
+      "ALTER TABLE import_candidates ADD COLUMN duplicate_resolution TEXT NOT NULL DEFAULT 'none'",
+    );
+  }
+  if (!importCandidateColumns.some((column) => column.name === "splits_json")) {
+    database.connection.exec("ALTER TABLE import_candidates ADD COLUMN splits_json TEXT NOT NULL DEFAULT '[]'");
+  }
+  database.connection.exec(`
+    CREATE INDEX IF NOT EXISTS import_candidates_fingerprint_idx ON import_candidates(fingerprint, status);
+    CREATE INDEX IF NOT EXISTS import_candidates_duplicate_idx ON import_candidates(duplicate_of_candidate_id);
+  `);
   database.connection
     .prepare(`
       UPDATE financial_goals

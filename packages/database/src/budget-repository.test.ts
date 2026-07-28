@@ -279,14 +279,14 @@ describe("budget repository", () => {
       cashOutflowPaise: dashboardAfter.cashOutflowPaise,
       regularBudgetPaise: 6054800,
     });
-    expect(ledger.listTransactions("2026-07")).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          payee: "Groceries, food and eating out",
-          origin: "expense_sheet_aggregate",
-        }),
-      ]),
-    );
+    expect(
+      database.connection
+        .prepare("SELECT payee, origin FROM journal_transactions WHERE id = ?")
+        .get("migration-expense-history-2026-07-category-groceries"),
+    ).toEqual({
+      payee: "Groceries, food and eating out",
+      origin: "expense_sheet_aggregate",
+    });
 
     const emergencyAfter = wealth.getWealth("2026-07-26").goals.find((goal) => goal.id === "goal-emergency-fund");
     expect(emergencyAfter?.monthlyNeedPaise).toBe((emergencyBefore?.monthlyNeedPaise ?? 0) + 50000);

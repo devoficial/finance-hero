@@ -239,7 +239,7 @@ describe("import repository", () => {
     database.close();
   });
 
-  it("adds an approved expense to the month determined by its transaction date", () => {
+  it("replaces the matching migrated aggregate amount without changing the accepted month total", () => {
     const { database, ledger, repository } = createRepository();
     const juneBefore = ledger.getDashboard("2026-06", 30);
     const julyBefore = ledger.getDashboard("2026-07", 31);
@@ -271,8 +271,8 @@ describe("import repository", () => {
 
     const juneAfter = ledger.getDashboard("2026-06", 30);
     const julyAfter = ledger.getDashboard("2026-07", 31);
-    expect(juneAfter.regularExpensePaise).toBe(juneBefore.regularExpensePaise + 12345);
-    expect(juneAfter.totalExpensePaise).toBe(juneBefore.totalExpensePaise + 12345);
+    expect(juneAfter.regularExpensePaise).toBe(juneBefore.regularExpensePaise);
+    expect(juneAfter.totalExpensePaise).toBe(juneBefore.totalExpensePaise);
     expect(julyAfter.totalExpensePaise).toBe(julyBefore.totalExpensePaise);
     expect(ledger.listTransactions("2026-06")).toEqual(
       expect.arrayContaining([
@@ -284,6 +284,191 @@ describe("import repository", () => {
         }),
       ]),
     );
+    repository.resetCandidatesToPending([candidate.id]);
+    expect(ledger.getDashboard("2026-06", 30).regularExpensePaise).toBe(juneBefore.regularExpensePaise);
+    database.close();
+  });
+
+  it("detects the same transaction across differently encoded source files and requires resolution", () => {
+    const { database, repository } = createRepository();
+    const base = {
+      sizeBytes: 120,
+      accountId: "account-primary-bank",
+      status: "parsed" as const,
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-20",
+          payee: "UPI/P2M/123456789/SWIGGY PAYMENT",
+          amountPaise: 42500,
+          direction: "debit" as const,
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    };
+    repository.createArtifact({
+      ...base,
+      filename: "statement.pdf",
+      contentHash: "semantic-duplicate-pdf",
+      mimeType: "application/pdf",
+    });
+    repository.createArtifact({
+      ...base,
+      filename: "statement.csv",
+      contentHash: "semantic-duplicate-csv",
+      mimeType: "text/csv",
+    });
+    const queue = repository.getQueue();
+    const duplicate = queue.candidates.find((candidate) => candidate.duplicateResolution === "suspected");
+    expect(duplicate).toMatchObject({
+      duplicateConfidence: 100,
+      duplicatePayee: "UPI/P2M/123456789/SWIGGY PAYMENT",
+      duplicateFilename: "statement.pdf",
+    });
+    expect(() => repository.approveCandidates([duplicate?.id ?? ""])).toThrow("matches an existing transaction");
+
+    repository.resolveDuplicate(duplicate?.id ?? "", "merge");
+    expect(repository.getQueue()).toMatchObject({ pendingCount: 1, rejectedCount: 1 });
+    database.close();
+  });
+
+  it("allows an explicitly distinct same-day transaction and records the decision", () => {
+    const { database, repository } = createRepository();
+    for (const [index, hash] of ["distinct-a", "distinct-b"].entries()) {
+      repository.createArtifact({
+        filename: `${hash}.csv`,
+        contentHash: hash,
+        mimeType: "text/csv",
+        sizeBytes: 100,
+        accountId: "account-primary-bank",
+        status: "parsed",
+        rows: [
+          {
+            sourceRow: 2,
+            occurredOn: "2026-07-20",
+            payee: "METRO TICKET",
+            amountPaise: 5000,
+            direction: "debit",
+            categoryId: "category-transport",
+            confidence: 85,
+            warnings: [],
+            source: { Copy: String(index) },
+          },
+        ],
+      });
+    }
+    const duplicate = repository
+      .getQueue()
+      .candidates.find((candidate) => candidate.duplicateResolution === "suspected");
+    repository.resolveDuplicate(duplicate?.id ?? "", "keep_distinct");
+    expect(repository.getQueue().candidates.find((candidate) => candidate.id === duplicate?.id)).toMatchObject({
+      duplicateResolution: "distinct",
+    });
+    expect(() => repository.approveCandidates([duplicate?.id ?? ""])).not.toThrow();
+    database.close();
+  });
+
+  it("posts balanced split expenses and rebases each migrated category", () => {
+    const { database, ledger, repository } = createRepository();
+    const before = ledger.getDashboard("2026-07", 31);
+    repository.createArtifact({
+      filename: "split.csv",
+      contentHash: "split-import",
+      mimeType: "text/csv",
+      sizeBytes: 100,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-20",
+          payee: "SUPERMARKET AND PHARMACY",
+          amountPaise: 100000,
+          direction: "debit",
+          confidence: 60,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    const candidate = repository.getQueue().candidates[0];
+    if (!candidate) throw new Error("Expected split candidate.");
+    repository.updateCandidate(candidate.id, {
+      categoryId: null,
+      splits: [
+        { categoryId: "category-groceries", amountPaise: 70000 },
+        { categoryId: "category-medical", amountPaise: 30000 },
+      ],
+    });
+    const approved = repository.approveCandidates([candidate.id]);
+    const transaction = ledger
+      .listTransactions("2026-07")
+      .find((item) => item.id === approved.candidates.find((item) => item.id === candidate.id)?.transactionId);
+    expect(transaction?.splits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ categoryId: "category-groceries", amountPaise: 70000 }),
+        expect.objectContaining({ categoryId: "category-medical", amountPaise: 30000 }),
+      ]),
+    );
+    expect(ledger.getDashboard("2026-07", 31).regularExpensePaise).toBe(before.regularExpensePaise);
+    database.close();
+  });
+
+  it("learns an exact merchant assignment rule for later source files", () => {
+    const { database, repository } = createRepository();
+    repository.createArtifact({
+      filename: "first.csv",
+      contentHash: "merchant-rule-first",
+      mimeType: "text/csv",
+      sizeBytes: 100,
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-20",
+          payee: "LOCAL TIFFIN SERVICE",
+          amountPaise: 25000,
+          direction: "debit",
+          confidence: 55,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    const first = repository.getQueue().candidates[0];
+    if (!first) throw new Error("Expected merchant candidate.");
+    repository.updateCandidate(first.id, {
+      accountId: "account-primary-bank",
+      categoryId: "category-groceries",
+      rememberMerchantRule: true,
+    });
+    repository.createArtifact({
+      filename: "next.csv",
+      contentHash: "merchant-rule-next",
+      mimeType: "text/csv",
+      sizeBytes: 100,
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-21",
+          payee: "LOCAL TIFFIN SERVICE",
+          amountPaise: 27500,
+          direction: "debit",
+          confidence: 55,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    expect(repository.getQueue().candidates.find((candidate) => candidate.filename === "next.csv")).toMatchObject({
+      accountId: "account-primary-bank",
+      categoryId: "category-groceries",
+      warnings: expect.arrayContaining(["Merchant rule applied"]),
+    });
     database.close();
   });
 

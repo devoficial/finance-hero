@@ -102,7 +102,10 @@ before updating it.
 - Google login, device pairing, LAN HTTPS, Gmail, and SMS are not connected yet.
 - Local CSV, TSV, text-PDF, XLS, and XLSX extraction is connected to the approval queue. Originals are preserved in
   `data/imports/quarantine`; password-protected PDFs can be retried with a password held only in process memory.
-- Scanned-PDF OCR, institution-specific layouts, statement balance reconciliation, merge/split review actions,
-  Gmail discovery, and iPhone Shortcut ingestion remain pending. Unsupported layouts stay outside the ledger.
+- Scanned PDFs use a fully local macOS PDFKit/Apple Vision helper. Cross-source semantic duplicates require an
+  explicit merge-or-keep decision, debit candidates support balanced category splits, and approved detailed rows
+  transactionally replace their migrated monthly aggregates. Reviewed merchant mappings can be reused locally.
+- Additional institution-specific fixtures, statement opening/closing-balance reconciliation, Gmail discovery, and
+  iPhone Shortcut ingestion remain pending. Unsupported layouts stay outside the financial record.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
 - PWA SVG branding is sufficient for development; release-quality iOS PNG icons are pending.

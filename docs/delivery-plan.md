@@ -81,9 +81,11 @@ views. No historical aggregate is presented as transaction-level evidence.
 
 ## 6. Phase 3: import review and statements
 
-Status: underway. The local quarantine, content-hash deduplication, CSV/TSV parser,
-editable review queue, multi-select approval/rejection, and audited ledger posting are implemented.
-PDF/Excel parser plug-ins, merge/split, reconciliation, and redacted institution fixtures remain.
+Status: underway. The local quarantine, CSV/TSV/PDF/Excel parsing, macOS Vision OCR,
+content-hash and semantic cross-source deduplication, editable split review,
+merchant-mapping rules, multi-select approval/rejection, audited posting, and migrated
+aggregate replacement are implemented. Opening/closing statement reconciliation and a
+larger set of redacted institution fixtures remain.
 
 Deliver:
 

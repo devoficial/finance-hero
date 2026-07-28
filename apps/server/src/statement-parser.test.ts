@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
-import { parseStatementDelimitedFile, parseStatementExcelFile, parseStatementPdfFile } from "./statement-parser";
+import {
+  parseStatementDelimitedFile,
+  parseStatementExcelFile,
+  parseStatementOcrPages,
+  parseStatementPdfFile,
+} from "./statement-parser";
 
 function createTextPdfPages(pages: Array<Array<Array<{ text: string; x: number }>>>): Buffer {
   const escapePdfText = (value: string) => value.replace(/([\\()])/g, "\\$1");
@@ -127,6 +132,35 @@ describe("statement delimited parser", () => {
     expect(() => parseStatementDelimitedFile(Buffer.from("A,B,C\n1,2,3"), "statement.csv")).toThrow(
       "Required date, description, and amount columns could not be detected.",
     );
+  });
+
+  it("detects semicolon-delimited exports and card amount DR markers", () => {
+    const parsed = parseStatementDelimitedFile(
+      Buffer.from("Posting Date;Transaction Description;Transaction Amount\n20/07/2026;APOLLO PHARMACY;600.00 DR"),
+      "card.csv",
+    );
+    expect(parsed.rows[0]).toMatchObject({
+      occurredOn: "2026-07-20",
+      payee: "APOLLO PHARMACY",
+      amountPaise: 60000,
+      direction: "debit",
+    });
+  });
+});
+
+describe("statement OCR normalizer", () => {
+  it("creates low-confidence review candidates from dated OCR lines", () => {
+    const parsed = parseStatementOcrPages([
+      {
+        page: 1,
+        lines: ["01/07/2026 OPENING INTEREST 408.00 CR 245258.91", "02/07/2026 RENT PAYMENT 16433.00 DR 228825.91"],
+      },
+    ]);
+    expect(parsed.rows).toEqual([
+      expect.objectContaining({ payee: "OPENING INTEREST", amountPaise: 40800, direction: "credit" }),
+      expect.objectContaining({ payee: "RENT PAYMENT", amountPaise: 1643300, direction: "debit" }),
+    ]);
+    expect(parsed.rows[0]?.warnings).toContain("Extracted with local OCR; verify date, direction, and amount");
   });
 });
 

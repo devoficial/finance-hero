@@ -17,6 +17,11 @@ export interface ParsedStatement {
   message: string;
 }
 
+export interface OcrStatementPage {
+  page: number;
+  lines: string[];
+}
+
 interface PdfToken {
   text: string;
   x: number;
@@ -35,10 +40,38 @@ const MAXIMUM_PDF_PAGES = 200;
 const MAXIMUM_PDF_TEXT_ITEMS = 500_000;
 const MAXIMUM_XLSX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
 const MAXIMUM_XLSX_ENTRIES = 5_000;
-const DATE_HEADERS = ["date", "trandate", "transactiondate", "txndate", "valuedate", "posteddate"];
-const DESCRIPTION_HEADERS = ["description", "narration", "particulars", "merchant", "transactiondetails", "remarks"];
-const DEBIT_HEADERS = ["debit", "debitamount", "withdrawal", "withdrawals", "dr"];
-const CREDIT_HEADERS = ["credit", "creditamount", "deposit", "deposits", "cr"];
+const DATE_HEADERS = ["date", "trandate", "transactiondate", "txndate", "valuedate", "posteddate", "postingdate"];
+const DESCRIPTION_HEADERS = [
+  "description",
+  "narration",
+  "particulars",
+  "merchant",
+  "transactiondetails",
+  "transactiondescription",
+  "transactionparticulars",
+  "details",
+  "remarks",
+];
+const DEBIT_HEADERS = [
+  "debit",
+  "debitamount",
+  "withdrawal",
+  "withdrawals",
+  "withdrawalamount",
+  "withdrawalamt",
+  "debitamt",
+  "dr",
+];
+const CREDIT_HEADERS = [
+  "credit",
+  "creditamount",
+  "deposit",
+  "deposits",
+  "depositamount",
+  "depositamt",
+  "creditamt",
+  "cr",
+];
 const AMOUNT_HEADERS = ["amount", "transactionamount", "txnamount"];
 const DIRECTION_HEADERS = ["direction", "type", "drcr", "debitcredit"];
 const BALANCE_HEADERS = ["balance", "closingbalance", "availablebalance", "runningbalance", "bal"];
@@ -135,8 +168,81 @@ function parseDate(value: string): string | null {
   return new Date(timestamp).toISOString().slice(0, 10);
 }
 
+export function parseStatementOcrPages(pages: OcrStatementPage[]): ParsedStatement {
+  const rows: ParsedStatementRow[] = [];
+  let previousBalance: number | null = null;
+  const datedLine = /^(\d{1,2}[-/]\d{1,2}[-/](?:\d{2}|\d{4})|\d{4}[-/]\d{1,2}[-/]\d{1,2})\s+(.+)$/;
+  const amountPattern = /(?:₹\s*)?(\d[\d,]*\.\d{2}|\d[\d,]*)(?:\s*(CR|DR))?/gi;
+
+  for (const page of pages) {
+    let pendingDescription = "";
+    for (const rawLine of page.lines) {
+      const line = rawLine.replace(/\s+/g, " ").trim();
+      const match = line.match(datedLine);
+      if (!match) {
+        if (line.length > 2 && !/^(page|statement|date|particular|description|balance)\b/i.test(line)) {
+          pendingDescription = `${pendingDescription} ${line}`.trim().slice(-400);
+        }
+        continue;
+      }
+      const occurredOn = parseDate(match[1] ?? "");
+      const remainder = match[2] ?? "";
+      const amounts = [...remainder.matchAll(amountPattern)].map((amountMatch) => ({
+        text: amountMatch[1] ?? "",
+        marker: amountMatch[2]?.toUpperCase() ?? "",
+        index: amountMatch.index ?? 0,
+      }));
+      if (!occurredOn || amounts.length === 0) {
+        pendingDescription = "";
+        continue;
+      }
+      const balance = amounts.length >= 2 ? parseBalance(amounts.at(-1)?.text ?? "") : null;
+      const transactionAmount = parseAmount((amounts.length >= 2 ? amounts.at(-2) : amounts.at(-1))?.text ?? "");
+      if (!transactionAmount) {
+        pendingDescription = "";
+        continue;
+      }
+      const amountToken = amounts.length >= 2 ? amounts.at(-2) : amounts.at(-1);
+      const explicitMarker = amountToken?.marker ?? "";
+      let direction: "debit" | "credit";
+      const warnings = ["Extracted with local OCR; verify date, direction, and amount"];
+      if (explicitMarker === "DR") {
+        direction = "debit";
+      } else if (explicitMarker === "CR") {
+        direction = "credit";
+      } else if (balance != null && previousBalance != null && balance !== previousBalance) {
+        direction = balance < previousBalance ? "debit" : "credit";
+      } else {
+        direction = "debit";
+        warnings.push("Direction inferred as debit");
+      }
+      if (balance != null) previousBalance = balance;
+      const descriptionEnd = amountToken?.index ?? remainder.length;
+      const description = remainder.slice(0, descriptionEnd).trim();
+      rows.push({
+        sourceRow: rows.length + 1,
+        occurredOn,
+        payee: [pendingDescription, description].filter(Boolean).join(" ").slice(0, 400) || "OCR transaction",
+        amountPaise: transactionAmount,
+        direction,
+        confidence: explicitMarker || (balance != null && previousBalance != null) ? 55 : 35,
+        warnings,
+        source: { Source: `Local OCR page ${page.page}`, "OCR line": rawLine },
+      });
+      pendingDescription = "";
+    }
+  }
+  if (rows.length === 0) {
+    throw new Error("Local OCR completed, but no recognizable dated transaction rows were found.");
+  }
+  return {
+    rows,
+    message: `${rows.length} low-confidence transaction candidate${rows.length === 1 ? "" : "s"} extracted with local Apple Vision OCR. Verify every row before approval.`,
+  };
+}
+
 function inferDirection(value: string, amountValue: string): "debit" | "credit" {
-  const normalized = value.trim().toLowerCase();
+  const normalized = `${value} ${amountValue}`.trim().toLowerCase();
   if (normalized.includes("cr") || normalized.includes("credit") || normalized.includes("deposit")) {
     return "credit";
   }
@@ -270,7 +376,16 @@ export function parseStatementDelimitedFile(content: Buffer, filename: string): 
   if (text.includes("\u0000")) {
     throw new Error("The file is not a text CSV or TSV statement.");
   }
-  const delimiter = filename.toLowerCase().endsWith(".tsv") ? "\t" : ",";
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
+  const delimiter = filename.toLowerCase().endsWith(".tsv")
+    ? "\t"
+    : ([",", ";", "\t"] as const).reduce(
+        (best, candidate) => {
+          const count = firstLine.split(candidate).length - 1;
+          return count > best.count ? { value: candidate, count } : best;
+        },
+        { value: "," as string, count: -1 },
+      ).value;
   const table = parseDelimited(text, delimiter);
   if (table.length < 2) {
     throw new Error("The statement does not contain a header and transaction rows.");

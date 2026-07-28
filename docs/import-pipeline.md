@@ -61,14 +61,16 @@ Supported formats:
 
 - text PDF;
 - password-protected PDF, with password held only in process memory;
-- scanned PDF detection, with local OCR still pending;
+- scanned PDF extraction with the macOS PDFKit and Apple Vision frameworks;
 - CSV and TSV;
 - XLS and XLSX.
 
 Uploads are copied to a quarantine directory, assigned a content hash, MIME-sniffed,
 size-limited, and scanned for parser safety before extraction. The original is never
-modified. Current generic PDF/Excel extraction runs inside the loopback-only local API;
-future OCR workers will have no network access and will read only the quarantined file.
+modified. Generic PDF/Excel extraction runs inside the loopback-only local API. When a
+PDF has no usable text layer, the API invokes the local Swift OCR helper. The helper has
+no network dependency and reads only the quarantined file. OCR results are deliberately
+low-confidence and cannot bypass review.
 
 ### Manual entry
 
@@ -148,9 +150,18 @@ Matching generates proposals; it does not merge silently. Features include:
 - equal opposite amounts across owned accounts for transfers;
 - refund/reversal markers.
 
-Candidate pairs receive a score and evidence list. Exact source IDs/content hashes
-are hard duplicates. High-confidence cross-source matches are grouped for one-click
-approval. Ambiguous groups stay separate and display the conflict.
+Candidate pairs receive a score and evidence list. Exact file content hashes prevent
+uploading the same source twice. Transaction rows also receive a semantic fingerprint
+from normalized payee, amount, direction, and date. Exact semantic matches and
+near-date matches across different files are held as suspected duplicates. Approval is
+blocked until the user chooses `Merge duplicate` or `Keep separate`; this decision is
+retained in the audit trail.
+
+Approved detailed statement rows replace, rather than add to, migrated monthly category
+aggregates. The aggregate is rebased by the approved amount in the same database
+transaction, keeping the monthly expense total stable while transaction evidence is
+introduced. Moving the candidate back to pending reverses the posting and restores the
+aggregate.
 
 ## 7. Review experience contract
 
@@ -165,6 +176,12 @@ Each row displays:
 Actions include select, select all in the current filtered result, edit, approve,
 reject, merge, split, defer, and open source. Bulk approval is blocked for candidates
 with unbalanced postings, ambiguous account, ambiguous sign, or hard validation errors.
+
+Debit rows can be divided into two or more category lines. Every line requires a
+category and positive amount, and the split total must exactly equal the source amount
+before it can be saved or approved. A reviewed merchant mapping can optionally be saved
+as a local rule; matching rows in later imports receive the same account and category
+proposal without being silently approved.
 
 Approval transactionally:
 

@@ -723,7 +723,8 @@ export class LedgerRepository {
         SELECT t.id, t.occurred_on AS occurredOn, t.payee, t.memo, t.status, t.origin,
                t.source_ref AS sourceRef
         FROM journal_transactions t
-        WHERE t.effective_month = ? AND t.origin <> 'reversal'
+        WHERE t.effective_month = ?
+          AND t.origin NOT IN ('reversal', 'historical_aggregate', 'expense_sheet_aggregate')
         ORDER BY t.occurred_on DESC, t.created_at DESC
       `)
       .all(month) as TransactionRow[];

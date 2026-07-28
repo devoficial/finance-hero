@@ -33,6 +33,7 @@ import {
   referenceDataResponseSchema,
   rejectImportCandidatesRequestSchema,
   replaceTransactionRequestSchema,
+  resolveImportDuplicateRequestSchema,
   reverseTransactionRequestSchema,
   statementParseRequestSchema,
   statementUploadResponseSchema,
@@ -64,6 +65,7 @@ import {
 } from "@finance-hero/database";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { ServerConfig } from "./config";
+import { parseScannedPdfWithLocalOcr } from "./local-ocr";
 import {
   type ParsedStatementRow,
   parseStatementDelimitedFile,
@@ -431,7 +433,16 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         `${artifact.contentHash}.${fileType}`,
       );
       const content = readFileSync(quarantinePath);
-      const parsed = await parseStatementContent(content, fileType, artifact.filename, input.password);
+      let parsed: Awaited<ReturnType<typeof parseStatementContent>>;
+      try {
+        parsed = await parseStatementContent(content, fileType, artifact.filename, input.password);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (fileType !== "pdf" || !message.includes("OCR is required")) {
+          throw error;
+        }
+        parsed = await parseScannedPdfWithLocalOcr(quarantinePath);
+      }
       const updated = imports.replaceArtifactParseResult(id, {
         status: "parsed",
         parserMessage: parsed.message,
@@ -496,6 +507,20 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     } catch (error) {
       const message = error instanceof Error ? error.message : "Import candidates could not be reset.";
       return reply.code(400).send({ error: { code: "INVALID_IMPORT_RESET", message } });
+    }
+  });
+
+  app.post("/api/v1/candidates/:id/duplicate-resolution", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const { id } = request.params as { id: string };
+      const input = resolveImportDuplicateRequestSchema.parse(request.body);
+      return reply.send(importQueueResponseSchema.parse(imports.resolveDuplicate(id, input.action)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Duplicate candidate could not be resolved.";
+      return reply.code(400).send({ error: { code: "INVALID_DUPLICATE_RESOLUTION", message } });
     }
   });
 
