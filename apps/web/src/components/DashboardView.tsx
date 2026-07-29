@@ -69,12 +69,18 @@ export function DashboardView({
   const displayedEmiPaise = historical
     ? (dashboard.expenseCategories.find((category) => category.id === "category-emi-payments")?.amountPaise ?? 0)
     : dashboard.totalEmiPaise;
-  const available = Math.max(0, dashboard.availableAfterPlanPaise);
+  const currentCashPaise = dashboard.cashBalancePaise;
+  const positiveCashPaise = Math.max(0, currentCashPaise);
+  const trackedFundsPaise = Math.max(1, dashboard.cashOutflowPaise + positiveCashPaise);
   const emiBurden = percentage(displayedEmiPaise, income);
-  const expenseShare = percentage(dashboard.totalExpensePaise, income);
-  const debtPaymentShare = percentage(dashboard.debtPaymentPaise, income);
-  const assetBuildingShare = percentage(dashboard.assetBuildingPaise, income);
-  const surplusRate = percentage(available, income);
+  const expenseShare = percentage(dashboard.totalExpensePaise, trackedFundsPaise);
+  const debtPaymentShare = percentage(dashboard.debtPaymentPaise, trackedFundsPaise);
+  const assetBuildingShare = percentage(dashboard.assetBuildingPaise, trackedFundsPaise);
+  const cashRemainingShare = percentage(positiveCashPaise, trackedFundsPaise);
+  const budgetExceeded = dashboard.budgetUsedPercentage > 100;
+  const lowCash = income > 0 && currentCashPaise <= income * 0.1;
+  const financialRisk = dashboard.dangerAlert || budgetExceeded || lowCash;
+  const budgetVariancePaise = dashboard.regularBudgetPaise - dashboard.regularExpensePaise;
   const receivableCoverage = percentage(liabilities.receivablePaise, liabilities.otherLiabilityPaise);
   const snowballTarget = liabilities.liabilities.find((liability) => liability.snowballRank === 1);
   const goalTargetPaise = wealth.goals.reduce((sum, goal) => sum + goal.targetPaise, 0);
@@ -107,29 +113,47 @@ export function DashboardView({
       share: assetBuildingShare,
       color: "#2f6f8f",
     },
-    { label: "Income plan remaining", amountPaise: available, share: surplusRate, color: "var(--green-bright)" },
+    {
+      label: currentCashPaise < 0 ? "Axis overdraft" : "Current Axis balance",
+      amountPaise: currentCashPaise,
+      share: cashRemainingShare,
+      color: "var(--green-bright)",
+    },
   ];
-  const allocationTotal = Math.max(1, income, dashboard.cashOutflowPaise + available);
-  const expenseAngle = (dashboard.totalExpensePaise / allocationTotal) * 360;
-  const debtAngle = (dashboard.debtPaymentPaise / allocationTotal) * 360;
-  const assetAngle = (dashboard.assetBuildingPaise / allocationTotal) * 360;
+  const expenseAngle = (dashboard.totalExpensePaise / trackedFundsPaise) * 360;
+  const debtAngle = (dashboard.debtPaymentPaise / trackedFundsPaise) * 360;
+  const assetAngle = (dashboard.assetBuildingPaise / trackedFundsPaise) * 360;
   const allocationStyle = {
     background: `conic-gradient(#c88646 0 ${expenseAngle}deg, var(--red) ${expenseAngle}deg ${expenseAngle + debtAngle}deg, #2f6f8f ${expenseAngle + debtAngle}deg ${expenseAngle + debtAngle + assetAngle}deg, var(--green-bright) ${expenseAngle + debtAngle + assetAngle}deg 360deg)`,
   };
 
   return (
     <>
-      <section className={`financial-signal ${dashboard.dangerAlert ? "danger" : "stable"}`}>
+      <section className={`financial-signal ${financialRisk ? "danger" : "stable"}`}>
         <div>
           <span>MONTHLY FINANCIAL SIGNAL</span>
-          <strong>{dashboard.dangerAlert ? "Spending intervention required" : "Cash flow is within plan"}</strong>
+          <strong>
+            {dashboard.dangerAlert
+              ? "Spending intervention required"
+              : budgetExceeded
+                ? "Regular expense budget exceeded"
+                : lowCash
+                  ? "Cash reserve is running low"
+                  : "Cash flow is within plan"}
+          </strong>
         </div>
         <p>
           {dashboard.dangerAlert
             ? `${dashboard.budgetUsedPercentage}% of the regular budget is already consumed before day 20.`
-            : `${dashboard.budgetUsedPercentage}% of the regular budget is used. Axis cash is ${money(
-                dashboard.cashBalancePaise,
-              )}; ${money(available)} remains in the income plan.`}
+            : budgetExceeded
+              ? `Regular spending is ${money(dashboard.regularExpensePaise)} against ${money(
+                  dashboard.regularBudgetPaise,
+                )}; the budget is exceeded by ${money(Math.abs(budgetVariancePaise))}. Axis cash is ${money(
+                  currentCashPaise,
+                )}.`
+              : `${dashboard.budgetUsedPercentage}% of the regular budget is used. Current Axis cash is ${money(
+                  currentCashPaise,
+                )}.`}
         </p>
         <button onClick={onOpenExpenses} type="button">
           Open expense register
@@ -196,16 +220,16 @@ export function DashboardView({
         <article className="panel allocation-panel">
           <div className="panel-heading compact">
             <div>
-              <p className="eyebrow">INCOME ALLOCATION / {monthLabel(dashboard.month, "long").toUpperCase()}</p>
-              <h2>Where each rupee is going</h2>
+              <p className="eyebrow">CASH ALLOCATION / {monthLabel(dashboard.month, "long").toUpperCase()}</p>
+              <h2>Where tracked cash went</h2>
             </div>
-            <span className="live-pill">{money(income)} PLAN</span>
+            <span className="live-pill">{money(trackedFundsPaise)} TRACKED</span>
           </div>
           <div className="allocation-content">
-            <div className="allocation-donut" style={allocationStyle} role="img" aria-label="Monthly income allocation">
+            <div className="allocation-donut" style={allocationStyle} role="img" aria-label="Monthly cash allocation">
               <div>
-                <strong>{surplusRate}%</strong>
-                <span>plan left</span>
+                <strong>{cashRemainingShare}%</strong>
+                <span>{currentCashPaise < 0 ? "overdrawn" : "cash left"}</span>
               </div>
             </div>
             <div className="allocation-legend">
@@ -221,10 +245,10 @@ export function DashboardView({
           </div>
           <div className="allocation-callout">
             <span>Monthly cash movement</span>
-            <strong>{money(dashboard.cashOutflowPaise)} has left the plan</strong>
+            <strong>{money(dashboard.cashOutflowPaise)} tracked outflow</strong>
             <small>
-              Includes {money(dashboard.debtPaymentPaise)} debt payments and {money(dashboard.assetBuildingPaise)}
-              toward assets; neither is labelled as normal spending.
+              Includes {money(dashboard.debtPaymentPaise)} debt payments and {money(dashboard.assetBuildingPaise)}{" "}
+              toward assets. Current reconciled Axis cash is {money(currentCashPaise)}.
             </small>
           </div>
         </article>

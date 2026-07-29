@@ -737,7 +737,6 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
         </div>
       </article>
 
-
       <section className="panel debt-planner">
         <div className="panel-heading debt-planner-heading">
           <div>
@@ -1214,7 +1213,6 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
           </article>
         </div>
       )}
-
     </>
   );
 }
