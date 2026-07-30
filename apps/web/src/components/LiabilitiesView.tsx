@@ -737,7 +737,28 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
         </div>
       </article>
 
-      <section className="panel debt-planner">
+      <details className="panel debt-planner">
+        <summary className="debt-planner-summary">
+          <div>
+            <span>ADVANCED DEBT PLANNING</span>
+            <strong>Payoff strategy and projections</strong>
+          </div>
+          <div className="debt-planner-summary-metrics">
+            <span>
+              <small>Snowball finish</small>
+              <strong>{monthLabel(snowballPlan.debtFreeMonth)}</strong>
+            </span>
+            <span>
+              <small>Monthly debt budget</small>
+              <strong>{money(selectedPlan.monthlyBudgetPaise)}</strong>
+            </span>
+            <b>
+              <span className="planner-open-label">Open planner</span>
+              <span className="planner-close-label">Close planner</span>
+            </b>
+          </div>
+        </summary>
+
         <div className="panel-heading debt-planner-heading">
           <div>
             <p className="eyebrow">DEBT PAYOFF LAB / LIVE LIABILITY DATA</p>
@@ -1086,7 +1107,7 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
             </div>
           )}
         </div>
-      </section>
+      </details>
 
       {(editingId || creatingLiability) && form && (
         <div className="liability-editor-overlay">
