@@ -6,7 +6,7 @@
 - Node.js 22 or newer
 - pnpm 10.28.2 through Corepack or a local installation
 - Xcode Command Line Tools if the encrypted SQLite prebuild is unavailable
-- Ollama with the local `qwen3:4b-instruct-2507-q4_K_M` model for the on-device finance assistant
+- Ollama with local Qwen3 4B thinking and answer models for the on-device finance assistant
 
 ## Install
 
@@ -15,6 +15,7 @@ pnpm install
 pnpm setup:local
 brew install ollama
 OLLAMA_NO_CLOUD=true ollama serve
+ollama pull qwen3:4b-thinking-2507-q4_K_M
 ollama pull qwen3:4b-instruct-2507-q4_K_M
 ```
 

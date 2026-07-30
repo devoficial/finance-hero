@@ -152,7 +152,7 @@ export function FinanceAssistant({ context, status }: FinanceAssistantProps) {
                 )}
               </article>
             ))}
-            {sending && <div className="assistant-thinking">Reading encrypted local records...</div>}
+            {sending && <div className="assistant-thinking">Reasoning over encrypted local records...</div>}
             {error && <div className="assistant-error">{error}</div>}
             <div ref={endRef} />
           </div>

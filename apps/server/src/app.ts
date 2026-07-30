@@ -235,7 +235,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       ? await assistant.status()
       : {
           available: false,
-          model: options.config.ollamaModel ?? "qwen3:4b-instruct-2507-q4_K_M",
+          model: options.config.ollamaModel ?? "qwen3:4b-thinking-2507-q4_K_M",
           localOnly: true as const,
           readOnly: true as const,
           message: "Unlock the encrypted database to use the local assistant.",

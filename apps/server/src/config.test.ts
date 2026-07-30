@@ -23,6 +23,8 @@ describe("server configuration", () => {
       host: "127.0.0.1",
       port: 4317,
       databaseKey: undefined,
+      ollamaModel: "qwen3:4b-thinking-2507-q4_K_M",
+      ollamaFinalizerModel: "qwen3:4b-instruct-2507-q4_K_M",
     });
   });
 
