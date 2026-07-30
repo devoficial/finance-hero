@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AccountsView } from "./components/AccountsView";
 import { DashboardView } from "./components/DashboardView";
 import { ExpensesView } from "./components/ExpensesView";
+import { FinanceAssistant } from "./components/FinanceAssistant";
 import { ForecastsView } from "./components/ForecastsView";
 import { GoalsView } from "./components/GoalsView";
 import { ImportsView } from "./components/ImportsView";
@@ -11,6 +12,7 @@ import { LiabilitiesView } from "./components/LiabilitiesView";
 import { ProjectsView } from "./components/ProjectsView";
 import {
   getAccounts,
+  getAssistantStatus,
   getBudget,
   getDashboard,
   getExpenseYear,
@@ -35,7 +37,7 @@ interface StandaloneNavigator extends Navigator {
   standalone?: boolean;
 }
 
-const navSlugs: Record<NavItem, string> = {
+const navSlugs = {
   Home: "home",
   Accounts: "accounts",
   Expenses: "expenses",
@@ -44,7 +46,7 @@ const navSlugs: Record<NavItem, string> = {
   Goals: "goals",
   Forecasts: "forecasts",
   Projects: "projects",
-};
+} as const satisfies Record<NavItem, string>;
 
 function normalizeRoutePeriod(nav: NavItem, month: string, year: string) {
   if (nav === "Home" && month > ACTIVE_MONTH) {
@@ -83,6 +85,11 @@ export function App() {
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const health = useQuery({ queryKey: ["health"], queryFn: ({ signal }) => getHealth(signal) });
+  const assistantStatus = useQuery({
+    queryKey: ["assistant", "status"],
+    queryFn: ({ signal }) => getAssistantStatus(signal),
+    refetchInterval: 15_000,
+  });
   const dashboard = useQuery({
     queryKey: ["dashboard", selectedMonth],
     queryFn: ({ signal }) => getDashboard(selectedMonth, signal),
@@ -408,6 +415,7 @@ export function App() {
           ),
         )}
       </nav>
+      <FinanceAssistant context={{ page: navSlugs[activeNav], month: selectedMonth }} status={assistantStatus.data} />
     </div>
   );
 }

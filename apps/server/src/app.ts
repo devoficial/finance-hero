@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  assistantChatRequestSchema,
+  assistantChatResponseSchema,
+  assistantConversationSchema,
+  assistantStatusResponseSchema,
   budgetMonthResponseSchema,
   createFinancialAccountRequestSchema,
   createFinancialGoalRequestSchema,
@@ -54,6 +58,7 @@ import {
 } from "@finance-hero/contracts";
 import {
   AccountRepository,
+  AssistantRepository,
   BudgetRepository,
   type FinanceHeroDatabase,
   ImportRepository,
@@ -65,6 +70,7 @@ import {
   WealthRepository,
 } from "@finance-hero/database";
 import Fastify, { type FastifyInstance } from "fastify";
+import { AssistantService } from "./assistant-service";
 import type { ServerConfig } from "./config";
 import { parseScannedPdfWithLocalOcr } from "./local-ocr";
 import {
@@ -180,6 +186,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   let imports: ImportRepository | undefined;
   let projects: ProjectRepository | undefined;
   let wealth: WealthRepository | undefined;
+  let assistant: AssistantService | undefined;
 
   if (options.config.databaseKey) {
     mkdirSync(options.config.dataDirectory, { recursive: true, mode: 0o700 });
@@ -195,6 +202,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     budgets = new BudgetRepository(database);
     projects = new ProjectRepository(database, ledger);
     wealth = new WealthRepository(database);
+    assistant = new AssistantService({
+      config: options.config,
+      assistant: new AssistantRepository(database),
+      accounts,
+      budgets,
+      ledger,
+      wealth,
+    });
   }
 
   app.addContentTypeParser(
@@ -213,6 +228,45 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     });
 
     return reply.header("cache-control", "no-store").send(payload);
+  });
+
+  app.get("/api/v1/assistant/status", async (_request, reply) => {
+    const status = assistant
+      ? await assistant.status()
+      : {
+          available: false,
+          model: options.config.ollamaModel ?? "qwen3:4b-instruct-2507-q4_K_M",
+          localOnly: true as const,
+          readOnly: true as const,
+          message: "Unlock the encrypted database to use the local assistant.",
+        };
+    return reply.header("cache-control", "no-store").send(assistantStatusResponseSchema.parse(status));
+  });
+
+  app.get("/api/v1/assistant/conversations/:id", async (request, reply) => {
+    if (!assistant) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    const { id } = request.params as { id: string };
+    const conversation = assistant.getConversation(id);
+    if (!conversation) {
+      return reply.code(404).send({ error: { code: "NOT_FOUND", message: "Conversation does not exist." } });
+    }
+    return reply.header("cache-control", "no-store").send(assistantConversationSchema.parse(conversation));
+  });
+
+  app.post("/api/v1/assistant/chat", async (request, reply) => {
+    if (!assistant) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const input = assistantChatRequestSchema.parse(request.body);
+      const response = await assistant.chat(input);
+      return reply.header("cache-control", "no-store").send(assistantChatResponseSchema.parse(response));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The local assistant could not answer.";
+      return reply.code(502).send({ error: { code: "LOCAL_MODEL_UNAVAILABLE", message } });
+    }
   });
 
   app.get("/api/v1/dashboard", async (request, reply) => {

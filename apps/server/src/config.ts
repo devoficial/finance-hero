@@ -6,6 +6,8 @@ export interface ServerConfig {
   port: number;
   dataDirectory: string;
   databaseKey?: string;
+  ollamaUrl?: string;
+  ollamaModel?: string;
 }
 
 export function readConfig(environment = process.env): ServerConfig {
@@ -20,6 +22,8 @@ export function readConfig(environment = process.env): ServerConfig {
     port: parsedPort,
     dataDirectory: resolve(environment.FINANCE_HERO_DATA_DIR ?? "./data"),
     databaseKey: environment.FINANCE_HERO_DATABASE_KEY,
+    ollamaUrl: environment.FINANCE_HERO_OLLAMA_URL ?? "http://127.0.0.1:11434",
+    ollamaModel: environment.FINANCE_HERO_OLLAMA_MODEL ?? "qwen3:4b-instruct-2507-q4_K_M",
   };
 }
 

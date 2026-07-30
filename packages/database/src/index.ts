@@ -6,6 +6,14 @@ export {
   type UpdateFinancialAccountInput,
 } from "./account-repository";
 export {
+  type AssistantCitationRecord,
+  type AssistantConversationRecord,
+  type AssistantMessageRecord,
+  AssistantRepository,
+  type AssistantToolTraceRecord,
+  type KnowledgeRecord,
+} from "./assistant-repository";
+export {
   type BudgetLineRecord,
   type BudgetMonthRecord,
   BudgetRepository,

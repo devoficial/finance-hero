@@ -1,4 +1,11 @@
 import {
+  type AssistantChatRequest,
+  type AssistantChatResponse,
+  type AssistantConversation,
+  type AssistantStatusResponse,
+  assistantChatResponseSchema,
+  assistantConversationSchema,
+  assistantStatusResponseSchema,
   type BudgetMonthResponse,
   budgetMonthResponseSchema,
   type CreateFinancialAccountRequest,
@@ -75,6 +82,29 @@ async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
 
 export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return healthResponseSchema.parse(await getJson("/api/v1/health", signal));
+}
+
+export async function getAssistantStatus(signal?: AbortSignal): Promise<AssistantStatusResponse> {
+  return assistantStatusResponseSchema.parse(await getJson("/api/v1/assistant/status", signal));
+}
+
+export async function getAssistantConversation(id: string, signal?: AbortSignal): Promise<AssistantConversation> {
+  return assistantConversationSchema.parse(
+    await getJson(`/api/v1/assistant/conversations/${encodeURIComponent(id)}`, signal),
+  );
+}
+
+export async function askAssistant(input: AssistantChatRequest): Promise<AssistantChatResponse> {
+  const response = await fetch("/api/v1/assistant/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local assistant returned ${response.status}`);
+  }
+  return assistantChatResponseSchema.parse(await response.json());
 }
 
 export async function getDashboard(month: string, signal?: AbortSignal): Promise<DashboardResponse> {

@@ -25,6 +25,7 @@ const KEYCHAIN_SERVICE = "finance-hero.database";
 const KEYCHAIN_ACCOUNT = "primary";
 const API_URL = "http://127.0.0.1:4317/api/v1/health";
 const WEB_URL = "http://127.0.0.1:4318/";
+const OLLAMA_URL = "http://127.0.0.1:11434/api/tags";
 
 function print(message = "") {
   process.stdout.write(`${message}\n`);
@@ -248,17 +249,20 @@ function pidIsAlive(pid) {
 function clearStaleRuntime() {
   const runtime = readRuntime();
   if (runtime && !pidIsAlive(runtime.pid)) {
+    if (runtime.ollamaPid && pidIsAlive(runtime.ollamaPid)) {
+      killProcessGroup(runtime.ollamaPid);
+    }
     rmSync(RUNTIME_PATH, { force: true });
     return null;
   }
   return runtime;
 }
 
-function writeRuntime(pid) {
+function writeRuntime(pid, ollamaPid = null) {
   mkdirSync(DATA_DIRECTORY, { recursive: true, mode: 0o700 });
   writeFileSync(
     RUNTIME_PATH,
-    `${JSON.stringify({ pid, startedAt: new Date().toISOString(), logPath: LOG_PATH }, null, 2)}\n`,
+    `${JSON.stringify({ pid, ollamaPid, startedAt: new Date().toISOString(), logPath: LOG_PATH }, null, 2)}\n`,
     { mode: 0o600 },
   );
   chmodSync(RUNTIME_PATH, 0o600);
@@ -329,6 +333,25 @@ async function start() {
   // Turbo runs each workspace task from its package directory. Keep every
   // process pinned to the single canonical encrypted database at the repo root.
   environment.FINANCE_HERO_DATA_DIR = DATA_DIRECTORY;
+  let ollamaPid = null;
+  if (!(await portIsOpen(11434))) {
+    const ollamaExecutable = spawnSync("which", ["ollama"], { encoding: "utf8" }).stdout.trim();
+    if (ollamaExecutable) {
+      const ollama = spawn(ollamaExecutable, ["serve"], {
+        cwd: ROOT,
+        detached: true,
+        env: {
+          ...environment,
+          OLLAMA_NO_CLOUD: "true",
+          OLLAMA_FLASH_ATTENTION: "1",
+          OLLAMA_KV_CACHE_TYPE: "q8_0",
+        },
+        stdio: ["ignore", logDescriptor, logDescriptor],
+      });
+      ollamaPid = ollama.pid ?? null;
+      ollama.unref();
+    }
+  }
   const child = spawn(process.execPath, [join(ROOT, "node_modules/turbo/bin/turbo"), "dev"], {
     cwd: ROOT,
     detached: true,
@@ -339,11 +362,12 @@ async function start() {
   if (!child.pid) {
     throw new Error("the managed local process could not be created.");
   }
-  writeRuntime(child.pid);
+  writeRuntime(child.pid, ollamaPid);
   child.unref();
 
   if (!(await waitForReady())) {
     killProcessGroup(child.pid);
+    if (ollamaPid) killProcessGroup(ollamaPid);
     rmSync(RUNTIME_PATH, { force: true });
     const logs = recentLogs();
     if (logs) {
@@ -368,6 +392,9 @@ async function stop() {
   }
 
   killProcessGroup(runtime.pid);
+  if (runtime.ollamaPid && pidIsAlive(runtime.ollamaPid)) {
+    killProcessGroup(runtime.ollamaPid);
+  }
   const deadline = Date.now() + 8_000;
   while (pidIsAlive(runtime.pid) && Date.now() < deadline) {
     await delay(200);
@@ -393,6 +420,8 @@ async function status() {
     }`,
   );
   print(`PWA: ${web?.ok ? "running" : "stopped"}`);
+  const ollama = await fetchState(OLLAMA_URL);
+  print(`Assistant: ${ollama?.ok ? "local model service running" : "stopped"}`);
   print(`Launcher: ${runtime ? `managed (PID ${runtime.pid})` : "not managing a process"}`);
 }
 

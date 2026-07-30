@@ -47,6 +47,7 @@ For owner-focused Keychain setup, one-click start/stop, and troubleshooting, use
 | [Migration plan](docs/migration-plan.md) | Google Sheet mapping and reconciliation |
 | [Delivery plan](docs/delivery-plan.md) | Phases, tests, gates, and proposed repository layout |
 | [Development setup](docs/development.md) | Install, run, verification, and current limitations |
+| [Local finance assistant](docs/local-finance-assistant.md) | On-device model, privacy boundary, and runtime |
 | [Local startup guide](LOCAL_SETUP.md) | Start, stop, install, and troubleshoot the local PWA |
 | [Architecture decisions](docs/adr/README.md) | Accepted architectural decision records |
 

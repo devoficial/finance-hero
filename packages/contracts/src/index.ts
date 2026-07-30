@@ -1,4 +1,22 @@
 export {
+  type AssistantChatRequest,
+  type AssistantChatResponse,
+  type AssistantCitation,
+  type AssistantConversation,
+  type AssistantMessage,
+  type AssistantPageContext,
+  type AssistantStatusResponse,
+  type AssistantToolTrace,
+  assistantChatRequestSchema,
+  assistantChatResponseSchema,
+  assistantCitationSchema,
+  assistantConversationSchema,
+  assistantMessageSchema,
+  assistantPageContextSchema,
+  assistantStatusResponseSchema,
+  assistantToolTraceSchema,
+} from "./assistant";
+export {
   type BudgetLine,
   type BudgetMonthResponse,
   budgetLineSchema,

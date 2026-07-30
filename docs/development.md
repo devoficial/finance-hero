@@ -6,12 +6,16 @@
 - Node.js 22 or newer
 - pnpm 10.28.2 through Corepack or a local installation
 - Xcode Command Line Tools if the encrypted SQLite prebuild is unavailable
+- Ollama with the local `qwen3:4b-instruct-2507-q4_K_M` model for the on-device finance assistant
 
 ## Install
 
 ```bash
 pnpm install
 pnpm setup:local
+brew install ollama
+OLLAMA_NO_CLOUD=true ollama serve
+ollama pull qwen3:4b-instruct-2507-q4_K_M
 ```
 
 The local setup command generates or validates the database key and stores it in
@@ -48,6 +52,11 @@ pnpm start:local
 - Complete statement reconciliation: `POST /api/v1/imports/:id/reconcile`
 - Candidate edit: `PATCH /api/v1/candidates/:id`
 - Candidate approval/rejection: `POST /api/v1/candidate-actions/approve`, `POST /api/v1/candidate-actions/reject`
+- Assistant status: `GET /api/v1/assistant/status`
+- Read-only local assistant: `POST /api/v1/assistant/chat`
+
+The secure launcher starts Ollama on demand with cloud access disabled. There is no
+OpenAI or cloud-model fallback. See [local finance assistant](local-finance-assistant.md).
 
 Development binds only to loopback. LAN HTTPS, Bonjour discovery, and iPhone certificate
 installation remain a Phase 0 spike and must not be simulated by exposing the HTTP server.
@@ -114,3 +123,5 @@ before updating it.
   Unsupported layouts stay outside the financial record.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
 - PWA SVG branding is sufficient for development; release-quality iOS PNG icons are pending.
+- The local assistant uses bounded read-only repository context. Official external finance
+  knowledge ingestion and evaluation fixtures remain an incremental content-maintenance task.

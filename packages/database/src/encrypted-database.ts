@@ -315,6 +315,34 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
       UNIQUE (normalized_payee, direction)
     ) STRICT;
 
+    CREATE TABLE IF NOT EXISTS assistant_conversations (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS assistant_messages (
+      id TEXT PRIMARY KEY NOT NULL,
+      conversation_id TEXT NOT NULL REFERENCES assistant_conversations(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+      content TEXT NOT NULL,
+      citations_json TEXT NOT NULL DEFAULT '[]',
+      tool_trace_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS assistant_knowledge (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL,
+      publisher TEXT NOT NULL,
+      source_url TEXT,
+      effective_date TEXT,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+
     CREATE INDEX IF NOT EXISTS postings_transaction_idx ON postings(transaction_id);
     CREATE INDEX IF NOT EXISTS postings_account_idx ON postings(account_id);
     CREATE INDEX IF NOT EXISTS transactions_month_idx ON journal_transactions(effective_month, occurred_on);
@@ -330,6 +358,9 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     CREATE INDEX IF NOT EXISTS import_candidates_status_idx ON import_candidates(status, updated_at DESC);
     CREATE INDEX IF NOT EXISTS import_candidates_artifact_idx ON import_candidates(artifact_id, source_row);
     CREATE INDEX IF NOT EXISTS merchant_rules_match_idx ON merchant_rules(normalized_payee, direction);
+    CREATE INDEX IF NOT EXISTS assistant_messages_conversation_idx
+      ON assistant_messages(conversation_id, created_at);
+    CREATE INDEX IF NOT EXISTS assistant_conversations_updated_idx ON assistant_conversations(updated_at DESC);
   `);
 
   const debtColumns = database.connection.prepare("PRAGMA table_info(debts)").all() as Array<{ name: string }>;
