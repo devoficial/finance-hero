@@ -1785,7 +1785,7 @@ h2 {
 .liability-metric-card strong {
   max-width: 100%;
   overflow: hidden;
-  font-size: clamp(17px, 1.3vw, 23px);
+  font-size: clamp(20px, 1.55vw, 28px);
   letter-spacing: -0.035em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2494,7 +2494,7 @@ h2 {
   min-width: 860px;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 9px;
+  font-size: 10px;
 }
 .liabilities-table th,
 .liabilities-table td {
@@ -2749,7 +2749,7 @@ h2 {
 }
 .personal-balance-total strong {
   font:
-    19px "Newsreader",
+    23px "Newsreader",
     serif;
 }
 .personal-balance-total button,
@@ -2799,7 +2799,7 @@ h2 {
 }
 .personal-balance-list b {
   font:
-    9px "DM Mono",
+    10px "DM Mono",
     monospace;
 }
 .personal-balance-actions {
