@@ -331,7 +331,7 @@ describe("budget repository", () => {
     expect(ledger.getDashboard("2026-08", 5)).toMatchObject({
       regularExpensePaise: 125000,
       cashOutflowPaise: 125000,
-      regularBudgetPaise: 200000,
+      regularBudgetPaise: 6004800,
     });
     database.close();
   });
@@ -347,17 +347,66 @@ describe("budget repository", () => {
     });
 
     expect(updated.plannedIncomePaise).toBe(32500000);
-    expect(updated.regularBudgetPaise).toBe(2900000);
-    expect(updated.unallocatedIncomePaise).toBe(29600000);
+    expect(updated.regularBudgetPaise).toBe(6654800);
+    expect(updated.unallocatedIncomePaise).toBe(25845200);
     expect(ledger.getDashboard("2026-08", 1)).toMatchObject({
       plannedIncomePaise: 32500000,
-      regularBudgetPaise: 2900000,
+      regularBudgetPaise: 6654800,
       budgetUsedPercentage: 0,
     });
     const audit = database.connection
       .prepare("SELECT action FROM audit_events WHERE entity_id = '2026-08' ORDER BY created_at DESC LIMIT 1")
       .get() as { action: string };
     expect(audit.action).toBe("expense_sheet.updated");
+    database.close();
+  });
+
+  it("prefills future salary and limits while keeping the new month independently editable", () => {
+    const { database, ledger, repository } = createRepository();
+
+    const august = repository.getMonth("2026-08");
+    expect(august.plannedIncomePaise).toBe(30089300);
+    expect(august.regularBudgetPaise).toBe(6004800);
+    expect(august.lines.find((line) => line.categoryId === "category-rent")?.plannedPaise).toBe(2050000);
+    expect(ledger.getExpenseYear("2026").months[7]).toMatchObject({ regularBudgetPaise: 6004800 });
+
+    repository.updateMonth("2026-08", {
+      lines: [{ categoryId: "category-rent", plannedPaise: 2200000 }],
+    });
+    expect(repository.getMonth("2026-08").regularBudgetPaise).toBe(6154800);
+    expect(repository.getMonth("2026-07").regularBudgetPaise).toBe(6004800);
+    expect(repository.getMonth("2026-09").regularBudgetPaise).toBe(6154800);
+    database.close();
+  });
+
+  it("moves the reconciled balance when later deposits or expenses are recorded", () => {
+    const { database, ledger, repository } = createRepository();
+    repository.updateMonth("2026-07", {
+      reconciliation: { statementBalancePaise: 1216050, reconciledOn: "2026-07-26" },
+    });
+    const july = repository.getMonth("2026-07");
+    repository.updateMonth("2026-07", {
+      cashAdjustments: [
+        ...july.cashBridge.adjustments,
+        { occurredOn: "2026-07-29", label: "Post-statement deposit", amountPaise: 200000 },
+      ],
+    });
+    ledger.createManualTransaction({
+      occurredOn: "2026-07-28",
+      payee: "Post-statement expense",
+      kind: "expense",
+      amountPaise: 100000,
+      accountId: "account-primary-bank",
+      categoryId: "category-groceries",
+      idempotencyKey: "budget-test:post-reconciliation-expense",
+    });
+
+    expect(repository.getMonth("2026-07").cashBridge).toMatchObject({
+      statementBalancePaise: 1216050,
+      reconciliationDifferencePaise: -3350550,
+      closingBalancePaise: 1316050,
+    });
+    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1316050);
     database.close();
   });
 

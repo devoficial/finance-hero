@@ -184,7 +184,7 @@ export class AssistantRepository {
                tool_trace_json AS toolTraceJson, created_at AS createdAt
         FROM assistant_messages
         WHERE conversation_id = ?
-        ORDER BY created_at, id
+        ORDER BY created_at, rowid
       `)
       .all(id) as MessageRow[];
     return {

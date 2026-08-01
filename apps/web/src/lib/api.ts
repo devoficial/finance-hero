@@ -457,6 +457,14 @@ export async function updateWealthAsset(id: string, input: UpdateWealthAssetRequ
   return wealthAssetSchema.parse(await response.json());
 }
 
+export async function deleteWealthAsset(id: string): Promise<void> {
+  const response = await fetch(`/api/v1/wealth/assets/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+}
+
 export async function createFinancialGoal(input: CreateFinancialGoalRequest): Promise<FinancialGoal> {
   const response = await fetch("/api/v1/wealth/goals", {
     method: "POST",

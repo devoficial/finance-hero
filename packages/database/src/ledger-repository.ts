@@ -270,14 +270,8 @@ export class LedgerRepository {
       assetBuildingPaise: number;
       transactionCount: number;
     }>;
-    const budgets = this.database.connection
-      .prepare(`
-        SELECT month, regular_budget_paise AS regularBudgetPaise
-        FROM budget_periods WHERE month LIKE ?
-      `)
-      .all(`${year}-%`) as Array<{ month: string; regularBudgetPaise: number }>;
     const spendingByMonth = new Map(spending.map((item) => [item.month, item]));
-    const budgetByMonth = new Map(budgets.map((item) => [item.month, item.regularBudgetPaise]));
+    const budgets = new BudgetRepository(this.database);
 
     return {
       year,
@@ -288,7 +282,7 @@ export class LedgerRepository {
         const cashOutflowPaise = spendingByMonth.get(month)?.cashOutflowPaise ?? 0;
         const debtPaymentPaise = spendingByMonth.get(month)?.debtPaymentPaise ?? 0;
         const assetBuildingPaise = spendingByMonth.get(month)?.assetBuildingPaise ?? 0;
-        const regularBudgetPaise = budgetByMonth.get(month) ?? 0;
+        const regularBudgetPaise = budgets.getMonth(month).regularBudgetPaise;
         return {
           month,
           regularExpensePaise,
@@ -603,14 +597,6 @@ export class LedgerRepository {
   }
 
   getDashboard(month: string, localDay: number): DashboardRecord {
-    const period = this.database.connection
-      .prepare(`
-        SELECT planned_income_paise AS plannedIncomePaise,
-               regular_budget_paise AS regularBudgetPaise
-        FROM budget_periods WHERE month = ?
-      `)
-      .get(month) as { plannedIncomePaise: number; regularBudgetPaise: number } | undefined;
-
     const totals = this.database.connection
       .prepare(`
         SELECT
@@ -694,9 +680,10 @@ export class LedgerRepository {
       `)
       .get() as DashboardRecord["snowballTarget"];
 
-    const plannedIncomePaise = period?.plannedIncomePaise ?? 0;
-    const regularBudgetPaise = period?.regularBudgetPaise ?? 0;
-    const cashBridge = new BudgetRepository(this.database).getMonth(month).cashBridge;
+    const budget = new BudgetRepository(this.database).getMonth(month);
+    const plannedIncomePaise = budget.plannedIncomePaise;
+    const regularBudgetPaise = budget.regularBudgetPaise;
+    const cashBridge = budget.cashBridge;
     const budgetUsedPercentage =
       regularBudgetPaise > 0 ? Math.round((totals.regularExpensePaise / regularBudgetPaise) * 100) : 0;
 

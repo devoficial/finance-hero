@@ -212,8 +212,23 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const fundsAvailable = (budget?.cashBridge.carryoverPaise ?? 0) + adjustmentTotal;
   const calculatedClosingBalance = fundsAvailable - draftCashOutflow;
   const parsedStatementBalance = statementBalance.trim() ? parseRupeeExpression(statementBalance) : null;
-  const closingBalance = parsedStatementBalance ?? calculatedClosingBalance;
-  const reconciliationDifference = closingBalance - calculatedClosingBalance;
+  const adjustmentDelta = adjustmentTotal - (budget?.cashBridge.adjustmentTotalPaise ?? 0);
+  const outflowDelta = draftCashOutflow - (budget?.cashBridge.cashOutflowPaise ?? 0);
+  const statementDelta =
+    parsedStatementBalance != null && budget?.cashBridge.statementBalancePaise != null
+      ? parsedStatementBalance - budget.cashBridge.statementBalancePaise
+      : 0;
+  const closingBalance =
+    parsedStatementBalance == null
+      ? calculatedClosingBalance
+      : budget?.cashBridge.statementBalancePaise == null
+        ? parsedStatementBalance
+        : budget.cashBridge.closingBalancePaise + statementDelta + adjustmentDelta - outflowDelta;
+  const reconciliationDifference =
+    parsedStatementBalance == null
+      ? 0
+      : (budget?.cashBridge.reconciliationDifferencePaise ?? parsedStatementBalance - calculatedClosingBalance) +
+        statementDelta;
   const plannedIncome = parseRupeeExpression(income) ?? 0;
   const hasIncomePlan = plannedIncome > 0;
   const freeAfterPlan = plannedIncome - emiPaise - draftTotals.planned;
@@ -590,7 +605,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
             </article>
             <b aria-hidden="true">=</b>
             <article className={`closing ${closingBalance < 0 ? "negative" : ""}`}>
-              <span>{parsedStatementBalance == null ? "Estimate" : "Bank closing"}</span>
+              <span>{parsedStatementBalance == null ? "Estimated balance" : "Current balance"}</span>
               <strong>{money(closingBalance)}</strong>
             </article>
           </div>
@@ -645,11 +660,11 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               <h4>
                 {parsedStatementBalance == null
                   ? "Confirm the real bank balance"
-                  : "Statement balance overrides the estimate"}
+                  : "Statement balance anchors the calculation"}
               </h4>
               <small>
-                The expense sheet calculates {money(calculatedClosingBalance)}. Compare it with the bank balance to
-                expose missing, duplicated or pending transactions.
+                The confirmed balance is kept at its statement date. Deposits and spending recorded afterward update the
+                current balance automatically.
               </small>
             </div>
             <label>

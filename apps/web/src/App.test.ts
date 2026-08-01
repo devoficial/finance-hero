@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRouteHash, routeHash } from "./App";
+import { currentLocalMonth, parseRouteHash, routeHash } from "./App";
 
 describe("dashboard routes", () => {
   it("restores a persisted section and reporting period", () => {
@@ -11,9 +11,9 @@ describe("dashboard routes", () => {
   });
 
   it("falls back safely when route values are invalid", () => {
-    expect(parseRouteHash("#/unknown?month=July&year=26")).toEqual({
+    expect(parseRouteHash("#/unknown?month=July&year=26", "2026-08")).toEqual({
       nav: "Home",
-      month: "2026-07",
+      month: "2026-08",
       year: "2026",
     });
   });
@@ -35,15 +35,19 @@ describe("dashboard routes", () => {
   });
 
   it("keeps Home on the latest populated month while preserving future planning periods", () => {
-    expect(parseRouteHash("#/home?month=2026-08&year=2026")).toEqual({
+    expect(parseRouteHash("#/home?month=2026-08&year=2026", "2026-07")).toEqual({
       nav: "Home",
       month: "2026-07",
       year: "2026",
     });
-    expect(parseRouteHash("#/expenses?month=2026-08&year=2026")).toEqual({
+    expect(parseRouteHash("#/expenses?month=2026-08&year=2026", "2026-07")).toEqual({
       nav: "Expenses",
       month: "2026-08",
       year: "2026",
     });
+  });
+
+  it("uses the Asia/Kolkata calendar month for the live expense period", () => {
+    expect(currentLocalMonth(new Date("2026-07-31T19:00:00.000Z"))).toBe("2026-08");
   });
 });

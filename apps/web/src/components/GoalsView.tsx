@@ -14,6 +14,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   createFinancialGoal,
   createWealthAsset,
+  deleteWealthAsset,
   updateFinancialGoal,
   updateGoalAllocations,
   updateWealthAsset,
@@ -126,6 +127,7 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
   const [goalForm, setGoalForm] = useState<GoalForm | null>(null);
   const [allocationGoal, setAllocationGoal] = useState<FinancialGoal | null>(null);
   const [allocationValues, setAllocationValues] = useState<Record<string, string>>({});
+  const [assetToDelete, setAssetToDelete] = useState<WealthAsset | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const editorOpen = assetForm !== null || goalForm !== null || allocationGoal !== null;
 
@@ -171,6 +173,15 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
     onSuccess: async () => {
       setAllocationGoal(null);
       setAllocationValues({});
+      setFormError(null);
+      await refreshWealth();
+    },
+  });
+  const deleteAssetMutation = useMutation({
+    mutationFn: (id: string) => deleteWealthAsset(id),
+    onSuccess: async () => {
+      setAssetToDelete(null);
+      setAssetForm(null);
       setFormError(null);
       await refreshWealth();
     },
@@ -759,10 +770,35 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
                           setAllocationValues((current) => ({ ...current, [asset.id]: event.target.value }))
                         }
                       />
+                      <button
+                        disabled={availableForGoal <= 0}
+                        onClick={() =>
+                          setAllocationValues((current) => ({
+                            ...current,
+                            [asset.id]: String(
+                              Math.min(availableForGoal, allocationGoal.remainingPaise + currentGoalAmount) / 100,
+                            ),
+                          }))
+                        }
+                        type="button"
+                      >
+                        Use available
+                      </button>
                     </label>
                   );
                 })}
               </div>
+              {unrestrictedAssets.every((asset) => asset.availablePaise <= 0) && (
+                <div className="allocation-empty-state">
+                  <strong>No unallocated savings are currently recorded.</strong>
+                  <span>Update the current value of a savings or emergency-fund asset, then allocate it here.</span>
+                  {unrestrictedAssets[0] && (
+                    <button onClick={() => startAsset(unrestrictedAssets[0])} type="button">
+                      Update savings balance
+                    </button>
+                  )}
+                </div>
+              )}
               <button className="wealth-save" disabled={allocationMutation.isPending} type="submit">
                 {allocationMutation.isPending ? "Allocating..." : "Save allocations"}
               </button>
@@ -855,9 +891,14 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
                         : "No monthly plan"}
                   </small>
                 </div>
-                <button onClick={() => startAsset(asset)} type="button">
-                  Edit
-                </button>
+                <div className="asset-row-actions">
+                  <button onClick={() => startAsset(asset)} type="button">
+                    Edit
+                  </button>
+                  <button className="danger-text-button" onClick={() => setAssetToDelete(asset)} type="button">
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -944,6 +985,37 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
           )}
         </div>
       </section>
+
+      {assetToDelete && (
+        <div className="modal-backdrop" role="presentation">
+          <section aria-modal="true" className="wealth-modal" role="dialog">
+            <div className="modal-title">
+              <div>
+                <p className="eyebrow">DELETE ASSET</p>
+                <h2>Remove {assetToDelete.name}?</h2>
+              </div>
+            </div>
+            <p>
+              This removes the manually tracked asset position. Assets with allocations, statement imports, or ledger
+              activity cannot be deleted.
+            </p>
+            {deleteAssetMutation.error && <p className="form-error">{deleteAssetMutation.error.message}</p>}
+            <div className="modal-actions">
+              <button disabled={deleteAssetMutation.isPending} onClick={() => setAssetToDelete(null)} type="button">
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                disabled={deleteAssetMutation.isPending}
+                onClick={() => deleteAssetMutation.mutate(assetToDelete.id)}
+                type="button"
+              >
+                {deleteAssetMutation.isPending ? "Deleting..." : "Delete asset"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

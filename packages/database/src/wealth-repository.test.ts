@@ -147,4 +147,32 @@ describe("wealth repository", () => {
     expect(allocated.forecastDate).toBe("2027-05-23");
     database.close();
   });
+
+  it("deletes unused assets but protects allocated or active financial positions", () => {
+    const { database, ledger, wealth } = createRepositories();
+    const unused = wealth.createAsset({
+      name: "Unused cash envelope",
+      assetType: "savings",
+      institution: "Manual",
+      currentValuePaise: 0,
+      monthlyContributionPaise: 0,
+      restricted: false,
+      asOfDate: "2026-07-23",
+    });
+    wealth.deleteAsset(unused.id);
+    expect(wealth.getWealth("2026-07-23").assets.some((asset) => asset.id === unused.id)).toBe(false);
+
+    expect(() => wealth.deleteAsset("asset-savings")).toThrow("goal allocations");
+    ledger.createManualTransaction({
+      occurredOn: "2026-07-23",
+      payee: "Wallet order",
+      kind: "expense",
+      amountPaise: 10000,
+      accountId: "account-pluxee",
+      categoryId: "category-groceries",
+      idempotencyKey: "wealth-test:protected-asset",
+    });
+    expect(() => wealth.deleteAsset("asset-pluxee")).toThrow("financial activity");
+    database.close();
+  });
 });

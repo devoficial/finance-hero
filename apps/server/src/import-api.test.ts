@@ -151,9 +151,9 @@ describe("statement import API", () => {
     expect(july.cashBridge).toMatchObject({
       statementBalancePaise: 950000,
       reconciledOn: "2026-07-12",
-      closingBalancePaise: 950000,
+      closingBalancePaise: -19409200,
     });
-    expect(august.cashBridge.carryoverPaise).toBe(950000);
+    expect(august.cashBridge.carryoverPaise).toBe(-19409200);
     await app.close();
   });
 

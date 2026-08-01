@@ -245,6 +245,32 @@ export class WealthRepository {
     return this.requireAsset(id);
   }
 
+  deleteAsset(id: string): void {
+    const existing = this.requireStoredAsset(id);
+    if (existing.allocatedPaise > 0) {
+      throw new Error("Remove this asset's goal allocations before deleting it.");
+    }
+    const references = this.database.connection
+      .prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM postings WHERE account_id = ?) +
+          (SELECT COUNT(*) FROM import_artifacts WHERE account_id = ?) +
+          (SELECT COUNT(*) FROM monthly_bank_reconciliations WHERE account_id = ?) AS referenceCount
+      `)
+      .get(existing.accountId, existing.accountId, existing.accountId) as { referenceCount: number };
+    if (references.referenceCount > 0) {
+      throw new Error("This asset has financial activity and cannot be deleted. Set its value to zero instead.");
+    }
+
+    const now = new Date().toISOString();
+    const write = this.database.connection.transaction(() => {
+      this.database.connection.prepare("DELETE FROM asset_positions WHERE id = ?").run(id);
+      this.database.connection.prepare("DELETE FROM accounts WHERE id = ?").run(existing.accountId);
+      this.insertAudit("wealth_asset.deleted", "asset_position", id, { before: existing }, now);
+    });
+    write.immediate();
+  }
+
   createGoal(input: CreateFinancialGoalInput, today = currentLocalDate()): FinancialGoalRecord {
     const id = `goal-${randomUUID()}`;
     const now = new Date().toISOString();

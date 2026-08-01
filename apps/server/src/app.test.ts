@@ -62,6 +62,11 @@ describe("local API", () => {
     const budget = await app.inject({ method: "GET", url: "/api/v1/budgets/2026-07" });
     expect(budget.statusCode).toBe(200);
     expect(budgetMonthResponseSchema.parse(budget.json()).regularBudgetPaise).toBe(6004800);
+    const inheritedBudget = await app.inject({ method: "GET", url: "/api/v1/budgets/2026-08" });
+    expect(budgetMonthResponseSchema.parse(inheritedBudget.json())).toMatchObject({
+      plannedIncomePaise: 30089300,
+      regularBudgetPaise: 6004800,
+    });
     const budgetUpdate = await app.inject({
       method: "PUT",
       url: "/api/v1/budgets/2026-08",
@@ -81,7 +86,7 @@ describe("local API", () => {
     expect(budgetUpdate.statusCode).toBe(200);
     expect(budgetMonthResponseSchema.parse(budgetUpdate.json())).toMatchObject({
       plannedIncomePaise: 31000000,
-      regularBudgetPaise: 2600000,
+      regularBudgetPaise: 6354800,
       lines: expect.arrayContaining([
         expect.objectContaining({
           categoryId: "category-groceries",
@@ -95,7 +100,7 @@ describe("local API", () => {
     expect(dashboardResponseSchema.parse(augustDashboard.json())).toMatchObject({
       regularExpensePaise: 125000,
       cashOutflowPaise: 125000,
-      regularBudgetPaise: 2600000,
+      regularBudgetPaise: 6354800,
     });
 
     const liabilities = await app.inject({ method: "GET", url: "/api/v1/liabilities" });
@@ -228,7 +233,7 @@ describe("local API", () => {
     const parsedWealth = wealthResponseSchema.parse(wealth.json());
     expect(parsedWealth.savingsPaise).toBe(11880800);
     expect(parsedWealth.restrictedWalletPaise).toBe(880000);
-    expect(parsedWealth.goals[0]?.progressPercentage).toBe(21);
+    expect(parsedWealth.goals[0]?.progressPercentage).toBe(20);
 
     const wealthAsset = await app.inject({
       method: "POST",
@@ -245,6 +250,23 @@ describe("local API", () => {
     });
     expect(wealthAsset.statusCode).toBe(201);
     const createdWealthAsset = wealthAssetSchema.parse(wealthAsset.json());
+
+    const disposableAsset = await app.inject({
+      method: "POST",
+      url: "/api/v1/wealth/assets",
+      payload: {
+        name: "Disposable test asset",
+        assetType: "savings",
+        currentValuePaise: 0,
+        monthlyContributionPaise: 0,
+        restricted: false,
+        asOfDate: "2026-07-23",
+      },
+    });
+    const disposableAssetId = wealthAssetSchema.parse(disposableAsset.json()).id;
+    expect((await app.inject({ method: "DELETE", url: `/api/v1/wealth/assets/${disposableAssetId}` })).statusCode).toBe(
+      204,
+    );
 
     const financialGoal = await app.inject({
       method: "POST",

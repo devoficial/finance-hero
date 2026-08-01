@@ -26,7 +26,16 @@ import {
 
 const navItems = ["Home", "Accounts", "Expenses", "Imports", "Liabilities", "Goals", "Forecasts", "Projects"] as const;
 type NavItem = (typeof navItems)[number];
-const ACTIVE_MONTH = "2026-07";
+
+export function currentLocalMonth(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    timeZone: "Asia/Kolkata",
+  }).format(now);
+}
+
+const ACTIVE_MONTH = currentLocalMonth();
 
 interface PwaInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -48,23 +57,26 @@ const navSlugs = {
   Projects: "projects",
 } as const satisfies Record<NavItem, string>;
 
-function normalizeRoutePeriod(nav: NavItem, month: string, year: string) {
-  if (nav === "Home" && month > ACTIVE_MONTH) {
-    return { month: ACTIVE_MONTH, year: ACTIVE_MONTH.slice(0, 4) };
+function normalizeRoutePeriod(nav: NavItem, month: string, year: string, activeMonth = ACTIVE_MONTH) {
+  if (nav === "Home" && month > activeMonth) {
+    return { month: activeMonth, year: activeMonth.slice(0, 4) };
   }
 
   return { month, year };
 }
 
-export function parseRouteHash(hash: string): { nav: NavItem; month: string; year: string } {
+export function parseRouteHash(
+  hash: string,
+  activeMonth = ACTIVE_MONTH,
+): { nav: NavItem; month: string; year: string } {
   const [path = "home", search = ""] = hash.replace(/^#\/?/, "").split("?");
   const nav = path === "ledger" ? "Expenses" : (navItems.find((item) => navSlugs[item] === path) ?? "Home");
   const params = new URLSearchParams(search);
   const routeMonth = params.get("month");
-  const month = routeMonth && /^\d{4}-\d{2}$/.test(routeMonth) ? routeMonth : ACTIVE_MONTH;
+  const month = routeMonth && /^\d{4}-\d{2}$/.test(routeMonth) ? routeMonth : activeMonth;
   const routeYear = params.get("year");
   const year = routeYear && /^\d{4}$/.test(routeYear) ? routeYear : month.slice(0, 4);
-  return { nav, ...normalizeRoutePeriod(nav, month, year) };
+  return { nav, ...normalizeRoutePeriod(nav, month, year, activeMonth) };
 }
 
 function readRoute() {
@@ -200,8 +212,16 @@ export function App() {
     setYear(period.year);
   }
 
+  function navigateFromSidebar(nav: NavItem) {
+    if (nav === "Expenses") {
+      navigate(nav, ACTIVE_MONTH, ACTIVE_MONTH.slice(0, 4));
+      return;
+    }
+    navigate(nav);
+  }
+
   function openExpenses() {
-    navigate("Expenses");
+    navigate("Expenses", ACTIVE_MONTH, ACTIVE_MONTH.slice(0, 4));
   }
 
   function changeExpenseYear(nextYear: string) {
@@ -238,7 +258,7 @@ export function App() {
             <button
               className={activeNav === item ? "active" : ""}
               key={item}
-              onClick={() => navigate(item)}
+              onClick={() => navigateFromSidebar(item)}
               type="button"
             >
               <span className="nav-index">0{index + 1}</span>
@@ -317,7 +337,7 @@ export function App() {
             liabilities={liabilities.data}
             loading={dashboard.isLoading || liabilities.isLoading || wealth.isLoading}
             money={money}
-            onOpenExpenses={() => navigate("Expenses")}
+            onOpenExpenses={openExpenses}
             onOpenLiabilities={() => navigate("Liabilities")}
             onOpenGoals={() => navigate("Goals")}
             wealth={wealth.data}
