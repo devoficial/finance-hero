@@ -5204,25 +5204,28 @@ h2 {
 
 .accounts-workspace {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 .accounts-brief {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 28px;
-  border-left: 5px solid var(--yellow);
+  gap: 22px;
+  border-left: 4px solid var(--yellow);
   background: var(--green);
   color: white;
-  padding: 25px 28px;
+  padding: 15px 20px;
 }
 .accounts-brief h2 {
-  margin: 3px 0 5px;
+  margin: 2px 0 3px;
   color: white;
+  font-size: 26px;
 }
 .accounts-brief p:not(.eyebrow) {
   max-width: 720px;
   margin: 0;
   color: #bed0c8;
+  font-size: 10px;
 }
 .accounts-brief .eyebrow {
   color: #9fb7ac;
@@ -5245,11 +5248,11 @@ h2 {
 }
 .accounts-kpis article {
   min-width: 0;
-  min-height: 142px;
+  min-height: 86px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 25px 24px;
+  gap: 4px;
+  padding: 13px 17px;
   border-right: 1px solid var(--line);
 }
 .accounts-kpis article:last-child {
@@ -5267,8 +5270,9 @@ h2 {
 }
 .accounts-kpis strong {
   font:
-    600 clamp(22px, 2.25vw, 36px) "Newsreader",
+    600 clamp(22px, 2vw, 30px) "Newsreader",
     serif;
+  line-height: 1;
 }
 .money-value {
   min-width: 0;
@@ -5290,9 +5294,10 @@ h2 {
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
   border-right: 1px solid var(--line);
-  padding: 15px 18px;
+  padding: 9px 13px;
 }
 .account-source-guide article:last-child {
   border-right: 0;
@@ -5302,6 +5307,11 @@ h2 {
   color: #63726c;
   font-size: 8px;
 }
+.account-source-guide strong,
+.account-source-guide small,
+.account-source-guide span {
+  grid-column: 1;
+}
 .account-source-guide span {
   font:
     600 8px "DM Mono",
@@ -5309,6 +5319,9 @@ h2 {
   letter-spacing: 0.08em;
 }
 .account-source-guide button {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
   width: fit-content;
   border: 0;
   border-bottom: 1px solid var(--green);
@@ -5326,10 +5339,14 @@ h2 {
   align-items: end;
   justify-content: space-between;
   gap: 20px;
-  padding: 24px 26px 17px;
+  padding: 15px 18px 10px;
 }
 .accounts-register-head h2 {
   margin: 2px 0 0;
+}
+.accounts-register-head > div > small {
+  color: #63726c;
+  font-size: 8px;
 }
 .accounts-search {
   width: min(340px, 100%);
@@ -5345,7 +5362,7 @@ h2 {
 .account-form input,
 .account-form select {
   width: 100%;
-  min-height: 40px;
+  min-height: 34px;
   border: 1px solid var(--line);
   border-radius: 0;
   background: #fbf8ef;
@@ -5358,19 +5375,36 @@ h2 {
   gap: 0;
   margin: 0;
   border: 0;
-  padding: 0 26px 16px;
+  padding: 0 18px 10px;
 }
 .accounts-filters button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   border: 1px solid var(--line);
   border-right: 0;
   background: transparent;
-  padding: 8px 14px;
+  padding: 6px 10px;
   color: #52645c;
   cursor: pointer;
   font:
     600 8px "DM Mono",
     monospace;
   text-transform: uppercase;
+}
+.accounts-filters button b {
+  display: grid;
+  min-width: 18px;
+  min-height: 18px;
+  place-items: center;
+  border-radius: 10px;
+  background: #e3e0d7;
+  color: #52645c;
+  font-size: 7px;
+}
+.accounts-filters button.active b {
+  background: #41685a;
+  color: white;
 }
 .accounts-filters button:last-child {
   border-right: 1px solid var(--line);
@@ -5386,24 +5420,22 @@ h2 {
 .accounts-table-header,
 .accounts-table article {
   display: grid;
-  grid-template-columns:
-    minmax(190px, 1.45fr) minmax(130px, 0.8fr) minmax(140px, 0.85fr)
-    minmax(130px, 0.8fr) minmax(105px, 0.65fr) 132px;
+  grid-template-columns: minmax(230px, 1.45fr) minmax(180px, 1fr) minmax(125px, 0.7fr) minmax(100px, 0.55fr) 124px;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 .accounts-table-header {
-  min-height: 52px;
+  min-height: 36px;
   background: #dcdbd3;
-  padding: 0 20px;
+  padding: 0 16px;
   color: #5b6b65;
   font:
     500 8px "DM Mono",
     monospace;
 }
 .accounts-table article {
-  min-height: 82px;
-  margin: 0 20px;
+  min-height: 61px;
+  margin: 0 16px;
   border-bottom: 1px solid var(--line);
 }
 .accounts-table article.inactive {
@@ -5420,9 +5452,21 @@ h2 {
   color: #75837d;
   font-size: 8px;
 }
+.account-name-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.account-name-line > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .account-class {
   width: fit-content;
-  padding: 5px 7px;
+  flex: 0 0 auto;
+  padding: 3px 5px;
   background: #dce9e2;
   color: #285b4a;
   font:
@@ -5430,12 +5474,24 @@ h2 {
     monospace;
   text-transform: uppercase;
 }
+.account-owner > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+.account-balance {
+  font-size: 17px;
+}
+.accounts-table article > span:nth-child(4) > strong {
+  font-size: 11px;
+}
 .account-class.liability {
   background: #f4d4cc;
   color: #a43726;
 }
 .table-action {
-  min-height: 34px;
+  min-height: 29px;
   border: 1px solid var(--green);
   background: transparent;
   color: var(--green);
@@ -5443,22 +5499,19 @@ h2 {
   font-weight: 700;
 }
 .account-row-actions {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
 }
 .account-row-actions .table-action {
-  flex: 0 1 62px;
-  min-width: 0;
+  width: 100%;
   padding: 6px;
 }
 .account-remove-action {
-  min-height: 34px;
-  border: 0;
-  border-bottom: 1px solid #c84732;
+  min-height: 29px;
+  border: 1px solid #c84732;
   background: transparent;
-  padding: 4px 2px;
-  border-color: var(--red);
+  padding: 4px 6px;
   color: #b53b29;
   cursor: pointer;
   font:
@@ -6085,10 +6138,10 @@ h2 {
   }
   .accounts-table-header,
   .accounts-table article {
-    min-width: 820px;
+    min-width: 720px;
     grid-template-columns:
-      minmax(160px, 1.35fr) minmax(110px, 0.75fr) minmax(120px, 0.8fr)
-      minmax(110px, 0.7fr) minmax(90px, 0.6fr) 116px;
+      minmax(190px, 1.35fr) minmax(150px, 0.9fr) minmax(115px, 0.7fr)
+      minmax(90px, 0.55fr) 118px;
     gap: 10px;
   }
   .accounts-table-header > span:first-child,
@@ -6113,15 +6166,12 @@ h2 {
   .accounts-table article.inactive > div:first-child {
     background: var(--paper);
   }
-  .accounts-kpis,
   .forecast-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .accounts-kpis article:nth-child(2),
   .forecast-kpis article:nth-child(2) {
     border-right: 0;
   }
-  .accounts-kpis article:nth-child(-n + 2),
   .forecast-kpis article:nth-child(-n + 2) {
     border-bottom: 1px solid var(--line);
   }
@@ -7176,13 +7226,9 @@ h2 {
     position: static;
     box-shadow: none;
   }
-  .accounts-table article > div:nth-child(2) {
+  .accounts-table article > .account-owner {
     grid-column: 1;
     grid-row: 2;
-  }
-  .accounts-table article > span:nth-child(3) {
-    grid-column: 1;
-    grid-row: 3;
   }
   .accounts-table article > .account-balance {
     grid-column: 2;
@@ -7190,15 +7236,15 @@ h2 {
     align-self: start;
     font-size: 15px;
   }
-  .accounts-table article > span:nth-child(5) {
+  .accounts-table article > span:nth-child(4) {
     grid-column: 2;
-    grid-row: 2 / 4;
+    grid-row: 2;
     align-self: center;
     text-align: right;
   }
   .accounts-table article > .account-row-actions {
     grid-column: 1 / -1;
-    grid-row: 4;
+    grid-row: 3;
   }
   .account-form-shell {
     padding: 18px;

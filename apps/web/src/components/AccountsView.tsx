@@ -41,6 +41,13 @@ function accountTypeLabel(account: FinancialAccount): string {
   return account.accountType.replaceAll("_", " ");
 }
 
+function balanceSourceLabel(account: FinancialAccount): string {
+  if (account.id === "account-primary-bank") return "Monthly bank reconciliation";
+  if (account.managedBy === "ledger") return "Recorded transactions";
+  if (account.managedBy === "liability") return "Liability register";
+  return "Direct valuation";
+}
+
 export function AccountsView({
   data,
   loading,
@@ -199,17 +206,20 @@ export function AccountsView({
     (account) => account.accountClass === "liability" && account.isActive,
   ).length;
   const inactiveAccounts = data.accounts.filter((account) => !account.isActive).length;
+  const filterCounts: Record<AccountFilter, number> = {
+    all: data.accounts.length,
+    asset: activeAssets,
+    liability: activeLiabilities,
+    inactive: inactiveAccounts,
+  };
 
   return (
     <section className="accounts-workspace">
       <div className="accounts-brief">
         <div>
           <p className="eyebrow">ACCOUNT CONTROL / ONE SOURCE OF TRUTH</p>
-          <h2>Every balance has an owner.</h2>
-          <p>
-            Edit savings and wallet valuations here. Transaction accounts follow recorded activity; loans follow the
-            liability register.
-          </p>
+          <h2>Accounts at a glance.</h2>
+          <p>Direct valuations, transaction balances and liabilities—without duplicate totals.</p>
         </div>
         <div className="accounts-brief-actions">
           <button className="ghost-button" onClick={onOpenLiabilities} type="button">
@@ -253,21 +263,21 @@ export function AccountsView({
       <section className="account-source-guide" aria-label="How account balances are edited">
         <article>
           <span>DIRECT VALUATION</span>
-          <strong>Savings, investments and wallets</strong>
-          <small>Edit the current balance here; it becomes a dated valuation.</small>
+          <strong>Savings and wallets</strong>
+          <small>Edit balance here</small>
         </article>
         <article>
           <span>TRANSACTION CALCULATED</span>
-          <strong>Bank and cash transaction accounts</strong>
-          <small>Post or reconcile transactions so the audit trail remains intact.</small>
+          <strong>Bank and cash</strong>
+          <small>Updated by activity</small>
           <button onClick={onOpenExpenses} type="button">
             Open expenses
           </button>
         </article>
         <article>
           <span>LIABILITY CALCULATED</span>
-          <strong>Loans and credit cards</strong>
-          <small>Edit principal or clear the facility in the liability register.</small>
+          <strong>Loans and cards</strong>
+          <small>Updated in liabilities</small>
           <button onClick={onOpenLiabilities} type="button">
             Open liabilities
           </button>
@@ -288,6 +298,7 @@ export function AccountsView({
           <div>
             <p className="eyebrow">ACCOUNT REGISTER</p>
             <h2>Connected financial positions</h2>
+            <small>{filteredAccounts.length} accounts shown</small>
           </div>
           <label className="accounts-search">
             <span>SEARCH</span>
@@ -313,7 +324,8 @@ export function AccountsView({
               }}
               type="button"
             >
-              {item}
+              <span>{item}</span>
+              <b>{filterCounts[item]}</b>
             </button>
           ))}
         </fieldset>
@@ -321,8 +333,7 @@ export function AccountsView({
         <div className="accounts-table" ref={tableRef}>
           <div className="accounts-table-header">
             <span>ACCOUNT</span>
-            <span>CLASS</span>
-            <span>INSTITUTION</span>
+            <span>OWNER / SOURCE</span>
             <span>BALANCE</span>
             <span>ACTIVITY</span>
             <span>ACTION</span>
@@ -330,20 +341,16 @@ export function AccountsView({
           {filteredAccounts.map((account) => (
             <article className={!account.isActive ? "inactive" : ""} key={account.id}>
               <div>
-                <strong>{account.name}</strong>
+                <div className="account-name-line">
+                  <strong>{account.name}</strong>
+                  <span className={`account-class ${account.accountClass}`}>{account.accountClass}</span>
+                </div>
                 <small>{accountTypeLabel(account)}</small>
               </div>
-              <div>
-                <span className={`account-class ${account.accountClass}`}>{account.accountClass}</span>
-                <small>
-                  {account.id === "account-primary-bank"
-                    ? "Matches current month closing balance"
-                    : account.managedBy === "ledger"
-                      ? "Calculated from transactions"
-                      : `Managed in ${account.managedBy}`}
-                </small>
+              <div className="account-owner">
+                <span>{account.institution || "Independent"}</span>
+                <small>{balanceSourceLabel(account)}</small>
               </div>
-              <span>{account.institution || "Independent"}</span>
               <strong
                 className={`account-balance money-value ${
                   account.accountClass === "liability" && account.balancePaise > 0 ? "negative" : ""
@@ -352,8 +359,8 @@ export function AccountsView({
                 {money(account.balancePaise)}
               </strong>
               <span>
-                {account.transactionCount} entries
-                <small>{account.isActive ? "Active" : "Archived"}</small>
+                <strong>{account.transactionCount}</strong>
+                <small>{account.transactionCount === 1 ? "entry" : "entries"} · {account.isActive ? "Active" : "Archived"}</small>
               </span>
               <div className="account-row-actions">
                 <button className="table-action" onClick={() => openEditForm(account)} type="button">
