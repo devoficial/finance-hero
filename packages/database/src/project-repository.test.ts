@@ -101,7 +101,15 @@ describe("project repository", () => {
     const project = repository.getHomeConstruction();
     expect(project.actualExpensePaise).toBe(122831000);
     expect(project.monthlySpend.find((item) => item.month === "2026-07")?.amountPaise).toBe(250000);
-    expect(ledger.getDashboard("2026-07", 20).assetBuildingPaise).toBe(4845300);
+    expect(ledger.getDashboard("2026-07", 20).assetBuildingPaise).toBe(4595300);
+    const expensePosting = database.connection
+      .prepare(`
+        SELECT COALESCE(SUM(p.amount_paise), 0) AS amountPaise
+        FROM postings p JOIN accounts a ON a.id = p.account_id
+        WHERE p.transaction_id = ? AND a.account_class = 'expense'
+      `)
+      .get(first.linkedTransactionId) as { amountPaise: number };
+    expect(expensePosting.amountPaise).toBe(0);
 
     const balance = database.connection
       .prepare("SELECT SUM(amount_paise) AS total FROM postings WHERE transaction_id = ?")
@@ -135,6 +143,16 @@ describe("project repository", () => {
     const project = repository.getHomeConstruction();
     expect(project.fundBalancePaise).toBe(initialFund + 375000);
     expect(project.actualExpensePaise).toBe(122706000);
+    const julyProjectExpensePostings = database.connection
+      .prepare(`
+        SELECT COALESCE(SUM(p.amount_paise), 0) AS amountPaise
+        FROM project_expenses pe
+        JOIN postings p ON p.transaction_id = pe.linked_transaction_id
+        JOIN accounts a ON a.id = p.account_id
+        WHERE pe.occurred_on LIKE '2026-07-%' AND a.account_class = 'expense'
+      `)
+      .get() as { amountPaise: number };
+    expect(julyProjectExpensePostings.amountPaise).toBe(0);
     database.close();
   });
 });

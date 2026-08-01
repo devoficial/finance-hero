@@ -16,7 +16,7 @@ const CASH_FLOW_CATEGORIES = [
   ["category-emi-payments", "EMIs / debt payments", "debt_payment"],
   ["category-home-construction", "Home construction", "asset_building"],
   ["category-loan-charges", "Loan and bank charges", "nonbudget_expense"],
-  ["category-extra-savings", "Extra savings / lending / payback", "savings_investment"],
+  ["category-extra-savings", "Lending / payback", "savings_investment"],
   ["category-loan-repayments", "Loan repayments", "debt_payment"],
   ["category-emergency-fund", "Emergency fund", "savings_investment"],
 ] as const;
@@ -759,6 +759,38 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
     insertAccount.run("account-primary-bank", "Primary salary account", "asset", "bank", null, SEEDED_AT);
     insertAccount.run("account-savings", "Savings", "asset", "savings", null, SEEDED_AT);
     insertAccount.run("account-pluxee", "Pluxee food wallet", "asset", "restricted_wallet", "Pluxee", SEEDED_AT);
+    insertAccount.run(
+      "account-home-construction-use",
+      "Home construction project use",
+      "equity",
+      "project_use",
+      null,
+      SEEDED_AT,
+    );
+    database.connection
+      .prepare("UPDATE categories SET name = 'Lending / payback' WHERE id = 'category-extra-savings'")
+      .run();
+    database.connection
+      .prepare(`
+        UPDATE journal_transactions
+        SET origin = 'project_spend'
+        WHERE id IN (
+          SELECT linked_transaction_id FROM project_expenses
+          WHERE linked_transaction_id IS NOT NULL
+        ) AND origin = 'manual_expense'
+      `)
+      .run();
+    database.connection
+      .prepare(`
+        UPDATE postings
+        SET account_id = 'account-home-construction-use', category_id = NULL
+        WHERE account_id = 'account-regular-expense'
+          AND transaction_id IN (
+            SELECT linked_transaction_id FROM project_expenses
+            WHERE linked_transaction_id IS NOT NULL
+          )
+      `)
+      .run();
 
     const existing = database.connection
       .prepare("SELECT value FROM app_metadata WHERE key = 'accepted_opening_seed'")

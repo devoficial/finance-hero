@@ -143,7 +143,7 @@ describe("budget repository", () => {
     database.close();
   });
 
-  it("records a bank statement check without overriding the calculated closing balance", () => {
+  it("uses a reconciled bank statement as the trusted closing balance and next carryover", () => {
     const { database, repository } = createRepository();
 
     const july = repository.updateMonth("2026-07", {
@@ -158,9 +158,9 @@ describe("budget repository", () => {
       statementBalancePaise: 1216050,
       reconciliationDifferencePaise: -3350550,
       reconciledOn: "2026-07-26",
-      closingBalancePaise: 4566600,
+      closingBalancePaise: 1216050,
     });
-    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(4566600);
+    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1216050);
     database.close();
   });
 
@@ -191,6 +191,48 @@ describe("budget repository", () => {
       before.calculatedClosingBalancePaise,
     );
     expect(wealth.getWealth("2026-07-23").totalAssetPaise).toBe(beforeWealth);
+    database.close();
+  });
+
+  it("keeps non-primary account spending out of the Axis cash balance", () => {
+    const { database, ledger, repository } = createRepository();
+    const before = repository.getMonth("2026-07").cashBridge;
+
+    ledger.createManualTransaction({
+      occurredOn: "2026-07-24",
+      payee: "Construction account purchase",
+      kind: "expense",
+      amountPaise: 125000,
+      accountId: "account-savings",
+      categoryId: "category-home-construction",
+      idempotencyKey: "budget-test:non-primary-spend",
+    });
+
+    const after = repository.getMonth("2026-07").cashBridge;
+    expect(after.cashOutflowPaise).toBe(before.cashOutflowPaise + 125000);
+    expect(after.primaryAccountOutflowPaise).toBe(before.primaryAccountOutflowPaise);
+    expect(after.calculatedClosingBalancePaise).toBe(before.calculatedClosingBalancePaise);
+    database.close();
+  });
+
+  it("moves an Emergency Fund sheet contribution from Axis into ICICI", () => {
+    const { database, repository } = createRepository();
+
+    const august = repository.updateMonth("2026-08", {
+      lines: [{ categoryId: "category-emergency-fund", actualPaise: 2000000 }],
+    });
+    const iciciMovement = database.connection
+      .prepare(
+        "SELECT COALESCE(SUM(amount_paise), 0) AS amountPaise FROM postings WHERE account_id = 'account-icici-expense-reserve'",
+      )
+      .get() as { amountPaise: number };
+
+    expect(august.lines.find((line) => line.categoryId === "category-emergency-fund")?.spentPaise).toBe(2000000);
+    expect(august.cashBridge.primaryAccountOutflowPaise).toBe(2000000);
+    expect(iciciMovement.amountPaise).toBe(2000000);
+    expect(august.lines.find((line) => line.categoryId === "category-extra-savings")?.categoryName).toBe(
+      "Lending / payback",
+    );
     database.close();
   });
 
@@ -445,9 +487,9 @@ describe("budget repository", () => {
     expect(repository.getMonth("2026-07").cashBridge).toMatchObject({
       statementBalancePaise: 1216050,
       reconciliationDifferencePaise: -3450550,
-      closingBalancePaise: 4666600,
+      closingBalancePaise: 1216050,
     });
-    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(4666600);
+    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1216050);
     database.close();
   });
 

@@ -29,6 +29,8 @@ export interface MonthlyCashBridgeRecord {
   adjustmentTotalPaise: number;
   fundsAvailablePaise: number;
   cashOutflowPaise: number;
+  primaryAccountOutflowPaise: number;
+  primaryTransferMovementPaise: number;
   calculatedClosingBalancePaise: number;
   statementBalancePaise: number | null;
   reconciliationDifferencePaise: number;
@@ -566,24 +568,63 @@ export class BudgetRepository {
           .all(month) as Array<{ month: string; amountPaise: number }>
       ).map((row) => [row.month, row.amountPaise]),
     );
+    const primaryAccountOutflows = new Map(
+      (
+        this.database.connection
+          .prepare(`
+            WITH transaction_outflows AS (
+              SELECT t.id, t.effective_month AS month, t.origin,
+                     COALESCE(SUM(CASE
+                       WHEN p.account_id = 'account-primary-bank' AND p.amount_paise < 0
+                         THEN -p.amount_paise
+                       ELSE 0
+                     END), 0) AS direct_primary_outflow,
+                     COALESCE(SUM(CASE
+                       WHEN a.account_class = 'expense' AND p.amount_paise > 0
+                         THEN p.amount_paise
+                       ELSE 0
+                     END), 0) AS aggregate_outflow
+              FROM journal_transactions t
+              JOIN postings p ON p.transaction_id = t.id
+              JOIN accounts a ON a.id = p.account_id
+              WHERE t.effective_month <= ? AND t.status = 'posted'
+              GROUP BY t.id, t.effective_month, t.origin
+            )
+            SELECT month, SUM(CASE
+              WHEN origin = 'manual_transfer' THEN 0
+              WHEN direct_primary_outflow > 0 THEN direct_primary_outflow
+              WHEN origin IN ('historical_aggregate', 'expense_sheet_aggregate') THEN aggregate_outflow
+              ELSE 0
+            END) AS amountPaise
+            FROM transaction_outflows
+            GROUP BY month
+          `)
+          .all(month) as Array<{ month: string; amountPaise: number }>
+      ).map((row) => [row.month, row.amountPaise]),
+    );
     let previousClosing = 0;
     let selectedCarryover = 0;
     let selectedOutflow = 0;
+    let selectedPrimaryOutflow = 0;
+    let selectedPrimaryTransferMovement = 0;
     let selectedCalculatedClosing = 0;
     let selectedReconciliation: { statementBalancePaise: number; reconciledOn: string } | undefined;
     for (const item of months) {
       const carryover = overrides.get(item.month) ?? previousClosing;
       const adjustmentTotal = adjustmentTotals.get(item.month) ?? 0;
       const cashOutflow = outflows.get(item.month) ?? 0;
+      const primaryAccountOutflow = primaryAccountOutflows.get(item.month) ?? 0;
       // Internal transfers are not spending, but they still move cash into or out of
       // the primary bank account whose balance this bridge represents.
       const primaryTransferMovement = primaryAccountTransfers.get(item.month) ?? 0;
-      const calculatedClosing = carryover + adjustmentTotal - cashOutflow + primaryTransferMovement;
+      const calculatedClosing = carryover + adjustmentTotal - primaryAccountOutflow + primaryTransferMovement;
       const reconciliation = reconciliations.get(item.month);
-      previousClosing = calculatedClosing;
+      previousClosing = reconciliation?.statementBalancePaise ?? calculatedClosing;
       if (item.month === month) {
         selectedCarryover = carryover;
         selectedOutflow = cashOutflow;
+        selectedPrimaryOutflow = primaryAccountOutflow;
+        selectedPrimaryTransferMovement = primaryTransferMovement;
         selectedCalculatedClosing = calculatedClosing;
         selectedReconciliation = reconciliation;
       }
@@ -596,13 +637,15 @@ export class BudgetRepository {
       adjustmentTotalPaise,
       fundsAvailablePaise,
       cashOutflowPaise: selectedOutflow,
+      primaryAccountOutflowPaise: selectedPrimaryOutflow,
+      primaryTransferMovementPaise: selectedPrimaryTransferMovement,
       calculatedClosingBalancePaise: selectedCalculatedClosing,
       statementBalancePaise: selectedReconciliation?.statementBalancePaise ?? null,
       reconciliationDifferencePaise: selectedReconciliation
         ? selectedReconciliation.statementBalancePaise - selectedCalculatedClosing
         : 0,
       reconciledOn: selectedReconciliation?.reconciledOn ?? null,
-      closingBalancePaise: selectedCalculatedClosing,
+      closingBalancePaise: selectedReconciliation?.statementBalancePaise ?? selectedCalculatedClosing,
     };
   }
 
@@ -694,5 +737,14 @@ export class BudgetRepository {
         -amountPaise,
         createdAt,
       );
+    if (categoryId === "category-emergency-fund") {
+      this.database.connection
+        .prepare(`
+          INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
+          VALUES (?, ?, 'account-primary-bank', NULL, ?, ?),
+                 (?, ?, 'account-icici-expense-reserve', NULL, ?, ?)
+        `)
+        .run(randomUUID(), transactionId, -amountPaise, createdAt, randomUUID(), transactionId, amountPaise, createdAt);
+    }
   }
 }

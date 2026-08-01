@@ -302,6 +302,8 @@ export const monthlyCashBridgeSchema = z.object({
   adjustmentTotalPaise: paiseSchema,
   fundsAvailablePaise: paiseSchema,
   cashOutflowPaise: paiseSchema,
+  primaryAccountOutflowPaise: paiseSchema,
+  primaryTransferMovementPaise: paiseSchema,
   calculatedClosingBalancePaise: paiseSchema,
   statementBalancePaise: paiseSchema.nullable(),
   reconciliationDifferencePaise: paiseSchema,

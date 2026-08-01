@@ -209,8 +209,11 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const persistedSheetOutflow = budget?.lines.reduce((sum, line) => sum + line.spentPaise, 0) ?? 0;
   const draftCashOutflow =
     (budget?.cashBridge.cashOutflowPaise ?? 0) + (draftTotals.overallActual - persistedSheetOutflow);
+  const draftPrimaryAccountOutflow =
+    (budget?.cashBridge.primaryAccountOutflowPaise ?? 0) + (draftTotals.overallActual - persistedSheetOutflow);
   const fundsAvailable = (budget?.cashBridge.carryoverPaise ?? 0) + adjustmentTotal;
-  const calculatedClosingBalance = fundsAvailable - draftCashOutflow;
+  const calculatedClosingBalance =
+    fundsAvailable - draftPrimaryAccountOutflow + (budget?.cashBridge.primaryTransferMovementPaise ?? 0);
   const parsedStatementBalance = statementBalance.trim() ? parseRupeeExpression(statementBalance) : null;
   const closingBalance = calculatedClosingBalance;
   const reconciliationDifference =

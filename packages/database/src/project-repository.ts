@@ -170,14 +170,12 @@ export class ProjectRepository {
   createExpense(input: CreateProjectExpenseInput): ProjectExpenseRecord {
     let created: ProjectExpenseRecord | undefined;
     const write = this.database.connection.transaction(() => {
-      const transaction = this.ledger.createManualTransaction({
+      const transaction = this.ledger.createProjectSpendTransaction({
         occurredOn: input.occurredOn,
         payee: input.description,
         memo: "Home Construction project expense",
-        kind: "expense",
         amountPaise: input.amountPaise,
         accountId: input.accountId,
-        categoryId: "category-home-construction",
         idempotencyKey: input.idempotencyKey,
       });
       const existing = this.database.connection

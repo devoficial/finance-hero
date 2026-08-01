@@ -16,6 +16,15 @@ export interface ManualTransactionInput {
   idempotencyKey: string;
 }
 
+export interface ProjectSpendTransactionInput {
+  occurredOn: string;
+  payee: string;
+  memo?: string;
+  amountPaise: number;
+  accountId: string;
+  idempotencyKey: string;
+}
+
 export interface LedgerTransactionRecord {
   id: string;
   occurredOn: string;
@@ -798,7 +807,9 @@ export class LedgerRepository {
       }));
     const amountPaise =
       kind === "expense"
-        ? expensePostings.reduce((sum, posting) => sum + posting.amountPaise, 0)
+        ? row.origin === "project_spend"
+          ? Math.abs(sourcePosting.amountPaise)
+          : expensePostings.reduce((sum, posting) => sum + posting.amountPaise, 0)
         : kind === "income"
           ? incomePostings.reduce((sum, posting) => sum + Math.abs(posting.amountPaise), 0)
           : Math.abs(sourcePosting.amountPaise);
@@ -1085,6 +1096,65 @@ export class LedgerRepository {
     write.immediate();
     if (!result) {
       throw new Error("Transaction could not be created.");
+    }
+    return result;
+  }
+
+  createProjectSpendTransaction(input: ProjectSpendTransactionInput): LedgerTransactionRecord {
+    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise <= 0) {
+      throw new Error("Project spend must be a positive whole number of paise.");
+    }
+    const source = this.database.connection
+      .prepare(`
+        SELECT id FROM accounts
+        WHERE id = ? AND account_class = 'asset' AND is_active = 1
+      `)
+      .get(input.accountId) as { id: string } | undefined;
+    if (!source) {
+      throw new Error("Project spending requires an active asset account.");
+    }
+
+    const requestHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
+    const existing = this.getIdempotentResponse(input.idempotencyKey, requestHash);
+    if (existing) {
+      return existing;
+    }
+
+    let result: LedgerTransactionRecord | undefined;
+    const write = this.database.connection.transaction(() => {
+      const id = randomUUID();
+      const now = new Date().toISOString();
+      this.database.connection
+        .prepare(`
+          INSERT INTO journal_transactions
+            (id, occurred_on, effective_month, payee, memo, status, origin, source_ref, created_at)
+          VALUES (?, ?, ?, ?, ?, 'posted', 'project_spend', NULL, ?)
+        `)
+        .run(id, input.occurredOn, input.occurredOn.slice(0, 7), input.payee.trim(), input.memo?.trim() || null, now);
+      this.database.connection
+        .prepare(`
+          INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
+          VALUES (?, ?, ?, NULL, ?, ?),
+                 (?, ?, 'account-home-construction-use', NULL, ?, ?)
+        `)
+        .run(randomUUID(), id, input.accountId, -input.amountPaise, now, randomUUID(), id, input.amountPaise, now);
+      result = this.getTransaction(id);
+      this.database.connection
+        .prepare(`
+          INSERT INTO idempotency_keys (key, request_hash, response_json, created_at)
+          VALUES (?, ?, ?, ?)
+        `)
+        .run(input.idempotencyKey, requestHash, JSON.stringify(result), now);
+      this.database.connection
+        .prepare(`
+          INSERT INTO audit_events (id, action, entity_type, entity_id, detail_json, created_at)
+          VALUES (?, 'project_spend.created', 'journal_transaction', ?, ?, ?)
+        `)
+        .run(randomUUID(), id, JSON.stringify({ amountPaise: input.amountPaise }), now);
+    });
+    write.immediate();
+    if (!result) {
+      throw new Error("Project spend transaction could not be created.");
     }
     return result;
   }
