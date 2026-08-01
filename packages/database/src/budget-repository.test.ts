@@ -164,6 +164,36 @@ describe("budget repository", () => {
     database.close();
   });
 
+  it("moves primary cash between owned accounts without treating it as spending", () => {
+    const { database, ledger, repository, wealth } = createRepository();
+    const before = repository.getMonth("2026-07").cashBridge;
+    const beforeWealth = wealth.getWealth("2026-07-23").totalAssetPaise;
+    const transfer = ledger.createManualTransaction({
+      occurredOn: "2026-07-23",
+      payee: "Fund Jupiter construction account",
+      kind: "transfer",
+      amountPaise: 500000,
+      accountId: "account-primary-bank",
+      destinationAccountId: "account-savings",
+      idempotencyKey: "budget-test:owned-transfer",
+    });
+
+    const after = repository.getMonth("2026-07").cashBridge;
+    expect(after.cashOutflowPaise).toBe(before.cashOutflowPaise);
+    expect(after.calculatedClosingBalancePaise).toBe(before.calculatedClosingBalancePaise - 500000);
+    expect(wealth.getWealth("2026-07-23").totalAssetPaise).toBe(beforeWealth + 500000);
+
+    ledger.reverseTransaction(transfer.id, {
+      reason: "Transfer entered in error",
+      idempotencyKey: "budget-test:owned-transfer-reversal",
+    });
+    expect(repository.getMonth("2026-07").cashBridge.calculatedClosingBalancePaise).toBe(
+      before.calculatedClosingBalancePaise,
+    );
+    expect(wealth.getWealth("2026-07-23").totalAssetPaise).toBe(beforeWealth);
+    database.close();
+  });
+
   it("shows approved imported credits as editable extra income without duplicating cash", () => {
     const { database, imports, ledger, repository } = createRepository();
     imports.createArtifact({

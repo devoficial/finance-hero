@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { AccountRepository } from "./account-repository";
 import { BudgetRepository } from "./budget-repository";
 import { initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
+import { LedgerRepository } from "./ledger-repository";
 import { seedAcceptedOpeningSnapshot } from "./opening-seed";
 
 const directories: string[] = [];
@@ -92,6 +93,41 @@ describe("account repository", () => {
     expect(() => repository.updateAccount(account.id, { isActive: false })).toThrow(
       "Move or reconcile the remaining balance before deactivating this account.",
     );
+    database.close();
+  });
+
+  it("consolidates an owned-account transfer without changing total assets", () => {
+    const { database, repository } = createRepository();
+    const ledger = new LedgerRepository(database);
+    const before = repository.getAccounts();
+    const primaryBefore = before.accounts.find((account) => account.id === "account-primary-bank")?.balancePaise ?? 0;
+    const reserveBefore =
+      before.accounts.find((account) => account.id === "account-icici-expense-reserve")?.balancePaise ?? 0;
+    const occurredOn = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: "Asia/Kolkata",
+    }).format(new Date());
+
+    ledger.createManualTransaction({
+      occurredOn,
+      payee: "Monthly ICICI reserve funding",
+      kind: "transfer",
+      amountPaise: 2000000,
+      accountId: "account-primary-bank",
+      destinationAccountId: "account-icici-expense-reserve",
+      idempotencyKey: "account-test:icici-transfer",
+    });
+
+    const after = repository.getAccounts();
+    expect(after.accounts.find((account) => account.id === "account-primary-bank")?.balancePaise).toBe(
+      primaryBefore - 2000000,
+    );
+    expect(after.accounts.find((account) => account.id === "account-icici-expense-reserve")?.balancePaise).toBe(
+      reserveBefore + 2000000,
+    );
+    expect(after.totalAssetBalancePaise).toBe(before.totalAssetBalancePaise);
     database.close();
   });
 

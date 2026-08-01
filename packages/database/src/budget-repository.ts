@@ -552,6 +552,20 @@ export class BudgetRepository {
           .all(month) as Array<{ month: string; amountPaise: number }>
       ).map((row) => [row.month, row.amountPaise]),
     );
+    const primaryAccountTransfers = new Map(
+      (
+        this.database.connection
+          .prepare(`
+            SELECT t.effective_month AS month, COALESCE(SUM(p.amount_paise), 0) AS amountPaise
+            FROM journal_transactions t
+            JOIN postings p ON p.transaction_id = t.id
+            WHERE t.effective_month <= ? AND t.status = 'posted'
+              AND t.origin = 'manual_transfer' AND p.account_id = 'account-primary-bank'
+            GROUP BY t.effective_month
+          `)
+          .all(month) as Array<{ month: string; amountPaise: number }>
+      ).map((row) => [row.month, row.amountPaise]),
+    );
     let previousClosing = 0;
     let selectedCarryover = 0;
     let selectedOutflow = 0;
@@ -561,7 +575,10 @@ export class BudgetRepository {
       const carryover = overrides.get(item.month) ?? previousClosing;
       const adjustmentTotal = adjustmentTotals.get(item.month) ?? 0;
       const cashOutflow = outflows.get(item.month) ?? 0;
-      const calculatedClosing = carryover + adjustmentTotal - cashOutflow;
+      // Internal transfers are not spending, but they still move cash into or out of
+      // the primary bank account whose balance this bridge represents.
+      const primaryTransferMovement = primaryAccountTransfers.get(item.month) ?? 0;
+      const calculatedClosing = carryover + adjustmentTotal - cashOutflow + primaryTransferMovement;
       const reconciliation = reconciliations.get(item.month);
       previousClosing = calculatedClosing;
       if (item.month === month) {
