@@ -6,7 +6,7 @@ import type {
 } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useMemo, useRef, useState } from "react";
-import { createFinancialAccount, updateFinancialAccount } from "../lib/api";
+import { createFinancialAccount, deleteFinancialAccount, updateFinancialAccount } from "../lib/api";
 
 interface AccountsViewProps {
   data?: FinancialAccountsResponse;
@@ -50,6 +50,7 @@ export function AccountsView({ data, loading, money, onOpenExpenses, onOpenLiabi
   const [restricted, setRestricted] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
+  const [accountToDelete, setAccountToDelete] = useState<FinancialAccount | null>(null);
 
   const refreshAccounts = async () => {
     await Promise.all([
@@ -78,6 +79,14 @@ export function AccountsView({ data, loading, money, onOpenExpenses, onOpenLiabi
     },
     onError: (error) => {
       setFormError(error instanceof Error ? error.message : "The account could not be saved.");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteFinancialAccount,
+    onSuccess: async () => {
+      setAccountToDelete(null);
+      await refreshAccounts();
     },
   });
 
@@ -320,9 +329,16 @@ export function AccountsView({ data, loading, money, onOpenExpenses, onOpenLiabi
                 {account.transactionCount} entries
                 <small>{account.isActive ? "Active" : "Archived"}</small>
               </span>
-              <button className="table-action" onClick={() => openEditForm(account)} type="button">
-                Edit
-              </button>
+              <div className="account-row-actions">
+                <button className="table-action" onClick={() => openEditForm(account)} type="button">
+                  Edit
+                </button>
+                {account.managedBy === "wealth" && account.balancePaise === 0 && account.transactionCount === 0 && (
+                  <button className="table-action danger" onClick={() => setAccountToDelete(account)} type="button">
+                    Delete
+                  </button>
+                )}
+              </div>
             </article>
           ))}
           {filteredAccounts.length === 0 && <p className="accounts-empty">No accounts match this filter.</p>}
@@ -435,6 +451,37 @@ export function AccountsView({ data, loading, money, onOpenExpenses, onOpenLiabi
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {accountToDelete && (
+        <div className="modal-backdrop" role="presentation">
+          <section aria-modal="true" className="wealth-modal account-delete-modal" role="dialog">
+            <div className="modal-title">
+              <div>
+                <p className="eyebrow">DELETE ACCOUNT</p>
+                <h2>Remove {accountToDelete.name}?</h2>
+              </div>
+            </div>
+            <p>
+              Deletion is allowed only when the balance is zero and the account has no transactions, imports,
+              reconciliations, or goal allocations. Otherwise Finance Hero preserves it for the audit trail.
+            </p>
+            {deleteMutation.error && <p className="form-error">{deleteMutation.error.message}</p>}
+            <div className="modal-actions">
+              <button disabled={deleteMutation.isPending} onClick={() => setAccountToDelete(null)} type="button">
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(accountToDelete.id)}
+                type="button"
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete account"}
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </section>

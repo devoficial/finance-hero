@@ -657,6 +657,21 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
   });
 
+  app.delete("/api/v1/accounts/:id", async (request, reply) => {
+    if (!accounts) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const { id } = request.params as { id: string };
+      accounts.deleteAccount(id);
+      return reply.code(204).send();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Financial account could not be deleted.";
+      const statusCode = message === "Financial account does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "INVALID_ACCOUNT_DELETE", message } });
+    }
+  });
+
   app.get("/api/v1/budgets/:month", async (request, reply) => {
     if (!budgets) {
       return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });

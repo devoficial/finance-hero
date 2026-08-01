@@ -6,6 +6,7 @@ const SOURCE = "Finance tracker 2025:accepted opening snapshot";
 const SEEDED_AT = "2026-07-18T12:00:00.000Z";
 const EXPENSE_HISTORY_SEED = "2026-07-v7";
 const ACCEPTED_MONTHLY_INCOME_PLAN_PAISE = 30089300;
+const ICICI_EXPENSE_RESERVE_PAISE = 2000000;
 const CREDIT_CARD_BILLS_CATEGORY = [
   "category-credit-card-bills",
   "Credit card bills (unreconciled)",
@@ -655,6 +656,94 @@ function seedAcceptedWealthSnapshot(database: FinanceHeroDatabase): void {
   seed.immediate();
 }
 
+function seedOwnerCashAccountPlan(database: FinanceHeroDatabase): void {
+  const now = new Date().toISOString();
+  const currentMonth = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date());
+  const currentDate = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date());
+
+  const seed = database.connection.transaction(() => {
+    const existing = database.connection
+      .prepare("SELECT value FROM app_metadata WHERE key = 'owner_cash_account_plan'")
+      .get() as { value: string } | undefined;
+    if (existing?.value === "2026-08-v1") {
+      return;
+    }
+    database.connection
+      .prepare(
+        "UPDATE accounts SET name = 'Jupiter construction account', institution = 'Jupiter' WHERE id = 'account-savings'",
+      )
+      .run();
+    database.connection
+      .prepare(`
+        INSERT OR IGNORE INTO accounts
+          (id, name, account_class, account_type, institution, is_active, created_at)
+        VALUES ('account-icici-expense-reserve', 'ICICI expense reserve', 'asset', 'bank', 'ICICI Bank', 1, ?)
+      `)
+      .run(now);
+    database.connection
+      .prepare(`
+        INSERT OR IGNORE INTO asset_positions
+          (id, account_id, asset_type, baseline_value_paise, monthly_contribution_paise,
+           restricted, as_of_date, valued_at, source_ref, updated_at)
+        VALUES ('asset-icici-expense-reserve', 'account-icici-expense-reserve', 'savings', 0, ?, 0, ?, ?,
+                'Owner-confirmed flexible extra-expense reserve', ?)
+      `)
+      .run(ICICI_EXPENSE_RESERVE_PAISE, currentDate, now, now);
+    database.connection
+      .prepare(`
+        UPDATE asset_positions
+        SET monthly_contribution_paise = ?, updated_at = ?
+        WHERE id = 'asset-icici-expense-reserve'
+      `)
+      .run(ICICI_EXPENSE_RESERVE_PAISE, now);
+
+    database.connection
+      .prepare(`
+        INSERT INTO budget_periods
+          (month, planned_income_paise, regular_budget_paise, state, source_ref, updated_at)
+        VALUES (?, COALESCE((
+          SELECT planned_income_paise
+          FROM budget_periods
+          WHERE month < ? AND planned_income_paise > 0
+          ORDER BY month DESC
+          LIMIT 1
+        ), ?), 0, 'open', 'owner monthly reserve plan', ?)
+        ON CONFLICT(month) DO NOTHING
+      `)
+      .run(currentMonth, currentMonth, ACCEPTED_MONTHLY_INCOME_PLAN_PAISE, now);
+    database.connection
+      .prepare(`
+        INSERT INTO budget_lines (month, category_id, planned_paise)
+        SELECT month, 'category-extra-savings', ?
+        FROM budget_periods
+        WHERE month >= ?
+        ON CONFLICT(month, category_id) DO UPDATE SET
+          planned_paise = CASE
+            WHEN budget_lines.planned_paise = 0 THEN excluded.planned_paise
+            ELSE budget_lines.planned_paise
+          END
+      `)
+      .run(ICICI_EXPENSE_RESERVE_PAISE, currentMonth);
+    database.connection
+      .prepare(`
+        INSERT INTO app_metadata (key, value, updated_at)
+        VALUES ('owner_cash_account_plan', '2026-08-v1', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `)
+      .run(now);
+  });
+  seed.immediate();
+}
+
 export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void {
   seedAcceptedLiabilities(database);
   seedAcceptedPersonalBalances(database);
@@ -750,4 +839,5 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
   seedAcceptedExpenseHistory(database);
   seedAcceptedCashBridge(database);
   seedAcceptedWealthSnapshot(database);
+  seedOwnerCashAccountPlan(database);
 }

@@ -193,7 +193,7 @@ describe("ledger repository", () => {
     });
 
     expect(transfer.kind).toBe("transfer");
-    expect(transfer.destinationAccountName).toBe("Savings");
+    expect(transfer.destinationAccountName).toBe("Jupiter construction account");
     expect(repository.getDashboard("2026-07", 20).cashOutflowPaise).toBe(before.cashOutflowPaise);
     database.close();
   });

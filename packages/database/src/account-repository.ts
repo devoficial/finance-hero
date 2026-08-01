@@ -215,6 +215,49 @@ export class AccountRepository {
     return this.requireAccount(id);
   }
 
+  deleteAccount(id: string): void {
+    const existing = this.requireAccount(id);
+    if (existing.managedBy !== "wealth") {
+      throw new Error(
+        existing.managedBy === "liability"
+          ? "Clear or archive this account from Liabilities."
+          : "Transaction-calculated accounts must be retained for their audit history.",
+      );
+    }
+    if (existing.balancePaise !== 0) {
+      throw new Error("Move the remaining balance before deleting this account.");
+    }
+    const asset = this.database.connection
+      .prepare(`
+        SELECT ap.id,
+               COALESCE((SELECT SUM(ga.amount_paise) FROM goal_allocations ga
+                         WHERE ga.asset_position_id = ap.id), 0) AS allocatedPaise,
+               (SELECT COUNT(*) FROM postings WHERE account_id = ap.account_id) +
+               (SELECT COUNT(*) FROM import_artifacts WHERE account_id = ap.account_id) +
+               (SELECT COUNT(*) FROM monthly_bank_reconciliations WHERE account_id = ap.account_id) AS referenceCount
+        FROM asset_positions ap
+        WHERE ap.account_id = ?
+      `)
+      .get(id) as { id: string; allocatedPaise: number; referenceCount: number } | undefined;
+    if (!asset) {
+      throw new Error("The account valuation could not be found.");
+    }
+    if (asset.allocatedPaise > 0) {
+      throw new Error("Remove this account's goal allocations before deleting it.");
+    }
+    if (asset.referenceCount > 0) {
+      throw new Error("This account has financial activity and cannot be deleted. Archive it instead.");
+    }
+
+    const now = new Date().toISOString();
+    const write = this.database.connection.transaction(() => {
+      this.database.connection.prepare("DELETE FROM asset_positions WHERE id = ?").run(asset.id);
+      this.database.connection.prepare("DELETE FROM accounts WHERE id = ?").run(id);
+      this.insertAudit("account.deleted", id, { before: existing }, now);
+    });
+    write.immediate();
+  }
+
   private requireAccount(id: string): FinancialAccountRecord {
     const account = this.getAccounts().accounts.find((item) => item.id === id);
     if (!account) {

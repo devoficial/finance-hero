@@ -127,7 +127,7 @@ describe("wealth repository", () => {
     ).toThrow("Restricted wallets cannot fund financial goals.");
     expect(() =>
       wealth.updateGoalAllocations(goal.id, [{ assetId: "asset-savings", amountPaise: 10000 }], "2026-07-23"),
-    ).toThrow("Savings does not have enough unallocated value.");
+    ).toThrow("Jupiter construction account does not have enough unallocated value.");
 
     const asset = wealth.createAsset({
       name: "Travel fund",

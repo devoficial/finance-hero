@@ -5315,7 +5315,7 @@ h2 {
   display: grid;
   grid-template-columns:
     minmax(190px, 1.45fr) minmax(130px, 0.8fr) minmax(140px, 0.85fr)
-    minmax(130px, 0.8fr) minmax(105px, 0.65fr) 68px;
+    minmax(130px, 0.8fr) minmax(105px, 0.65fr) 132px;
   align-items: center;
   gap: 14px;
 }
@@ -5368,6 +5368,23 @@ h2 {
   color: var(--green);
   cursor: pointer;
   font-weight: 700;
+}
+.account-row-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.account-row-actions .table-action {
+  flex: 1;
+  min-width: 0;
+  padding: 6px;
+}
+.account-row-actions .table-action.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+.account-delete-modal {
+  max-width: 620px;
 }
 .accounts-empty {
   margin: 0;
@@ -5879,7 +5896,11 @@ h2 {
   }
   .accounts-table-header,
   .accounts-table article {
-    min-width: 900px;
+    min-width: 820px;
+    grid-template-columns:
+      minmax(160px, 1.35fr) minmax(110px, 0.75fr) minmax(120px, 0.8fr)
+      minmax(110px, 0.7fr) minmax(90px, 0.6fr) 116px;
+    gap: 10px;
   }
   .accounts-table-header > span:first-child,
   .accounts-table article > div:first-child {
@@ -6954,7 +6975,7 @@ h2 {
     align-self: center;
     text-align: right;
   }
-  .accounts-table article > .table-action {
+  .accounts-table article > .account-row-actions {
     grid-column: 1 / -1;
     grid-row: 4;
   }

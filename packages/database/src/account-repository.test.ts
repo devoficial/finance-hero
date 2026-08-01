@@ -51,6 +51,28 @@ describe("account repository", () => {
       balancePaise: currentClosingBalance,
       managedBy: "ledger",
     });
+    expect(accounts.accounts.find((account) => account.id === "account-savings")).toMatchObject({
+      name: "Jupiter construction account",
+      institution: "Jupiter",
+    });
+    expect(accounts.accounts.find((account) => account.id === "account-icici-expense-reserve")).toMatchObject({
+      name: "ICICI expense reserve",
+      institution: "ICICI Bank",
+      balancePaise: 0,
+      managedBy: "wealth",
+    });
+    const reserve = database.connection
+      .prepare(`
+        SELECT monthly_contribution_paise AS monthlyContributionPaise
+        FROM asset_positions WHERE id = 'asset-icici-expense-reserve'
+      `)
+      .get() as { monthlyContributionPaise: number };
+    expect(reserve.monthlyContributionPaise).toBe(2000000);
+    expect(
+      new BudgetRepository(database)
+        .getMonth(currentMonth)
+        .lines.find((line) => line.categoryId === "category-extra-savings")?.plannedPaise,
+    ).toBe(2000000);
     database.close();
   });
 
@@ -82,6 +104,22 @@ describe("account repository", () => {
     expect(() => repository.updateAccount("account-debt-home", { balancePaise: 100000 })).toThrow(
       "Edit the linked liability principal in Liabilities.",
     );
+    database.close();
+  });
+
+  it("deletes only empty wealth-managed accounts without financial history", () => {
+    const { database, repository } = createRepository();
+    const disposable = repository.createAccount({
+      name: "Unused envelope",
+      accountType: "savings",
+      openingBalancePaise: 0,
+      restricted: false,
+    });
+
+    repository.deleteAccount(disposable.id);
+    expect(repository.getAccounts().accounts.some((account) => account.id === disposable.id)).toBe(false);
+    expect(() => repository.deleteAccount("account-pluxee")).toThrow("Move the remaining balance");
+    expect(() => repository.deleteAccount("account-primary-bank")).toThrow("audit history");
     database.close();
   });
 });
