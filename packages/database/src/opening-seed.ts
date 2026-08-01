@@ -817,6 +817,82 @@ function reconcileHomeConstructionFunding(database: FinanceHeroDatabase): void {
   reconcile.immediate();
 }
 
+function reconcileEmergencyFundFunding(database: FinanceHeroDatabase): void {
+  const now = new Date().toISOString();
+  const reconcile = database.connection.transaction(() => {
+    const existing = database.connection
+      .prepare("SELECT value FROM app_metadata WHERE key = 'emergency_fund_link_repair'")
+      .get() as { value: string } | undefined;
+    if (existing?.value === "2026-08-v2") return;
+
+    // ICICI is ledger-backed from a zero opening balance. Keep its valuation
+    // before every tracked transfer so a reversal pair cannot be split across
+    // the valuation boundary and hide the replacement expense-sheet transfer.
+    database.connection
+      .prepare(`
+        UPDATE journal_transactions
+        SET created_at = ?
+        WHERE status = 'posted' AND origin = 'expense_sheet_aggregate'
+          AND EXISTS (
+            SELECT 1 FROM postings
+            WHERE postings.transaction_id = journal_transactions.id
+              AND postings.category_id = 'category-emergency-fund'
+          )
+      `)
+      .run(now);
+    database.connection
+      .prepare(`
+        UPDATE asset_positions
+        SET baseline_value_paise = 0, valued_at = ?, updated_at = ?
+        WHERE id = 'asset-icici-expense-reserve'
+      `)
+      .run(SEEDED_AT, now);
+
+    const target = database.connection
+      .prepare(`
+        SELECT goal.id AS goalId, goal.target_paise AS targetPaise, asset.id AS assetId,
+               MAX(0, asset.baseline_value_paise + COALESCE(SUM(CASE
+                 WHEN tx.status IN ('posted', 'reversed') AND tx.created_at > asset.valued_at
+                   THEN posting.amount_paise
+                 ELSE 0
+               END), 0)) AS currentValuePaise
+        FROM financial_goals goal
+        JOIN asset_positions asset ON asset.account_id = 'account-icici-expense-reserve'
+        LEFT JOIN postings posting ON posting.account_id = asset.account_id
+        LEFT JOIN journal_transactions tx ON tx.id = posting.transaction_id
+        WHERE goal.status = 'active' AND goal.target_mode = 'emergency_cover'
+        GROUP BY goal.id, goal.target_paise, goal.priority, asset.id,
+                 asset.baseline_value_paise, asset.valued_at
+        ORDER BY goal.priority, goal.id
+        LIMIT 1
+      `)
+      .get() as { goalId: string; targetPaise: number; assetId: string; currentValuePaise: number } | undefined;
+    if (!target) return;
+
+    const amountPaise = Math.min(target.targetPaise, target.currentValuePaise);
+    database.connection
+      .prepare("DELETE FROM goal_allocations WHERE goal_id = ? AND asset_position_id = ?")
+      .run(target.goalId, target.assetId);
+    if (amountPaise > 0) {
+      database.connection
+        .prepare(`
+          INSERT INTO goal_allocations
+            (goal_id, asset_position_id, amount_paise, effective_date, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+        `)
+        .run(target.goalId, target.assetId, amountPaise, now.slice(0, 10), now);
+    }
+    database.connection
+      .prepare(`
+        INSERT INTO app_metadata (key, value, updated_at)
+        VALUES ('emergency_fund_link_repair', '2026-08-v2', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `)
+      .run(now);
+  });
+  reconcile.immediate();
+}
+
 export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void {
   seedAcceptedLiabilities(database);
   seedAcceptedPersonalBalances(database);
@@ -946,4 +1022,5 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
   seedAcceptedWealthSnapshot(database);
   seedOwnerCashAccountPlan(database);
   reconcileHomeConstructionFunding(database);
+  reconcileEmergencyFundFunding(database);
 }

@@ -1591,9 +1591,19 @@ h2 {
 .liability-metrics .metric-card:last-child {
   border-right: 0;
 }
+.expense-overview-grid .metric-card {
+  min-height: 112px;
+  padding: 18px 24px;
+}
+.expense-overview-grid .metric-card strong {
+  font-size: clamp(26px, 2.7vw, 38px);
+}
 .expense-period-panel,
 .selected-expense-panel {
   margin-bottom: 16px;
+}
+.selected-expense-panel {
+  padding: 20px 24px;
 }
 .expense-period-panel {
   padding-bottom: 12px;
@@ -1727,14 +1737,14 @@ h2 {
 .cashflow-classification {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 26px;
+  margin-bottom: 14px;
   border: 1px solid var(--line);
 }
 .cashflow-classification > div {
   display: grid;
-  gap: 7px;
+  gap: 4px;
   min-width: 0;
-  padding: 16px;
+  padding: 11px 13px;
   border-right: 1px solid var(--line);
 }
 .cashflow-classification > div:last-child {
@@ -1753,7 +1763,7 @@ h2 {
 }
 .cashflow-classification strong {
   font:
-    600 24px "Newsreader",
+    600 20px "Newsreader",
     serif;
 }
 .cashflow-classification small {
@@ -1767,12 +1777,12 @@ h2 {
 }
 .expense-detail-grid {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 34px;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 22px;
   align-items: center;
 }
 .category-pie {
-  width: 220px;
+  width: 165px;
   aspect-ratio: 1;
   border-radius: 50%;
   display: grid;
@@ -1783,7 +1793,7 @@ h2 {
 .category-pie::after {
   content: "";
   position: absolute;
-  width: 118px;
+  width: 88px;
   aspect-ratio: 1;
   border-radius: 50%;
   background: var(--paper);
@@ -1797,7 +1807,7 @@ h2 {
 }
 .category-pie strong {
   font:
-    18px "Newsreader",
+    15px "Newsreader",
     serif;
 }
 .category-pie span {
@@ -1808,7 +1818,7 @@ h2 {
     monospace;
 }
 .expense-category-list {
-  max-height: 310px;
+  max-height: 220px;
   overflow-y: auto;
 }
 .empty-month-state {
@@ -5977,25 +5987,14 @@ h2 {
 
 @media (max-width: 1400px) {
   .expense-register-overview {
-    grid-template-columns: minmax(340px, 0.95fr) minmax(470px, 1.25fr);
+    grid-template-columns: minmax(280px, 0.9fr) minmax(390px, 1.3fr) minmax(210px, 0.7fr);
   }
-  .cash-overview {
-    border-right: 0;
-  }
-  .plan-overview {
-    grid-column: 1 / -1;
-    grid-template-columns: minmax(180px, 0.6fr) minmax(280px, 1fr);
-    gap: 8px 14px;
-    border-top: 1px solid var(--line);
-  }
-  .plan-overview > .eyebrow {
-    grid-column: 1 / -1;
-    margin-bottom: 0;
-  }
-  .plan-overview-metrics {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: 0;
+  .register-metric-grid strong,
+  .cash-overview-formula strong,
+  .plan-overview-metrics strong {
+    overflow-wrap: normal;
+    font-size: 12px;
+    white-space: nowrap;
   }
   .ledger-layout {
     grid-template-columns: minmax(0, 1fr);

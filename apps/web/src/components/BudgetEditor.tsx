@@ -207,15 +207,19 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
     0,
   );
   const persistedSheetOutflow = budget?.lines.reduce((sum, line) => sum + line.spentPaise, 0) ?? 0;
-  const draftCashOutflow =
-    (budget?.cashBridge.cashOutflowPaise ?? 0) + (draftTotals.overallActual - persistedSheetOutflow);
+  const persistedHomeConstruction =
+    budget?.lines.find((line) => line.categoryId === "category-home-construction")?.spentPaise ?? 0;
+  const draftHomeConstruction = parseRupeeExpression(lineValues["category-home-construction"]?.actual ?? "") ?? 0;
   const draftPrimaryAccountOutflow =
-    (budget?.cashBridge.primaryAccountOutflowPaise ?? 0) + (draftTotals.overallActual - persistedSheetOutflow);
+    (budget?.cashBridge.primaryAccountOutflowPaise ?? 0) +
+    (draftTotals.overallActual - persistedSheetOutflow) -
+    (draftHomeConstruction - persistedHomeConstruction);
   const fundsAvailable = (budget?.cashBridge.carryoverPaise ?? 0) + adjustmentTotal;
-  const calculatedClosingBalance =
-    fundsAvailable - draftPrimaryAccountOutflow + (budget?.cashBridge.primaryTransferMovementPaise ?? 0);
+  const primaryCashMovement = draftPrimaryAccountOutflow - (budget?.cashBridge.primaryTransferMovementPaise ?? 0);
+  const calculatedClosingBalance = fundsAvailable - primaryCashMovement;
   const parsedStatementBalance = statementBalance.trim() ? parseRupeeExpression(statementBalance) : null;
-  const closingBalance = calculatedClosingBalance;
+  const closingBalance = parsedStatementBalance ?? calculatedClosingBalance;
+  const hasReconciliation = parsedStatementBalance != null;
   const reconciliationDifference =
     parsedStatementBalance == null ? 0 : parsedStatementBalance - calculatedClosingBalance;
   const plannedIncome = parseRupeeExpression(income) ?? 0;
@@ -590,8 +594,8 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
             </article>
             <b aria-hidden="true">−</b>
             <article>
-              <span>Outflow</span>
-              <strong>{money(draftCashOutflow)}</strong>
+              <span>Axis movement</span>
+              <strong>{money(primaryCashMovement)}</strong>
             </article>
             <b aria-hidden="true">=</b>
             <article className={`closing ${closingBalance < 0 ? "negative" : ""}`}>
@@ -599,11 +603,22 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               <strong>{money(closingBalance)}</strong>
             </article>
           </div>
-          <div className={`cash-overview-signal ${reconciliationDifference === 0 ? "reconciled" : "attention"}`}>
-            <span>{reconciliationDifference === 0 ? "Statement reconciled" : "Difference to investigate"}</span>
+          <div
+            className={`cash-overview-signal ${
+              hasReconciliation && reconciliationDifference === 0 ? "reconciled" : "attention"
+            }`}
+          >
+            <span>
+              {!hasReconciliation
+                ? "Bank balance not confirmed"
+                : reconciliationDifference === 0
+                  ? "Statement reconciled"
+                  : "Difference to investigate"}
+            </span>
             <strong>
-              {reconciliationDifference > 0 ? "+" : ""}
-              {money(reconciliationDifference)}
+              {!hasReconciliation
+                ? "—"
+                : `${reconciliationDifference > 0 ? "+" : ""}${money(reconciliationDifference)}`}
             </strong>
           </div>
         </div>

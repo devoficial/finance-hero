@@ -216,7 +216,19 @@ describe("budget repository", () => {
   });
 
   it("moves an Emergency Fund sheet contribution from Axis into ICICI", () => {
-    const { database, repository } = createRepository();
+    const { database, repository, wealth } = createRepository();
+
+    repository.updateMonth("2026-08", {
+      lines: [{ categoryId: "category-emergency-fund", actualPaise: 1000000 }],
+    });
+    database.connection
+      .prepare("UPDATE journal_transactions SET created_at = '2000-01-01T00:00:00.000Z' WHERE id = ?")
+      .run("expense-sheet-2026-08-category-emergency-fund");
+    database.connection
+      .prepare(
+        "UPDATE asset_positions SET baseline_value_paise = 0, valued_at = '2001-01-01T00:00:00.000Z' WHERE id = ?",
+      )
+      .run("asset-icici-expense-reserve");
 
     const august = repository.updateMonth("2026-08", {
       lines: [{ categoryId: "category-emergency-fund", actualPaise: 2000000 }],
@@ -230,6 +242,14 @@ describe("budget repository", () => {
     expect(august.lines.find((line) => line.categoryId === "category-emergency-fund")?.spentPaise).toBe(2000000);
     expect(august.cashBridge.primaryAccountOutflowPaise).toBe(2000000);
     expect(iciciMovement.amountPaise).toBe(2000000);
+    const iciciAsset = wealth
+      .getWealth("2026-08-02")
+      .assets.find((asset) => asset.id === "asset-icici-expense-reserve");
+    const emergencyGoal = wealth.getWealth("2026-08-02").goals.find((goal) => goal.targetMode === "emergency_cover");
+    expect(iciciAsset?.currentValuePaise).toBe(2000000);
+    expect(emergencyGoal?.allocations).toContainEqual(
+      expect.objectContaining({ assetId: "asset-icici-expense-reserve", amountPaise: 2000000 }),
+    );
     expect(august.lines.find((line) => line.categoryId === "category-extra-savings")?.categoryName).toBe(
       "Lending / payback",
     );

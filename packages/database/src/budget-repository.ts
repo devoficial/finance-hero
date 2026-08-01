@@ -331,6 +331,9 @@ export class BudgetRepository {
         const existing = existingSheetRow.get(month, line.categoryId) as { comment: string | null } | undefined;
         upsertSheetRow.run(month, line.categoryId, line.comment ?? existing?.comment ?? null, now);
       }
+      if (input.lines?.some((line) => line.categoryId === "category-emergency-fund")) {
+        this.syncEmergencyFundAllocation(now);
+      }
       if (input.cashAdjustments !== undefined) {
         for (const adjustment of input.cashAdjustments.filter((item) => item.transactionId)) {
           this.updateImportedCredit(adjustment, now);
@@ -689,7 +692,7 @@ export class BudgetRepository {
         .prepare(`
           UPDATE journal_transactions
           SET occurred_on = ?, payee = ?, memo = ?, status = 'posted',
-              origin = 'expense_sheet_aggregate', source_ref = ?
+              origin = 'expense_sheet_aggregate', source_ref = ?, created_at = ?
           WHERE id = ?
         `)
         .run(
@@ -697,6 +700,7 @@ export class BudgetRepository {
           category.name,
           "Monthly category total or correction edited from the expense sheet.",
           `monthly-expense-sheet:${month}:${category.id}`,
+          now,
           existingAggregate.id,
         );
       this.insertAggregatePostings(existingAggregate.id, category.id, aggregatePaise, now, month, desiredPaise);
@@ -801,5 +805,43 @@ export class BudgetRepository {
       `)
       .get(month, destinationAccountId) as { amountPaise: number };
     return row.amountPaise;
+  }
+
+  private syncEmergencyFundAllocation(now: string) {
+    const target = this.database.connection
+      .prepare(`
+        SELECT goal.id AS goalId, goal.target_paise AS targetPaise, asset.id AS assetId,
+               MAX(0, asset.baseline_value_paise + COALESCE(SUM(CASE
+                 WHEN tx.status IN ('posted', 'reversed')
+                   AND tx.created_at > asset.valued_at
+                   THEN posting.amount_paise
+                 ELSE 0
+               END), 0)) AS currentValuePaise
+        FROM financial_goals goal
+        JOIN asset_positions asset ON asset.account_id = 'account-icici-expense-reserve'
+        LEFT JOIN postings posting ON posting.account_id = asset.account_id
+        LEFT JOIN journal_transactions tx ON tx.id = posting.transaction_id
+        WHERE goal.status = 'active' AND goal.target_mode = 'emergency_cover'
+        GROUP BY goal.id, goal.target_paise, goal.priority, asset.id,
+                 asset.baseline_value_paise, asset.valued_at
+        ORDER BY goal.priority, goal.id
+        LIMIT 1
+      `)
+      .get() as { goalId: string; targetPaise: number; assetId: string; currentValuePaise: number } | undefined;
+    if (!target) return;
+
+    const amountPaise = Math.min(target.targetPaise, target.currentValuePaise);
+    this.database.connection
+      .prepare("DELETE FROM goal_allocations WHERE goal_id = ? AND asset_position_id = ?")
+      .run(target.goalId, target.assetId);
+    if (amountPaise > 0) {
+      this.database.connection
+        .prepare(`
+          INSERT INTO goal_allocations
+            (goal_id, asset_position_id, amount_paise, effective_date, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+        `)
+        .run(target.goalId, target.assetId, amountPaise, now.slice(0, 10), now);
+    }
   }
 }
