@@ -5568,23 +5568,25 @@ h2 {
 }
 .accounts-card-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   border-top: 1px solid var(--line);
-  padding: 14px 18px 18px;
+  padding: 0 18px 18px;
 }
 .account-card {
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-columns: minmax(210px, 1.35fr) minmax(140px, 0.65fr) minmax(390px, 2fr) auto;
+  align-items: stretch;
   min-width: 0;
-  min-height: 190px;
-  border: 1px solid var(--line);
-  border-top: 3px solid var(--green);
+  min-height: 86px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid var(--green);
   background: #f8f5ec;
-  padding: 14px;
+  padding: 0 12px;
 }
 .account-card.liability {
-  border-top-color: #d84a35;
+  border-left-color: #d84a35;
 }
 .account-card.inactive {
   color: #7e8984;
@@ -5595,7 +5597,10 @@ h2 {
   font-size: 8px;
 }
 .account-card-heading {
+  display: grid;
+  align-content: center;
   min-width: 0;
+  padding: 12px 10px;
 }
 .account-name-line {
   display: flex;
@@ -5620,24 +5625,29 @@ h2 {
   text-transform: uppercase;
 }
 .account-balance {
-  margin: 18px 0 14px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  border-left: 1px solid var(--line);
+  padding: 12px 16px;
   color: var(--green);
-  font-size: clamp(22px, 2.2vw, 31px);
+  font-size: clamp(18px, 1.65vw, 25px);
   line-height: 1;
+  white-space: nowrap;
 }
 .account-card-meta {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: start;
-  margin: 0 -14px;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  margin: 0;
+  border-left: 1px solid var(--line);
 }
 .account-card-meta > span {
   display: grid;
+  align-content: center;
   min-width: 0;
   gap: 3px;
-  padding: 9px 10px;
+  padding: 10px 12px;
 }
 .account-card-meta > span + span {
   border-left: 1px solid var(--line);
@@ -5669,9 +5679,11 @@ h2 {
 }
 .account-row-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  padding-top: 11px;
+  border-left: 1px solid var(--line);
+  padding: 10px 0 10px 12px;
 }
 .account-row-actions .table-action {
   min-width: 64px;
@@ -6305,7 +6317,7 @@ h2 {
     grid-template-columns: minmax(0, 1fr);
   }
   .accounts-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
   .forecast-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6648,6 +6660,45 @@ h2 {
 }
 
 @media (max-width: 720px) {
+  .accounts-card-grid {
+    gap: 10px;
+    padding: 12px;
+  }
+  .account-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 0;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--green);
+    padding: 0;
+  }
+  .account-card.liability {
+    border-left-color: #d84a35;
+  }
+  .account-card-heading {
+    padding: 13px 12px 7px;
+  }
+  .account-balance {
+    grid-column: 2;
+    grid-row: 1;
+    border-left: 0;
+    padding: 13px 12px 7px;
+    font-size: 19px;
+  }
+  .account-card-meta {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+  .account-card-meta > span:nth-child(odd) {
+    border-left: 0;
+  }
+  .account-row-actions {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    padding: 8px 12px;
+  }
   .purpose-trackers {
     grid-template-columns: 1fr;
   }
@@ -7347,10 +7398,11 @@ h2 {
   }
   .accounts-card-grid {
     grid-template-columns: 1fr;
-    padding: 12px;
+    padding: 0 12px 12px;
   }
   .account-card {
-    min-height: 175px;
+    grid-template-columns: minmax(175px, 1.2fr) minmax(115px, 0.65fr) minmax(260px, 1.6fr) auto;
+    min-height: 82px;
   }
   .account-form-shell {
     padding: 18px;
