@@ -5354,7 +5354,7 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 .accounts-kpis strong.negative,
-.accounts-table strong.negative {
+.accounts-card-grid strong.negative {
   color: #b33b28;
 }
 .account-source-guide {
@@ -5487,43 +5487,36 @@ h2 {
   background: var(--green);
   color: white;
 }
-.accounts-table {
-  border-top: 1px solid var(--line);
-}
-.accounts-table-header,
-.accounts-table article {
+.accounts-card-grid {
   display: grid;
-  grid-template-columns: minmax(230px, 1.45fr) minmax(180px, 1fr) minmax(125px, 0.7fr) minmax(100px, 0.55fr) 124px;
-  align-items: center;
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 14px 18px 18px;
 }
-.accounts-table-header {
-  min-height: 36px;
-  background: #dcdbd3;
-  padding: 0 16px;
-  color: #5b6b65;
-  font:
-    500 8px "DM Mono",
-    monospace;
+.account-card {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  min-width: 0;
+  min-height: 190px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--green);
+  background: #f8f5ec;
+  padding: 14px;
 }
-.accounts-table article {
-  min-height: 61px;
-  margin: 0 16px;
-  border-bottom: 1px solid var(--line);
+.account-card.liability {
+  border-top-color: #d84a35;
 }
-.accounts-table article.inactive {
+.account-card.inactive {
   color: #7e8984;
   opacity: 0.72;
 }
-.accounts-table article > div,
-.accounts-table article > span {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-.accounts-table article small {
+.account-card small {
   color: #75837d;
   font-size: 8px;
+}
+.account-card-heading {
+  min-width: 0;
 }
 .account-name-line {
   display: flex;
@@ -5547,17 +5540,41 @@ h2 {
     monospace;
   text-transform: uppercase;
 }
-.account-owner > span {
+.account-balance {
+  margin: 18px 0 14px;
+  color: var(--green);
+  font-size: clamp(22px, 2.2vw, 31px);
+  line-height: 1;
+}
+.account-card-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  margin: 0 -14px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.account-card-meta > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 9px 10px;
+}
+.account-card-meta > span + span {
+  border-left: 1px solid var(--line);
+}
+.account-card-meta small {
+  font:
+    500 6px "DM Mono",
+    monospace;
+  letter-spacing: 0.06em;
+}
+.account-card-meta strong {
   overflow: hidden;
+  font-size: 8px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
-}
-.account-balance {
-  font-size: 17px;
-}
-.accounts-table article > span:nth-child(4) > strong {
-  font-size: 11px;
 }
 .account-class.liability {
   background: #f4d4cc;
@@ -5572,19 +5589,21 @@ h2 {
   font-weight: 700;
 }
 .account-row-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 11px;
 }
 .account-row-actions .table-action {
-  width: 100%;
-  padding: 6px;
+  min-width: 64px;
+  padding: 6px 12px;
 }
 .account-remove-action {
   min-height: 29px;
-  border: 1px solid #c84732;
+  border: 0;
+  border-bottom: 1px solid #c84732;
   background: transparent;
-  padding: 4px 6px;
+  padding: 4px 2px;
   color: #b53b29;
   cursor: pointer;
   font:
@@ -6206,38 +6225,8 @@ h2 {
   .wealth-main-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .accounts-table {
-    overflow-x: auto;
-  }
-  .accounts-table-header,
-  .accounts-table article {
-    min-width: 720px;
-    grid-template-columns:
-      minmax(190px, 1.35fr) minmax(150px, 0.9fr) minmax(115px, 0.7fr)
-      minmax(90px, 0.55fr) 118px;
-    gap: 10px;
-  }
-  .accounts-table-header > span:first-child,
-  .accounts-table article > div:first-child {
-    position: sticky;
-    left: 0;
-    z-index: 2;
-  }
-  .accounts-table-header > span:first-child {
-    align-self: stretch;
-    display: flex;
-    align-items: center;
-    z-index: 3;
-    background: #dcdbd3;
-  }
-  .accounts-table article > div:first-child {
-    align-self: stretch;
-    align-content: center;
-    background: var(--paper);
-    box-shadow: 14px 0 16px -18px rgba(18, 49, 40, 0.65);
-  }
-  .accounts-table article.inactive > div:first-child {
-    background: var(--paper);
+  .accounts-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .forecast-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7267,9 +7256,6 @@ h2 {
   .accounts-filters button {
     white-space: nowrap;
   }
-  .accounts-table article {
-    margin: 0 12px;
-  }
   .account-source-guide {
     grid-template-columns: 1fr;
   }
@@ -7280,44 +7266,12 @@ h2 {
   .account-source-guide article:last-child {
     border-bottom: 0;
   }
-  .accounts-table {
-    overflow: visible;
+  .accounts-card-grid {
+    grid-template-columns: 1fr;
+    padding: 12px;
   }
-  .accounts-table-header {
-    display: none;
-  }
-  .accounts-table article {
-    min-width: 0;
-    min-height: 0;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 14px;
-    padding: 15px 2px;
-  }
-  .accounts-table article > div:first-child {
-    grid-column: 1;
-    grid-row: 1;
-    position: static;
-    box-shadow: none;
-  }
-  .accounts-table article > .account-owner {
-    grid-column: 1;
-    grid-row: 2;
-  }
-  .accounts-table article > .account-balance {
-    grid-column: 2;
-    grid-row: 1;
-    align-self: start;
-    font-size: 15px;
-  }
-  .accounts-table article > span:nth-child(4) {
-    grid-column: 2;
-    grid-row: 2;
-    align-self: center;
-    text-align: right;
-  }
-  .accounts-table article > .account-row-actions {
-    grid-column: 1 / -1;
-    grid-row: 3;
+  .account-card {
+    min-height: 175px;
   }
   .account-form-shell {
     padding: 18px;

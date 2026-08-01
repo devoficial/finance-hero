@@ -330,26 +330,18 @@ export function AccountsView({
           ))}
         </fieldset>
 
-        <div className="accounts-table" ref={tableRef}>
-          <div className="accounts-table-header">
-            <span>ACCOUNT</span>
-            <span>OWNER / SOURCE</span>
-            <span>BALANCE</span>
-            <span>ACTIVITY</span>
-            <span>ACTION</span>
-          </div>
+        <div className="accounts-card-grid" ref={tableRef}>
           {filteredAccounts.map((account) => (
-            <article className={!account.isActive ? "inactive" : ""} key={account.id}>
-              <div>
+            <article
+              className={`account-card ${account.accountClass} ${!account.isActive ? "inactive" : ""}`}
+              key={account.id}
+            >
+              <div className="account-card-heading">
                 <div className="account-name-line">
                   <strong>{account.name}</strong>
                   <span className={`account-class ${account.accountClass}`}>{account.accountClass}</span>
                 </div>
                 <small>{accountTypeLabel(account)}</small>
-              </div>
-              <div className="account-owner">
-                <span>{account.institution || "Independent"}</span>
-                <small>{balanceSourceLabel(account)}</small>
               </div>
               <strong
                 className={`account-balance money-value ${
@@ -358,16 +350,28 @@ export function AccountsView({
               >
                 {money(account.balancePaise)}
               </strong>
-              <span>
-                <strong>{account.transactionCount}</strong>
-                <small>{account.transactionCount === 1 ? "entry" : "entries"} · {account.isActive ? "Active" : "Archived"}</small>
-              </span>
+              <div className="account-card-meta">
+                <span>
+                  <small>OWNER</small>
+                  <strong>{account.institution || "Independent"}</strong>
+                </span>
+                <span>
+                  <small>SOURCE</small>
+                  <strong>{balanceSourceLabel(account)}</strong>
+                </span>
+                <span>
+                  <small>ACTIVITY</small>
+                  <strong>
+                    {account.transactionCount} {account.transactionCount === 1 ? "entry" : "entries"}
+                  </strong>
+                </span>
+              </div>
               <div className="account-row-actions">
                 <button className="table-action" onClick={() => openEditForm(account)} type="button">
                   Edit
                 </button>
                 <button className="account-remove-action" onClick={() => setAccountToDelete(account)} type="button">
-                  Delete
+                  Remove
                 </button>
               </div>
             </article>
