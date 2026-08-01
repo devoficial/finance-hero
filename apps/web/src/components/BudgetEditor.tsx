@@ -227,11 +227,14 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const plannedIncome = parseRupeeExpression(income) ?? 0;
   const hasIncomePlan = plannedIncome > 0;
   const freeAfterPlan = plannedIncome - emiPaise - draftTotals.planned;
-  const budgetUsedPercent = draftTotals.planned > 0 ? Math.round((draftTotals.regularActual / draftTotals.planned) * 100) : 0;
-  const budgetPlanTotal = Object.values(budgetPlanValues).reduce(
-    (sum, value) => sum + (parseRupeeExpression(value) ?? 0),
-    0,
-  );
+  const budgetUsedPercent =
+    draftTotals.planned > 0 ? Math.round((draftTotals.regularActual / draftTotals.planned) * 100) : 0;
+  const budgetPlanRegularTotal = (budget?.lines ?? [])
+    .filter((line) => line.budgetEligible)
+    .reduce((sum, line) => sum + (parseRupeeExpression(budgetPlanValues[line.categoryId] ?? "") ?? 0), 0);
+  const budgetPlanAllocationTotal = (budget?.lines ?? [])
+    .filter((line) => !line.budgetEligible)
+    .reduce((sum, line) => sum + (parseRupeeExpression(budgetPlanValues[line.categoryId] ?? "") ?? 0), 0);
 
   const mutation = useMutation({
     mutationFn: (input: UpdateBudgetMonthRequest) => updateBudget(budget?.month ?? "", input),
@@ -362,9 +365,10 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   function openBudgetPlanner() {
     setBudgetPlanValues(
       Object.fromEntries(
-        currentBudget.lines
-          .filter((line) => line.budgetEligible)
-          .map((line) => [line.categoryId, lineValues[line.categoryId]?.limit ?? rupeeInput(line.plannedPaise)]),
+        currentBudget.lines.map((line) => [
+          line.categoryId,
+          lineValues[line.categoryId]?.limit ?? rupeeInput(line.plannedPaise),
+        ]),
       ),
     );
     setValidationError(null);
@@ -372,8 +376,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   }
 
   function applyBudgetPlan() {
-    const eligibleLines = currentBudget.lines.filter((line) => line.budgetEligible);
-    for (const line of eligibleLines) {
+    for (const line of currentBudget.lines) {
       if (parseRupeeExpression(budgetPlanValues[line.categoryId] ?? "") == null) {
         setValidationError(`Enter a valid non-negative limit for ${line.categoryName}.`);
         return;
@@ -382,7 +385,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
     checkpoint();
     setLineValues((current) => {
       const next = { ...current };
-      for (const line of eligibleLines) {
+      for (const line of currentBudget.lines) {
         const plannedPaise = parseRupeeExpression(budgetPlanValues[line.categoryId] ?? "") ?? 0;
         next[line.categoryId] = {
           ...(next[line.categoryId] ?? draftFor(line)),
@@ -661,7 +664,9 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               <span className="overview-caption">Regular budget is {budgetUsedPercent}% used</span>
             </div>
             <div className="budget-overview-actions">
-              <button onClick={openBudgetPlanner} type="button">Set budget</button>
+              <button onClick={openBudgetPlanner} type="button">
+                Set budget
+              </button>
               <strong className={`budget-usage-badge ${budgetUsedPercent > 100 ? "over" : ""}`}>
                 {budgetUsedPercent}%
               </strong>
@@ -948,26 +953,46 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
 
       {budgetPlannerOpen && (
         <div className="modal-backdrop" role="presentation">
-          <section aria-labelledby="budget-planner-title" aria-modal="true" className="wealth-modal budget-planner-modal" role="dialog">
+          <section
+            aria-labelledby="budget-planner-title"
+            aria-modal="true"
+            className="wealth-modal budget-planner-modal"
+            role="dialog"
+          >
             <div className="modal-title">
               <div>
-                <p className="eyebrow">MONTHLY REGULAR BUDGET</p>
+                <p className="eyebrow">MONTHLY CATEGORY PLAN</p>
                 <h2 id="budget-planner-title">Set {monthLabel(currentBudget.month)} limits</h2>
-                <p>The total budget is calculated from these category limits.</p>
+                <p>
+                  Regular limits form the spending budget. Savings, debt and asset limits remain separate allocations.
+                </p>
               </div>
               <button aria-label="Close budget planner" onClick={() => setBudgetPlannerOpen(false)} type="button">
                 Close
               </button>
             </div>
             <div className="budget-planner-total">
-              <span>Planned regular budget</span>
-              <strong>{money(budgetPlanTotal)}</strong>
+              <span>
+                <small>Regular spending budget</small>
+                <strong>{money(budgetPlanRegularTotal)}</strong>
+              </span>
+              <span>
+                <small>Other planned allocations</small>
+                <strong>{money(budgetPlanAllocationTotal)}</strong>
+              </span>
             </div>
-            {validationError && <p className="form-error" role="alert">{validationError}</p>}
+            {validationError && (
+              <p className="form-error" role="alert">
+                {validationError}
+              </p>
+            )}
             <div className="budget-planner-grid">
-              {currentBudget.lines.filter((line) => line.budgetEligible).map((line) => (
+              {currentBudget.lines.map((line) => (
                 <label key={line.categoryId}>
-                  <span>{line.categoryName}</span>
+                  <span>
+                    <b>{line.categoryName}</b>
+                    <small>{lineType(line)}</small>
+                  </span>
                   <div className="sheet-money-input">
                     <b>₹</b>
                     <input
@@ -985,8 +1010,12 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               ))}
             </div>
             <div className="modal-actions">
-              <button onClick={() => setBudgetPlannerOpen(false)} type="button">Cancel</button>
-              <button className="save-button" onClick={applyBudgetPlan} type="button">Apply to sheet</button>
+              <button onClick={() => setBudgetPlannerOpen(false)} type="button">
+                Cancel
+              </button>
+              <button className="save-button" onClick={applyBudgetPlan} type="button">
+                Apply to sheet
+              </button>
             </div>
           </section>
         </div>

@@ -92,6 +92,8 @@ const SHEET_CATEGORY_ORDER = [
   "category-credit-card-bills",
   "category-emi-payments",
   "category-home-construction",
+  "category-extra-cash-savings",
+  "category-investments",
   "category-extra-savings",
   "category-loan-charges",
   "category-loan-repayments",

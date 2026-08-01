@@ -3277,13 +3277,17 @@ h2 {
 }
 .cash-balance-hero > span {
   color: var(--ink);
-  font: 7px "DM Mono", monospace;
+  font:
+    7px "DM Mono",
+    monospace;
   text-transform: uppercase;
 }
 .cash-balance-hero strong {
   grid-column: 1;
   color: var(--green);
-  font: 600 clamp(27px, 2.2vw, 38px) "Newsreader", serif;
+  font:
+    600 clamp(27px, 2.2vw, 38px) "Newsreader",
+    serif;
   line-height: 0.95;
   white-space: nowrap;
 }
@@ -3333,7 +3337,9 @@ h2 {
 .cash-overview-formula strong,
 .plan-overview-metrics strong {
   overflow-wrap: normal;
-  font: 600 16px "Newsreader", serif;
+  font:
+    600 16px "Newsreader",
+    serif;
   white-space: nowrap;
 }
 .register-metric-grid small {
@@ -3451,7 +3457,9 @@ h2 {
   min-height: 30px;
   background: #dcebe4;
   color: var(--green);
-  font: 700 12px "DM Mono", monospace;
+  font:
+    700 12px "DM Mono",
+    monospace;
 }
 .budget-usage-badge.over {
   background: #f2d3cb;
@@ -3482,15 +3490,20 @@ h2 {
   font-size: 9px;
 }
 .budget-planner-total {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 14px 0;
-  padding: 11px 13px;
   background: #e3eee8;
 }
-.budget-planner-total span {
+.budget-planner-total > span {
+  display: grid;
+  gap: 4px;
+  padding: 10px 13px;
+}
+.budget-planner-total > span + span {
+  border-left: 1px solid #bfd2c8;
+}
+.budget-planner-total small {
   font:
     600 8px "DM Mono",
     monospace;
@@ -3498,7 +3511,9 @@ h2 {
 }
 .budget-planner-total strong {
   color: var(--green);
-  font: 600 24px "Newsreader", serif;
+  font:
+    600 24px "Newsreader",
+    serif;
 }
 .budget-planner-grid {
   display: grid;
@@ -3517,11 +3532,23 @@ h2 {
   border-bottom: 1px solid var(--line);
 }
 .budget-planner-grid label > span {
+  display: grid;
+  gap: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.budget-planner-grid label > span b {
   overflow: hidden;
   font-size: 8px;
-  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.budget-planner-grid label > span small {
+  color: #65766f;
+  font:
+    500 6px "DM Mono",
+    monospace;
+  text-transform: uppercase;
 }
 .budget-planner-grid .sheet-money-input {
   min-height: 31px;

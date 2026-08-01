@@ -20,6 +20,10 @@ const CASH_FLOW_CATEGORIES = [
   ["category-loan-repayments", "Loan repayments", "debt_payment"],
   ["category-emergency-fund", "Emergency fund", "savings_investment"],
 ] as const;
+const ALLOCATION_CATEGORIES = [
+  ["category-extra-cash-savings", "Extra cash savings", "savings_investment"],
+  ["category-investments", "Investments", "savings_investment"],
+] as const;
 
 const categories = [
   ["category-rent", "Rent", "regular", 20500],
@@ -916,6 +920,19 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
       null,
       SEEDED_AT,
     );
+    const upsertAllocationCategory = database.connection.prepare(`
+      INSERT INTO categories
+        (id, name, broad_bucket, budget_eligible, alert_eligible, created_at)
+      VALUES (?, ?, ?, 0, 0, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        broad_bucket = excluded.broad_bucket,
+        budget_eligible = excluded.budget_eligible,
+        alert_eligible = excluded.alert_eligible
+    `);
+    for (const category of ALLOCATION_CATEGORIES) {
+      upsertAllocationCategory.run(...category, SEEDED_AT);
+    }
     database.connection
       .prepare("UPDATE categories SET name = 'Lending / payback' WHERE id = 'category-extra-savings'")
       .run();

@@ -44,7 +44,7 @@ describe("budget repository", () => {
     expect(budget.plannedIncomePaise).toBe(30089300);
     expect(budget.regularBudgetPaise).toBe(6004800);
     expect(budget.lines.reduce((sum, line) => sum + line.plannedPaise, 0)).toBe(6004800);
-    expect(budget.lines).toHaveLength(18);
+    expect(budget.lines).toHaveLength(20);
     expect(budget.lines.find((line) => line.categoryId === "category-rent")).toMatchObject({
       plannedPaise: 2050000,
       spentPaise: 1643300,
@@ -58,6 +58,18 @@ describe("budget repository", () => {
     expect(budget.lines.find((line) => line.categoryId === "category-loan-repayments")).toMatchObject({
       categoryName: "Loan repayments",
       budgetEligible: false,
+      spentPaise: 0,
+    });
+    expect(budget.lines.find((line) => line.categoryId === "category-extra-cash-savings")).toMatchObject({
+      categoryName: "Extra cash savings",
+      budgetEligible: false,
+      plannedPaise: 0,
+      spentPaise: 0,
+    });
+    expect(budget.lines.find((line) => line.categoryId === "category-investments")).toMatchObject({
+      categoryName: "Investments",
+      budgetEligible: false,
+      plannedPaise: 0,
       spentPaise: 0,
     });
     database.close();
