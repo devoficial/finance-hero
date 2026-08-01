@@ -3179,10 +3179,10 @@ h2 {
 }
 .expense-sheet-heading {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 .expense-sheet-heading h2 {
   margin-top: 3px;
@@ -3213,11 +3213,11 @@ h2 {
   color: #a36b09;
 }
 .expense-sheet-actions button {
-  min-height: 38px;
+  min-height: 34px;
   border: 1px solid var(--green);
   background: transparent;
   color: var(--green);
-  padding: 8px 13px;
+  padding: 7px 11px;
   cursor: pointer;
   font-size: 9px;
   font-weight: 800;
@@ -3235,14 +3235,14 @@ h2 {
 }
 .expense-register-overview {
   display: grid;
-  grid-template-columns: minmax(360px, 1.05fr) minmax(500px, 1.45fr) minmax(260px, 0.75fr);
+  grid-template-columns: minmax(430px, 1.35fr) minmax(400px, 1.1fr) minmax(250px, 0.72fr);
   margin-bottom: 10px;
   border: 1px solid var(--line);
-  background: #f8f5ed;
+  background: var(--paper);
 }
 .register-overview-group {
   min-width: 0;
-  padding: 10px 12px;
+  padding: 14px 16px;
   border-right: 1px solid var(--line);
 }
 .register-overview-group:last-child {
@@ -3253,22 +3253,70 @@ h2 {
   margin-bottom: 7px;
   font-size: 7px;
 }
+.register-group-title .eyebrow,
+.plan-overview > div .eyebrow {
+  margin-bottom: 3px;
+}
+.overview-caption {
+  display: block;
+  color: #53645e;
+  font-size: 9px;
+}
+.overview-primary {
+  background: #edf3ef;
+  box-shadow: inset 4px 0 0 var(--green);
+}
+.cash-balance-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 2px 12px;
+  margin: 12px 0 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #c7d5ce;
+}
+.cash-balance-hero > span {
+  color: var(--ink);
+  font: 7px "DM Mono", monospace;
+  text-transform: uppercase;
+}
+.cash-balance-hero strong {
+  grid-column: 1;
+  color: var(--green);
+  font: 600 clamp(27px, 2.2vw, 38px) "Newsreader", serif;
+  line-height: 0.95;
+  white-space: nowrap;
+}
+.cash-balance-hero strong.negative {
+  color: var(--red);
+}
+.cash-balance-hero small {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: end;
+  color: #53645e;
+  font-size: 8px;
+}
 .register-metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 11px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
 }
 .register-metric-grid article {
   display: grid;
   align-content: start;
   gap: 2px;
   min-width: 0;
-  min-height: 48px;
-  padding: 4px 8px;
-  border-left: 1px solid var(--line);
+  min-height: 54px;
+  padding: 9px 10px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 .register-metric-grid article:first-child {
-  padding-left: 0;
-  border-left: 0;
+  padding-left: 10px;
 }
 .register-metric-grid span,
 .cash-overview-formula span,
@@ -3284,10 +3332,9 @@ h2 {
 .register-metric-grid strong,
 .cash-overview-formula strong,
 .plan-overview-metrics strong {
-  overflow-wrap: anywhere;
-  font:
-    14px "Newsreader",
-    serif;
+  overflow-wrap: normal;
+  font: 600 16px "Newsreader", serif;
+  white-space: nowrap;
 }
 .register-metric-grid small {
   color: var(--ink);
@@ -3300,6 +3347,7 @@ h2 {
 }
 .register-metric-grid .overall {
   color: var(--green);
+  background: #edf3ef;
 }
 .register-group-title {
   display: flex;
@@ -3327,7 +3375,7 @@ h2 {
 }
 .cash-overview-formula {
   display: grid;
-  grid-template-columns: minmax(78px, 1fr) 12px minmax(78px, 1fr) 12px minmax(86px, 1fr) 12px minmax(92px, 1.1fr);
+  grid-template-columns: minmax(74px, 1fr) 10px minmax(65px, 0.8fr) 10px minmax(80px, 1fr) 10px minmax(74px, 1fr);
   align-items: stretch;
 }
 .cash-overview-formula article {
@@ -3335,7 +3383,7 @@ h2 {
   align-content: center;
   gap: 2px;
   min-width: 0;
-  padding: 4px 5px;
+  padding: 2px 4px;
 }
 .cash-overview-formula > b {
   display: grid;
@@ -3353,8 +3401,8 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 5px;
-  padding: 4px 6px;
+  margin-top: 10px;
+  padding: 6px 8px;
   background: #e3eee8;
 }
 .cash-overview-signal.attention {
@@ -3369,6 +3417,8 @@ h2 {
 .plan-overview {
   display: grid;
   align-content: start;
+  gap: 12px;
+  background: #f3efe5;
 }
 .plan-overview label {
   display: grid;
@@ -3384,8 +3434,8 @@ h2 {
 .plan-overview-metrics {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 0;
+  padding-top: 10px;
   border-top: 1px solid var(--line);
 }
 .plan-overview-metrics article {
@@ -3393,6 +3443,19 @@ h2 {
   gap: 2px;
   min-width: 0;
   padding-right: 7px;
+}
+.budget-usage-badge {
+  display: grid;
+  place-items: center;
+  min-width: 42px;
+  min-height: 30px;
+  background: #dcebe4;
+  color: var(--green);
+  font: 700 12px "DM Mono", monospace;
+}
+.budget-usage-badge.over {
+  background: #f2d3cb;
+  color: var(--red);
 }
 .plan-overview-metrics article + article {
   padding-left: 7px;
@@ -5987,13 +6050,18 @@ h2 {
 
 @media (max-width: 1400px) {
   .expense-register-overview {
-    grid-template-columns: minmax(280px, 0.9fr) minmax(390px, 1.3fr) minmax(210px, 0.7fr);
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 0.72fr);
+  }
+  .overview-primary {
+    grid-column: 1 / -1;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
   .register-metric-grid strong,
   .cash-overview-formula strong,
   .plan-overview-metrics strong {
     overflow-wrap: normal;
-    font-size: 12px;
+    font-size: 15px;
     white-space: nowrap;
   }
   .ledger-layout {
@@ -6076,6 +6144,14 @@ h2 {
 @media (max-width: 1050px) {
   .app-shell {
     grid-template-columns: 190px minmax(0, 1fr);
+  }
+  .expense-register-overview {
+    grid-template-columns: 1fr 1fr;
+  }
+  .overview-primary {
+    grid-column: 1 / -1;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
   .workspace-grid {
     grid-template-columns: 1fr;

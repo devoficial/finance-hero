@@ -225,6 +225,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const plannedIncome = parseRupeeExpression(income) ?? 0;
   const hasIncomePlan = plannedIncome > 0;
   const freeAfterPlan = plannedIncome - emiPaise - draftTotals.planned;
+  const budgetUsedPercent = draftTotals.planned > 0 ? Math.round((draftTotals.regularActual / draftTotals.planned) * 100) : 0;
 
   const mutation = useMutation({
     mutationFn: (input: UpdateBudgetMonthRequest) => updateBudget(budget?.month ?? "", input),
@@ -536,32 +537,12 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
       )}
 
       <section aria-label="Monthly register overview" className="expense-register-overview">
-        <div className="register-overview-group spending-overview">
-          <p className="eyebrow">SPENDING</p>
-          <div className="register-metric-grid">
-            <article>
-              <span>Budget</span>
-              <strong>{money(draftTotals.planned)}</strong>
-            </article>
-            <article>
-              <span>Regular spent</span>
-              <strong>{money(draftTotals.regularActual)}</strong>
-              <small>Personal {money(draftTotals.personalActual)}</small>
-            </article>
-            <article className={draftTotals.planned - draftTotals.regularActual < 0 ? "negative" : ""}>
-              <span>Remaining</span>
-              <strong>{money(draftTotals.planned - draftTotals.regularActual)}</strong>
-            </article>
-            <article className="overall">
-              <span>Total outflow</span>
-              <strong>{money(draftTotals.overallActual)}</strong>
-            </article>
-          </div>
-        </div>
-
-        <div className="register-overview-group cash-overview">
+        <div className="register-overview-group cash-overview overview-primary">
           <div className="register-group-title">
-            <p className="eyebrow">CASH POSITION</p>
+            <div>
+              <p className="eyebrow">AXIS / AVAILABLE CASH</p>
+              <span className="overview-caption">Current month closing position</span>
+            </div>
             <div className="cash-overview-actions">
               <button
                 aria-controls="cash-bridge-details"
@@ -582,6 +563,11 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               </button>
             </div>
           </div>
+          <div className="cash-balance-hero">
+            <span>Current balance</span>
+            <strong className={closingBalance < 0 ? "negative" : ""}>{money(closingBalance)}</strong>
+            <small>{hasReconciliation ? "Bank confirmed" : "Calculated from this register"}</small>
+          </div>
           <div className="cash-overview-formula">
             <article className={budget.cashBridge.carryoverPaise < 0 ? "negative" : ""}>
               <span>Carryover</span>
@@ -598,9 +584,9 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               <strong>{money(primaryCashMovement)}</strong>
             </article>
             <b aria-hidden="true">=</b>
-            <article className={`closing ${closingBalance < 0 ? "negative" : ""}`}>
-              <span>Current balance</span>
-              <strong>{money(closingBalance)}</strong>
+            <article className="closing">
+              <span>Calculated</span>
+              <strong>{money(calculatedClosingBalance)}</strong>
             </article>
           </div>
           <div
@@ -623,8 +609,42 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
           </div>
         </div>
 
+        <div className="register-overview-group spending-overview">
+          <div className="register-group-title">
+            <div>
+              <p className="eyebrow">MONTHLY SPENDING</p>
+              <span className="overview-caption">Regular budget is {budgetUsedPercent}% used</span>
+            </div>
+            <strong className={`budget-usage-badge ${budgetUsedPercent > 100 ? "over" : ""}`}>
+              {budgetUsedPercent}%
+            </strong>
+          </div>
+          <div className="register-metric-grid">
+            <article>
+              <span>Budget</span>
+              <strong>{money(draftTotals.planned)}</strong>
+            </article>
+            <article>
+              <span>Regular spent</span>
+              <strong>{money(draftTotals.regularActual)}</strong>
+              <small>Personal {money(draftTotals.personalActual)}</small>
+            </article>
+            <article className={draftTotals.planned - draftTotals.regularActual < 0 ? "negative" : ""}>
+              <span>Remaining</span>
+              <strong>{money(draftTotals.planned - draftTotals.regularActual)}</strong>
+            </article>
+            <article className="overall">
+              <span>Total movement</span>
+              <strong>{money(draftTotals.overallActual)}</strong>
+            </article>
+          </div>
+        </div>
+
         <div className="register-overview-group plan-overview">
-          <p className="eyebrow">MONTHLY PLAN</p>
+          <div>
+            <p className="eyebrow">MONTHLY PLAN</p>
+            <span className="overview-caption">Income minus budget and EMIs</span>
+          </div>
           <label>
             <span>Expected salary</span>
             <div className="sheet-money-input">
