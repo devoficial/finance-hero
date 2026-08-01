@@ -552,83 +552,23 @@ export class BudgetRepository {
           .all(month) as Array<{ month: string; amountPaise: number }>
       ).map((row) => [row.month, row.amountPaise]),
     );
-    const adjustmentsAfterReconciliation = new Map(
-      (
-        this.database.connection
-          .prepare(`
-            SELECT month, SUM(amount_paise) AS amountPaise
-            FROM (
-              SELECT cash.month, cash.amount_paise
-              FROM monthly_cash_adjustments cash
-              JOIN monthly_bank_reconciliations reconciliation ON reconciliation.month = cash.month
-              WHERE cash.month <= ? AND cash.occurred_on > reconciliation.reconciled_on
-              UNION ALL
-              SELECT t.effective_month AS month, candidate.amount_paise
-              FROM import_candidates candidate
-              JOIN journal_transactions t ON t.id = candidate.transaction_id
-              JOIN monthly_bank_reconciliations reconciliation ON reconciliation.month = t.effective_month
-              WHERE candidate.status = 'approved' AND candidate.direction = 'credit'
-                AND t.status = 'posted' AND t.effective_month <= ?
-                AND t.occurred_on > reconciliation.reconciled_on
-            )
-            GROUP BY month
-          `)
-          .all(month, month) as Array<{ month: string; amountPaise: number }>
-      ).map((row) => [row.month, row.amountPaise]),
-    );
-    const outflowsAfterReconciliation = new Map(
-      (
-        this.database.connection
-          .prepare(`
-            SELECT t.effective_month AS month,
-                   COALESCE(SUM(CASE
-                     WHEN account.account_class = 'expense' THEN posting.amount_paise
-                     WHEN t.origin = 'manual_debt_payment'
-                       AND account.account_class = 'asset' AND posting.amount_paise < 0
-                       THEN -posting.amount_paise
-                     ELSE 0
-                   END), 0) AS amountPaise
-            FROM journal_transactions t
-            JOIN monthly_bank_reconciliations reconciliation ON reconciliation.month = t.effective_month
-            JOIN postings posting ON posting.transaction_id = t.id
-            JOIN accounts account ON account.id = posting.account_id
-            WHERE t.effective_month <= ? AND t.status = 'posted'
-              AND t.occurred_on > reconciliation.reconciled_on
-            GROUP BY t.effective_month
-          `)
-          .all(month) as Array<{ month: string; amountPaise: number }>
-      ).map((row) => [row.month, row.amountPaise]),
-    );
-
     let previousClosing = 0;
     let selectedCarryover = 0;
     let selectedOutflow = 0;
     let selectedCalculatedClosing = 0;
     let selectedReconciliation: { statementBalancePaise: number; reconciledOn: string } | undefined;
-    let selectedReconciliationDifference = 0;
-    let selectedClosing = 0;
     for (const item of months) {
       const carryover = overrides.get(item.month) ?? previousClosing;
       const adjustmentTotal = adjustmentTotals.get(item.month) ?? 0;
       const cashOutflow = outflows.get(item.month) ?? 0;
       const calculatedClosing = carryover + adjustmentTotal - cashOutflow;
       const reconciliation = reconciliations.get(item.month);
-      const laterAdjustments = adjustmentsAfterReconciliation.get(item.month) ?? 0;
-      const laterOutflows = outflowsAfterReconciliation.get(item.month) ?? 0;
-      const calculatedAtReconciliation = calculatedClosing - laterAdjustments + laterOutflows;
-      const closing = reconciliation
-        ? reconciliation.statementBalancePaise + laterAdjustments - laterOutflows
-        : calculatedClosing;
-      previousClosing = closing;
+      previousClosing = calculatedClosing;
       if (item.month === month) {
         selectedCarryover = carryover;
         selectedOutflow = cashOutflow;
         selectedCalculatedClosing = calculatedClosing;
         selectedReconciliation = reconciliation;
-        selectedReconciliationDifference = reconciliation
-          ? reconciliation.statementBalancePaise - calculatedAtReconciliation
-          : 0;
-        selectedClosing = closing;
       }
     }
     const adjustmentTotalPaise = adjustments.reduce((sum, adjustment) => sum + adjustment.amountPaise, 0);
@@ -641,9 +581,11 @@ export class BudgetRepository {
       cashOutflowPaise: selectedOutflow,
       calculatedClosingBalancePaise: selectedCalculatedClosing,
       statementBalancePaise: selectedReconciliation?.statementBalancePaise ?? null,
-      reconciliationDifferencePaise: selectedReconciliationDifference,
+      reconciliationDifferencePaise: selectedReconciliation
+        ? selectedReconciliation.statementBalancePaise - selectedCalculatedClosing
+        : 0,
       reconciledOn: selectedReconciliation?.reconciledOn ?? null,
-      closingBalancePaise: selectedClosing,
+      closingBalancePaise: selectedCalculatedClosing,
     };
   }
 

@@ -143,7 +143,7 @@ describe("budget repository", () => {
     database.close();
   });
 
-  it("uses a bank-confirmed closing balance and exposes the reconciliation difference", () => {
+  it("records a bank statement check without overriding the calculated closing balance", () => {
     const { database, repository } = createRepository();
 
     const july = repository.updateMonth("2026-07", {
@@ -158,9 +158,9 @@ describe("budget repository", () => {
       statementBalancePaise: 1216050,
       reconciliationDifferencePaise: -3350550,
       reconciledOn: "2026-07-26",
-      closingBalancePaise: 1216050,
+      closingBalancePaise: 4566600,
     });
-    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1216050);
+    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(4566600);
     database.close();
   });
 
@@ -390,7 +390,7 @@ describe("budget repository", () => {
     database.close();
   });
 
-  it("moves the reconciled balance when later deposits or expenses are recorded", () => {
+  it("recalculates live balance and statement difference after deposits or expenses change", () => {
     const { database, ledger, repository } = createRepository();
     repository.updateMonth("2026-07", {
       reconciliation: { statementBalancePaise: 1216050, reconciledOn: "2026-07-26" },
@@ -414,10 +414,10 @@ describe("budget repository", () => {
 
     expect(repository.getMonth("2026-07").cashBridge).toMatchObject({
       statementBalancePaise: 1216050,
-      reconciliationDifferencePaise: -3350550,
-      closingBalancePaise: 1316050,
+      reconciliationDifferencePaise: -3450550,
+      closingBalancePaise: 4666600,
     });
-    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1316050);
+    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(4666600);
     database.close();
   });
 

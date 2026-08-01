@@ -700,7 +700,7 @@ export class LedgerRepository {
       totalEmiPaise: debtTotals.totalEmiPaise,
       debtPrincipalPaise: debtTotals.debtPrincipalPaise,
       availableAfterPlanPaise: plannedIncomePaise - totals.cashOutflowPaise,
-      cashBalancePaise: cashBridge.closingBalancePaise,
+      cashBalancePaise: cashBridge.statementBalancePaise ?? cashBridge.closingBalancePaise,
       cashBalanceSource: cashBridge.statementBalancePaise == null ? "calculated" : "bank_statement",
       cashBalanceAsOf: cashBridge.reconciledOn,
       budgetUsedPercentage,
