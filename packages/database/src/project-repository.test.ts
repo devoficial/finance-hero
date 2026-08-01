@@ -42,6 +42,7 @@ describe("project repository", () => {
     expect(project.excludedPaise).toBe(1000000);
     expect(project.commitmentEstimatePaise).toBe(46286100);
     expect(project.pendingCommitmentPaise).toBe(25486100);
+    expect(project.fundBalancePaise).toBe(11880800);
     expect(project.forecastPaise).toBe(148067100);
     expect(project.latestExpenseOn).toBe("2026-04-01");
     expect(project.needsReviewCount).toBe(8);
@@ -106,6 +107,34 @@ describe("project repository", () => {
       .prepare("SELECT SUM(amount_paise) AS total FROM postings WHERE transaction_id = ?")
       .get(first.linkedTransactionId) as { total: number };
     expect(balance.total).toBe(0);
+    database.close();
+  });
+
+  it("consolidates Jupiter transfers and construction spending into the project fund", () => {
+    const { database, ledger, repository } = createRepository();
+    const initialFund = repository.getHomeConstruction().fundBalancePaise;
+
+    ledger.createManualTransaction({
+      occurredOn: "2026-07-20",
+      payee: "Fund Jupiter construction account",
+      kind: "transfer",
+      amountPaise: 500000,
+      accountId: "account-primary-bank",
+      destinationAccountId: "account-savings",
+      idempotencyKey: "project-test:jupiter-funding",
+    });
+    expect(repository.getHomeConstruction().fundBalancePaise).toBe(initialFund + 500000);
+
+    repository.createExpense({
+      occurredOn: "2026-07-21",
+      description: "Construction material from Jupiter",
+      amountPaise: 125000,
+      accountId: "account-savings",
+      idempotencyKey: "project-test:jupiter-spend",
+    });
+    const project = repository.getHomeConstruction();
+    expect(project.fundBalancePaise).toBe(initialFund + 375000);
+    expect(project.actualExpensePaise).toBe(122706000);
     database.close();
   });
 });

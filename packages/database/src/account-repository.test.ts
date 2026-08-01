@@ -154,8 +154,57 @@ describe("account repository", () => {
 
     repository.deleteAccount(disposable.id);
     expect(repository.getAccounts().accounts.some((account) => account.id === disposable.id)).toBe(false);
-    expect(() => repository.deleteAccount("account-pluxee")).toThrow("Move the remaining balance");
-    expect(() => repository.deleteAccount("account-primary-bank")).toThrow("audit history");
+    expect(() => repository.deleteAccount("account-pluxee")).toThrow("remaining balance");
+    expect(() => repository.deleteAccount("account-primary-bank")).toThrow("remaining balance");
+
+    const archived = repository.createAccount({
+      name: "Historical envelope",
+      accountType: "savings",
+      openingBalancePaise: 0,
+      restricted: false,
+    });
+    const ledger = new LedgerRepository(database);
+    const occurredOn = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: "Asia/Kolkata",
+    }).format(new Date());
+    ledger.createManualTransaction({
+      occurredOn,
+      payee: "Temporary funding",
+      kind: "transfer",
+      amountPaise: 10000,
+      accountId: "account-primary-bank",
+      destinationAccountId: archived.id,
+      idempotencyKey: "account-test:archive-fund",
+    });
+    ledger.createManualTransaction({
+      occurredOn,
+      payee: "Return temporary funding",
+      kind: "transfer",
+      amountPaise: 10000,
+      accountId: archived.id,
+      destinationAccountId: "account-primary-bank",
+      idempotencyKey: "account-test:archive-return",
+    });
+    repository.deleteAccount(archived.id);
+    expect(repository.getAccounts().accounts.find((account) => account.id === archived.id)?.isActive).toBe(false);
+    database.close();
+  });
+
+  it("clears and archives an empty liability account while retaining its history", () => {
+    const { database, repository } = createRepository();
+
+    repository.deleteAccount("account-debt-axis-neo");
+
+    expect(repository.getAccounts().accounts.find((account) => account.id === "account-debt-axis-neo")?.isActive).toBe(
+      false,
+    );
+    const debt = database.connection
+      .prepare("SELECT status, emi_paise AS emiPaise FROM debts WHERE id = 'debt-axis-neo'")
+      .get() as { status: string; emiPaise: number };
+    expect(debt).toEqual({ status: "cleared", emiPaise: 0 });
     database.close();
   });
 });

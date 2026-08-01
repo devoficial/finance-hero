@@ -192,7 +192,7 @@ export function App() {
     .toUpperCase();
   const hasViewError =
     (activeNav === "Home" && (dashboard.isError || liabilities.isError || wealth.isError)) ||
-    (activeNav === "Accounts" && accounts.isError) ||
+    (activeNav === "Accounts" && (accounts.isError || wealth.isError || homeConstruction.isError)) ||
     (activeNav === "Expenses" && (expenseYear.isError || dashboard.isError || budget.isError)) ||
     (activeNav === "Imports" && (imports.isError || referenceData.isError)) ||
     (activeNav === "Liabilities" && liabilities.isError) ||
@@ -366,10 +366,14 @@ export function App() {
         ) : activeNav === "Accounts" ? (
           <AccountsView
             data={accounts.data}
-            loading={accounts.isLoading}
+            loading={accounts.isLoading || wealth.isLoading || homeConstruction.isLoading}
             money={money}
             onOpenExpenses={() => navigate("Expenses")}
+            onOpenGoals={() => navigate("Goals")}
             onOpenLiabilities={() => navigate("Liabilities")}
+            onOpenProjects={() => navigate("Projects")}
+            project={homeConstruction.data}
+            wealth={wealth.data}
           />
         ) : activeNav === "Liabilities" ? (
           <LiabilitiesView

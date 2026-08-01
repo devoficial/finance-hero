@@ -34,6 +34,7 @@ export interface ProjectSummaryRecord {
   excludedPaise: number;
   commitmentEstimatePaise: number;
   pendingCommitmentPaise: number;
+  fundBalancePaise: number;
   forecastPaise: number;
   latestExpenseOn: string | null;
   needsReviewCount: number;
@@ -133,6 +134,19 @@ export class ProjectRepository {
         monthlySpendMap.set(month, (monthlySpendMap.get(month) ?? 0) + expense.amountPaise);
       }
     }
+    const fundBalance = this.database.connection
+      .prepare(`
+        SELECT MAX(0, ap.baseline_value_paise + COALESCE((
+          SELECT SUM(p.amount_paise)
+          FROM postings p
+          JOIN journal_transactions t ON t.id = p.transaction_id
+          WHERE p.account_id = ap.account_id AND t.status IN ('posted', 'reversed')
+            AND t.created_at > ap.valued_at
+        ), 0)) AS amountPaise
+        FROM asset_positions ap
+        WHERE ap.account_id = 'account-savings'
+      `)
+      .get() as { amountPaise: number } | undefined;
 
     return {
       ...project,
@@ -141,6 +155,7 @@ export class ProjectRepository {
       excludedPaise: sourceExpensePaise - actualExpensePaise,
       commitmentEstimatePaise,
       pendingCommitmentPaise,
+      fundBalancePaise: fundBalance?.amountPaise ?? 0,
       forecastPaise: actualExpensePaise + pendingCommitmentPaise,
       latestExpenseOn: expenses[0]?.occurredOn ?? null,
       needsReviewCount: expenses.filter((expense) => expense.reviewStatus === "needs_review").length,

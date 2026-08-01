@@ -11,6 +11,7 @@ import {
   type CreateFinancialAccountRequest,
   type CreateFinancialGoalRequest,
   type CreateLiabilityRequest,
+  type CreateManualTransactionRequest,
   type CreatePersonalBalanceRequest,
   type CreateProjectCommitmentRequest,
   type CreateProjectExpenseRequest,
@@ -34,8 +35,10 @@ import {
   importArtifactSchema,
   importCandidateSchema,
   importQueueResponseSchema,
+  type LedgerTransaction,
   type LiabilitiesResponse,
   type Liability,
+  ledgerTransactionSchema,
   liabilitiesResponseSchema,
   liabilitySchema,
   type PersonalBalance,
@@ -160,6 +163,19 @@ export async function deleteFinancialAccount(id: string): Promise<void> {
     const body = (await response.json()) as { error?: { message?: string } };
     throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
   }
+}
+
+export async function createManualTransaction(input: CreateManualTransactionRequest): Promise<LedgerTransaction> {
+  const response = await fetch("/api/v1/transactions/manual", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return ledgerTransactionSchema.parse(await response.json());
 }
 
 export async function createLiability(input: CreateLiabilityRequest): Promise<Liability> {

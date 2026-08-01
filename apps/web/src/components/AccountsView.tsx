@@ -2,18 +2,25 @@ import type {
   CreateFinancialAccountRequest,
   FinancialAccount,
   FinancialAccountsResponse,
+  ProjectSummaryResponse,
   UpdateFinancialAccountRequest,
+  WealthResponse,
 } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useMemo, useRef, useState } from "react";
 import { createFinancialAccount, deleteFinancialAccount, updateFinancialAccount } from "../lib/api";
+import { AccountPurposeTrackers } from "./AccountPurposeTrackers";
 
 interface AccountsViewProps {
   data?: FinancialAccountsResponse;
   loading: boolean;
   money: (paise: number) => string;
+  wealth?: WealthResponse;
+  project?: ProjectSummaryResponse;
   onOpenExpenses: () => void;
+  onOpenGoals: () => void;
   onOpenLiabilities: () => void;
+  onOpenProjects: () => void;
 }
 
 type AccountFilter = "all" | "asset" | "liability" | "inactive";
@@ -34,7 +41,17 @@ function accountTypeLabel(account: FinancialAccount): string {
   return account.accountType.replaceAll("_", " ");
 }
 
-export function AccountsView({ data, loading, money, onOpenExpenses, onOpenLiabilities }: AccountsViewProps) {
+export function AccountsView({
+  data,
+  loading,
+  money,
+  wealth,
+  project,
+  onOpenExpenses,
+  onOpenGoals,
+  onOpenLiabilities,
+  onOpenProjects,
+}: AccountsViewProps) {
   const queryClient = useQueryClient();
   const formRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
@@ -257,6 +274,15 @@ export function AccountsView({ data, loading, money, onOpenExpenses, onOpenLiabi
         </article>
       </section>
 
+      <AccountPurposeTrackers
+        accounts={data.accounts}
+        money={money}
+        onOpenGoals={onOpenGoals}
+        onOpenProjects={onOpenProjects}
+        project={project}
+        wealth={wealth}
+      />
+
       <div className="accounts-register panel">
         <div className="accounts-register-head">
           <div>
@@ -333,11 +359,9 @@ export function AccountsView({ data, loading, money, onOpenExpenses, onOpenLiabi
                 <button className="table-action" onClick={() => openEditForm(account)} type="button">
                   Edit
                 </button>
-                {account.managedBy === "wealth" && account.balancePaise === 0 && account.transactionCount === 0 && (
-                  <button className="table-action danger" onClick={() => setAccountToDelete(account)} type="button">
-                    Delete
-                  </button>
-                )}
+                <button className="account-remove-action" onClick={() => setAccountToDelete(account)} type="button">
+                  Delete
+                </button>
               </div>
             </article>
           ))}
@@ -464,8 +488,8 @@ export function AccountsView({ data, loading, money, onOpenExpenses, onOpenLiabi
               </div>
             </div>
             <p>
-              Deletion is allowed only when the balance is zero and the account has no transactions, imports,
-              reconciliations, or goal allocations. Otherwise Finance Hero preserves it for the audit trail.
+              Accounts with no history are deleted permanently. Accounts with financial history are archived so past
+              statements and reports remain correct. Transfer or clear any remaining balance first.
             </p>
             {deleteMutation.error && <p className="form-error">{deleteMutation.error.message}</p>}
             <div className="modal-actions">

@@ -199,6 +199,11 @@ export function ProjectsView({ data, referenceData, loading, money }: ProjectsVi
         </div>
         <div className="project-command-metrics">
           <article>
+            <span>JUPITER FUND</span>
+            <strong>{money(data.fundBalancePaise)}</strong>
+            <small>available construction cash</small>
+          </article>
+          <article>
             <span>ACTUAL</span>
             <strong>{money(data.actualExpensePaise)}</strong>
             <small>{money(data.excludedPaise)} excluded</small>

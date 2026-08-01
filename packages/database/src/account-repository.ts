@@ -217,18 +217,17 @@ export class AccountRepository {
 
   deleteAccount(id: string): void {
     const existing = this.requireAccount(id);
-    if (existing.managedBy !== "wealth") {
+    if (existing.balancePaise !== 0) {
       throw new Error(
         existing.managedBy === "liability"
-          ? "Clear or archive this account from Liabilities."
-          : "Transaction-calculated accounts must be retained for their audit history.",
+          ? "Clear the remaining liability before removing this account."
+          : "Transfer or reconcile the remaining balance before removing this account.",
       );
     }
-    if (existing.balancePaise !== 0) {
-      throw new Error("Move the remaining balance before deleting this account.");
-    }
-    const asset = this.database.connection
-      .prepare(`
+    const asset =
+      existing.managedBy === "wealth"
+        ? (this.database.connection
+            .prepare(`
         SELECT ap.id,
                COALESCE((SELECT SUM(ga.amount_paise) FROM goal_allocations ga
                          WHERE ga.asset_position_id = ap.id), 0) AS allocatedPaise,
@@ -238,22 +237,35 @@ export class AccountRepository {
         FROM asset_positions ap
         WHERE ap.account_id = ?
       `)
-      .get(id) as { id: string; allocatedPaise: number; referenceCount: number } | undefined;
-    if (!asset) {
+            .get(id) as { id: string; allocatedPaise: number; referenceCount: number } | undefined)
+        : undefined;
+    if (existing.managedBy === "wealth" && !asset) {
       throw new Error("The account valuation could not be found.");
     }
-    if (asset.allocatedPaise > 0) {
+    if (asset && asset.allocatedPaise > 0) {
       throw new Error("Remove this account's goal allocations before deleting it.");
-    }
-    if (asset.referenceCount > 0) {
-      throw new Error("This account has financial activity and cannot be deleted. Archive it instead.");
     }
 
     const now = new Date().toISOString();
     const write = this.database.connection.transaction(() => {
-      this.database.connection.prepare("DELETE FROM asset_positions WHERE id = ?").run(asset.id);
-      this.database.connection.prepare("DELETE FROM accounts WHERE id = ?").run(id);
-      this.insertAudit("account.deleted", id, { before: existing }, now);
+      if (existing.managedBy === "liability") {
+        this.database.connection
+          .prepare(`
+            UPDATE debts
+            SET status = 'cleared', current_principal_paise = 0, emi_paise = 0,
+                updated_at = ?
+            WHERE account_id = ?
+          `)
+          .run(now, id);
+      }
+      if (asset && asset.referenceCount === 0) {
+        this.database.connection.prepare("DELETE FROM asset_positions WHERE id = ?").run(asset.id);
+        this.database.connection.prepare("DELETE FROM accounts WHERE id = ?").run(id);
+        this.insertAudit("account.deleted", id, { before: existing }, now);
+        return;
+      }
+      this.database.connection.prepare("UPDATE accounts SET is_active = 0 WHERE id = ?").run(id);
+      this.insertAudit("account.archived", id, { before: existing }, now);
     });
     write.immediate();
   }

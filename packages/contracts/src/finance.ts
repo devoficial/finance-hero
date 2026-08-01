@@ -439,6 +439,7 @@ export const projectSummaryResponseSchema = z.object({
   excludedPaise: paiseSchema.nonnegative(),
   commitmentEstimatePaise: paiseSchema.nonnegative(),
   pendingCommitmentPaise: paiseSchema.nonnegative(),
+  fundBalancePaise: paiseSchema.nonnegative(),
   forecastPaise: paiseSchema.nonnegative(),
   latestExpenseOn: localDateSchema.nullable(),
   needsReviewCount: z.number().int().nonnegative(),
