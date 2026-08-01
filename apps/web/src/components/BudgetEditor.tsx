@@ -235,6 +235,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
         queryClient.invalidateQueries({ queryKey: ["imports"] }),
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["wealth"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects", "home-construction"] }),
       ]);
     },
   });

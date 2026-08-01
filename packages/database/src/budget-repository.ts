@@ -737,14 +737,30 @@ export class BudgetRepository {
         -amountPaise,
         createdAt,
       );
-    if (categoryId === "category-emergency-fund") {
+    const destinationAccountId =
+      categoryId === "category-emergency-fund"
+        ? "account-icici-expense-reserve"
+        : categoryId === "category-home-construction"
+          ? "account-savings"
+          : null;
+    if (destinationAccountId) {
       this.database.connection
         .prepare(`
           INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
           VALUES (?, ?, 'account-primary-bank', NULL, ?, ?),
-                 (?, ?, 'account-icici-expense-reserve', NULL, ?, ?)
+                 (?, ?, ?, NULL, ?, ?)
         `)
-        .run(randomUUID(), transactionId, -amountPaise, createdAt, randomUUID(), transactionId, amountPaise, createdAt);
+        .run(
+          randomUUID(),
+          transactionId,
+          -amountPaise,
+          createdAt,
+          randomUUID(),
+          transactionId,
+          destinationAccountId,
+          amountPaise,
+          createdAt,
+        );
     }
   }
 }

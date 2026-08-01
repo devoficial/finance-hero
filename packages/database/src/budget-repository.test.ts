@@ -236,6 +236,45 @@ describe("budget repository", () => {
     database.close();
   });
 
+  it("uses the Home Construction sheet value to fund Jupiter without project spend writing back", () => {
+    const { database, ledger, repository } = createRepository();
+    repository.updateMonth("2026-08", {
+      lines: [{ categoryId: "category-home-construction", actualPaise: 70147500 }],
+    });
+    const funded = repository.getMonth("2026-08");
+    const jupiterAfterFunding = database.connection
+      .prepare(
+        "SELECT COALESCE(SUM(amount_paise), 0) AS amountPaise FROM postings WHERE account_id = 'account-savings'",
+      )
+      .get() as { amountPaise: number };
+
+    expect(funded.lines.find((line) => line.categoryId === "category-home-construction")?.spentPaise).toBe(70147500);
+    expect(funded.cashBridge.primaryAccountOutflowPaise).toBe(70147500);
+    expect(jupiterAfterFunding.amountPaise).toBe(70147500);
+
+    ledger.createProjectSpendTransaction({
+      occurredOn: "2026-08-02",
+      payee: "Vendor payment",
+      amountPaise: 94700,
+      accountId: "account-savings",
+      idempotencyKey: "budget-test:project-spend-boundary",
+    });
+    const afterSpend = repository.getMonth("2026-08");
+    const jupiterAfterSpend = database.connection
+      .prepare(
+        "SELECT COALESCE(SUM(amount_paise), 0) AS amountPaise FROM postings WHERE account_id = 'account-savings'",
+      )
+      .get() as { amountPaise: number };
+
+    expect(afterSpend.lines.find((line) => line.categoryId === "category-home-construction")?.spentPaise).toBe(
+      70147500,
+    );
+    expect(afterSpend.cashBridge.cashOutflowPaise).toBe(funded.cashBridge.cashOutflowPaise);
+    expect(afterSpend.cashBridge.primaryAccountOutflowPaise).toBe(funded.cashBridge.primaryAccountOutflowPaise);
+    expect(jupiterAfterSpend.amountPaise).toBe(jupiterAfterFunding.amountPaise - 94700);
+    database.close();
+  });
+
   it("shows approved imported credits as editable extra income without duplicating cash", () => {
     const { database, imports, ledger, repository } = createRepository();
     imports.createArtifact({
