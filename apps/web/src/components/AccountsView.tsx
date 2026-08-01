@@ -239,7 +239,7 @@ export function AccountsView({
         </article>
         <article>
           <span>LIABILITY BALANCES</span>
-          <strong className="money-value">{money(data.totalLiabilityBalancePaise)}</strong>
+          <strong className="money-value liability-value">{money(data.totalLiabilityBalancePaise)}</strong>
           <small>{activeLiabilities} linked liability accounts</small>
         </article>
         <article>
@@ -345,7 +345,11 @@ export function AccountsView({
               </div>
               <strong
                 className={`account-balance money-value ${
-                  account.accountClass === "liability" && account.balancePaise > 0 ? "negative" : ""
+                  account.accountClass === "liability" && account.balancePaise > 0
+                    ? "negative liability-value"
+                    : account.balancePaise < 0
+                      ? "negative"
+                      : ""
                 }`}
               >
                 {money(account.balancePaise)}

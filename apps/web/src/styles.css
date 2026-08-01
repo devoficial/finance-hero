@@ -23,6 +23,7 @@
 * {
   box-sizing: border-box;
 }
+
 body {
   margin: 0;
   min-width: 320px;
@@ -8717,6 +8718,15 @@ h2 {
   .import-editor-grid .wide {
     grid-column: auto;
   }
+}
+
+/* Financial semantics stay consistent across every dashboard surface. */
+.liability-value,
+.negative,
+.negative > strong,
+.negative > b,
+.negative .money-value {
+  color: var(--red);
 }
 
 @media (max-width: 1050px) {

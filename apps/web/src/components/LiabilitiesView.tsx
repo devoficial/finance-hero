@@ -467,7 +467,7 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
             <small>{description}</small>
           </div>
           <div className="personal-balance-total">
-            <strong>{money(totalPaise)}</strong>
+            <strong className={direction === "payable" ? "liability-value" : ""}>{money(totalPaise)}</strong>
             <button onClick={() => beginAddPersonal(direction)} type="button">
               + Add person
             </button>
@@ -480,7 +480,7 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
                 <strong>{balance.name}</strong>
                 <small>{balance.note || (balance.status === "open" ? "Open balance" : "Cleared")}</small>
               </span>
-              <b>{money(balance.amountPaise)}</b>
+              <b className={direction === "payable" ? "liability-value" : ""}>{money(balance.amountPaise)}</b>
               <span className={`status-pill ${balance.status}`}>
                 {balance.status === "settled" ? "cleared" : "open"}
               </span>
@@ -518,17 +518,17 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
       <section className="liability-metrics" aria-label="Liability summary">
         <article className="metric-card liability-metric-card warning">
           <span>Current principal</span>
-          <strong>{money(data.totalPrincipalPaise)}</strong>
+          <strong className="liability-value">{money(data.totalPrincipalPaise)}</strong>
           <small>{data.activeCount} active facilities</small>
         </article>
         <article className="metric-card liability-metric-card">
           <span>Total monthly EMI</span>
-          <strong>{money(data.totalEmiPaise)}</strong>
+          <strong className="liability-value">{money(data.totalEmiPaise)}</strong>
           <small>Committed monthly outflow</small>
         </article>
         <article className="metric-card liability-metric-card">
           <span>Other liabilities</span>
-          <strong>{money(data.otherLiabilityPaise)}</strong>
+          <strong className="liability-value">{money(data.otherLiabilityPaise)}</strong>
           <small>Open personal payables</small>
         </article>
         <article className="metric-card liability-metric-card positive">
@@ -538,13 +538,15 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
         </article>
         <article className="metric-card liability-metric-card warning">
           <span>Net obligations</span>
-          <strong>{money(data.netObligationPaise)}</strong>
+          <strong className="liability-value">{money(data.netObligationPaise)}</strong>
           <small>Principal + payables - receivables</small>
         </article>
         <article className="metric-card liability-metric-card positive">
           <span>Cleared accounts</span>
           <strong>{data.clearedCount}</strong>
-          <small>{money(data.totalOriginalPaise)} original obligations</small>
+          <small>
+            <span className="liability-value">{money(data.totalOriginalPaise)}</span> original obligations
+          </small>
         </article>
       </section>
 
@@ -683,11 +685,13 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
                         <i style={{ width: `${paidPercentage}%` }} />
                       </div>
                     </td>
-                    <td>{money(liability.originalAmountPaise)}</td>
-                    <td className="principal-cell">{money(liability.currentPrincipalPaise)}</td>
+                    <td className="liability-value">{money(liability.originalAmountPaise)}</td>
+                    <td className="principal-cell liability-value">{money(liability.currentPrincipalPaise)}</td>
                     <td>{money(liability.paidPaise)}</td>
-                    <td>{money(liability.emiPaise)}</td>
-                    <td>{liability.annualRateBps == null ? "—" : `${(liability.annualRateBps / 100).toFixed(2)}%`}</td>
+                    <td className="liability-value">{money(liability.emiPaise)}</td>
+                    <td className="liability-value">
+                      {liability.annualRateBps == null ? "—" : `${(liability.annualRateBps / 100).toFixed(2)}%`}
+                    </td>
                     <td>
                       <span className={`status-pill ${liability.status}`}>{liability.status}</span>
                     </td>
@@ -897,9 +901,9 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
                       </>
                     ) : (
                       <>
-                        <strong>{money(liability.currentPrincipalPaise)}</strong>
-                        <strong>{money(liability.emiPaise)}</strong>
-                        <strong className={liability.annualRateBps == null ? "missing-rate" : ""}>
+                        <strong className="liability-value">{money(liability.currentPrincipalPaise)}</strong>
+                        <strong className="liability-value">{money(liability.emiPaise)}</strong>
+                        <strong className={`liability-value ${liability.annualRateBps == null ? "missing-rate" : ""}`}>
                           {liability.annualRateBps == null
                             ? "Rate missing"
                             : `${(liability.annualRateBps / 100).toFixed(2)}%`}
@@ -1056,7 +1060,7 @@ export function LiabilitiesView({ data, loading, money, month }: LiabilitiesView
                 <article key={checkpoint.month}>
                   <div>
                     <span>{monthLabel(checkpoint.month)}</span>
-                    <strong>{money(checkpoint.remainingPrincipalPaise)}</strong>
+                    <strong className="liability-value">{money(checkpoint.remainingPrincipalPaise)}</strong>
                   </div>
                   <div className="debt-trajectory-track">
                     <i style={{ width: `${remainingPercent}%` }} />

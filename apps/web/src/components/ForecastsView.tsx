@@ -290,12 +290,12 @@ export function ForecastsView({
         <i>−</i>
         <article>
           <span>SCHEDULED EMIS</span>
-          <strong className="money-value">{money(scheduledEmiPaise)}</strong>
+          <strong className="money-value liability-value">{money(scheduledEmiPaise)}</strong>
         </article>
         <i>−</i>
         <article>
           <span>EXTRA DEBT</span>
-          <strong className="money-value">{money(extraDebtPaymentPaise)}</strong>
+          <strong className="money-value liability-value">{money(extraDebtPaymentPaise)}</strong>
         </article>
         <i>=</i>
         <article className="result">
@@ -317,7 +317,7 @@ export function ForecastsView({
         </article>
         <article>
           <span>BANK DEBT AFTER 12 MONTHS</span>
-          <strong className="money-value">{money(forecast.remainingDebtPaise)}</strong>
+          <strong className="money-value liability-value">{money(forecast.remainingDebtPaise)}</strong>
           <small>
             Down {money(debtReduction)} ({percentage(debtReduction, liabilities.totalPrincipalPaise)}%) from today
           </small>
@@ -449,13 +449,13 @@ export function ForecastsView({
                   <th>{monthLabel(item.month, true)}</th>
                   <td>{money(item.incomePaise)}</td>
                   <td>{money(item.regularExpensePaise)}</td>
-                  <td>{money(item.debtPaymentPaise)}</td>
-                  <td>{money(item.interestPaise)}</td>
+                  <td className="liability-value">{money(item.debtPaymentPaise)}</td>
+                  <td className="liability-value">{money(item.interestPaise)}</td>
                   <td className={item.cashSurplusPaise < 0 ? "negative" : "positive"}>
                     {money(item.cashSurplusPaise)}
                   </td>
                   <td>{money(item.projectedAssetPaise)}</td>
-                  <td>{money(item.remainingDebtPaise)}</td>
+                  <td className="liability-value">{money(item.remainingDebtPaise)}</td>
                   <td className={item.projectedNetWorthPaise < 0 ? "negative" : ""}>
                     {money(item.projectedNetWorthPaise)}
                   </td>

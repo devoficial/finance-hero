@@ -195,13 +195,15 @@ export function DashboardView({
         </div>
         <div>
           <span>Fixed EMI</span>
-          <strong>{money(displayedEmiPaise)}</strong>
+          <strong className="liability-value">{money(displayedEmiPaise)}</strong>
           <small>{emiBurden}% of planned income</small>
         </div>
         <div>
           <span>Debt focus</span>
           <strong>{snowballTarget?.name ?? "No active target"}</strong>
-          <small>{snowballTarget ? money(snowballTarget.currentPrincipalPaise) : "Nothing queued"}</small>
+          <small className={snowballTarget ? "liability-value" : ""}>
+            {snowballTarget ? money(snowballTarget.currentPrincipalPaise) : "Nothing queued"}
+          </small>
         </div>
       </section>
 
@@ -218,7 +220,7 @@ export function DashboardView({
           <span>{historical ? "Recorded EMI payments" : "Scheduled EMI burden"}</span>
           <strong>{emiBurden}%</strong>
           <div>
-            <b>{money(displayedEmiPaise)}</b>
+            <b className="liability-value">{money(displayedEmiPaise)}</b>
             <small>{emiBurden >= 40 ? "High fixed commitment" : "of monthly income"}</small>
           </div>
         </article>
@@ -232,7 +234,7 @@ export function DashboardView({
         </article>
         <article className="finance-kpi debt">
           <span>Net obligations</span>
-          <strong>{money(liabilities.netObligationPaise)}</strong>
+          <strong className="liability-value">{money(liabilities.netObligationPaise)}</strong>
           <div>
             <b>{liabilities.activeCount} accounts</b>
             <small>bank debt plus personal balances</small>
@@ -364,7 +366,7 @@ export function DashboardView({
           <div className="panel-heading compact">
             <div>
               <p className="eyebrow">DEBT PORTFOLIO / SNOWBALL</p>
-              <h2>{money(liabilities.totalPrincipalPaise)}</h2>
+              <h2 className="liability-value">{money(liabilities.totalPrincipalPaise)}</h2>
             </div>
             <span className="risk-pill">{liabilities.activeCount} ACTIVE</span>
           </div>
@@ -372,7 +374,7 @@ export function DashboardView({
             {liabilityTypes.map((group) => (
               <div key={group.type}>
                 <span>{productName(group.type)}</span>
-                <strong>{money(group.amountPaise)}</strong>
+                <strong className="liability-value">{money(group.amountPaise)}</strong>
                 <div>
                   <i style={{ width: `${percentage(group.amountPaise, liabilities.totalPrincipalPaise)}%` }} />
                 </div>
@@ -383,7 +385,7 @@ export function DashboardView({
             <div>
               <span>Largest exposure</span>
               <strong>{largestLiability?.name ?? "None"}</strong>
-              <small>{money(largestLiability?.currentPrincipalPaise ?? 0)}</small>
+              <small className="liability-value">{money(largestLiability?.currentPrincipalPaise ?? 0)}</small>
             </div>
             <div>
               <span>Personal receivable cover</span>
@@ -396,7 +398,8 @@ export function DashboardView({
               <span>Next snowball target</span>
               <strong>{snowballTarget.name}</strong>
               <small>
-                {money(snowballTarget.currentPrincipalPaise)} outstanding · EMI {money(snowballTarget.emiPaise)}
+                <span className="liability-value">{money(snowballTarget.currentPrincipalPaise)}</span> outstanding · EMI{" "}
+                <span className="liability-value">{money(snowballTarget.emiPaise)}</span>
               </small>
             </div>
           )}

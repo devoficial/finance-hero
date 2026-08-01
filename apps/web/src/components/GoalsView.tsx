@@ -470,7 +470,7 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
                 <span>02</span>
                 <div>
                   <b>Attack the snowball account</b>
-                  <small>
+                  <small className={snowballTarget ? "liability-value" : ""}>
                     {snowballTarget
                       ? `${snowballTarget.name} · ${money(snowballTarget.currentPrincipalPaise)} outstanding.`
                       : "No active snowball account remains."}
@@ -868,7 +868,9 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
           <div className="wealth-debt-contrast">
             <span>Asset-to-obligation coverage</span>
             <strong>{data.debtPaise > 0 ? Math.round((data.totalAssetPaise / data.debtPaise) * 100) : 100}%</strong>
-            <small>{money(data.debtPaise)} total tracked obligations</small>
+            <small>
+              <span className="liability-value">{money(data.debtPaise)}</span> total tracked obligations
+            </small>
           </div>
         </article>
 
