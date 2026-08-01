@@ -10,7 +10,7 @@ import type {
   WealthResponse,
 } from "@finance-hero/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
   createFinancialGoal,
   createWealthAsset,
@@ -129,6 +129,7 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
   const [allocationValues, setAllocationValues] = useState<Record<string, string>>({});
   const [assetToDelete, setAssetToDelete] = useState<WealthAsset | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [strategyOpen, setStrategyOpen] = useState(false);
   const editorOpen = assetForm !== null || goalForm !== null || allocationGoal !== null;
 
   useEffect(() => {
@@ -187,16 +188,6 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
     },
   });
 
-  const assetMix = useMemo(() => {
-    if (!data || data.totalAssetPaise <= 0) {
-      return { savingsAngle: 0, investmentAngle: 0 };
-    }
-    return {
-      savingsAngle: (data.savingsPaise / data.totalAssetPaise) * 360,
-      investmentAngle: (data.investmentPaise / data.totalAssetPaise) * 360,
-    };
-  }, [data]);
-
   if (loading || !data || !dashboard || !liabilities) {
     return <section className="panel loading-panel">Valuing savings and calculating goal forecasts...</section>;
   }
@@ -234,9 +225,15 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
             100,
         )
       : 0;
-  const mixStyle = {
-    background: `conic-gradient(var(--green-bright) 0 ${assetMix.savingsAngle}deg, #2f6f8f ${assetMix.savingsAngle}deg ${assetMix.savingsAngle + assetMix.investmentAngle}deg, var(--yellow) ${assetMix.savingsAngle + assetMix.investmentAngle}deg 360deg)`,
-  };
+  const savingsMixPercentage = data.totalAssetPaise > 0 ? (data.savingsPaise / data.totalAssetPaise) * 100 : 0;
+  const investmentMixPercentage = data.totalAssetPaise > 0 ? (data.investmentPaise / data.totalAssetPaise) * 100 : 0;
+  const walletMixPercentage = data.totalAssetPaise > 0 ? (data.restrictedWalletPaise / data.totalAssetPaise) * 100 : 0;
+  const nextMove =
+    starterFundGapPaise > 0
+      ? `Add ${money(starterFundGapPaise)} to complete one month of safety.`
+      : snowballTarget
+        ? `Direct extra cash to ${snowballTarget.name}.`
+        : "Build the next emergency-fund milestone.";
 
   function startAsset(asset?: WealthAsset) {
     setGoalForm(null);
@@ -428,89 +425,109 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
         </article>
       </section>
 
-      <section className="goal-command-grid" aria-label="Financial goal strategy">
-        <article className="panel goal-priority-panel">
-          <div className="panel-heading compact">
-            <div>
-              <p className="eyebrow">RECOMMENDED ORDER / SAFETY BEFORE GROWTH</p>
-              <h2>Your next three financial moves</h2>
-            </div>
-            <span className="goal-plan-pill">SNOWBALL PLAN</span>
-          </div>
-          <div className="goal-priority-steps">
-            <div className={starterFundGapPaise === 0 ? "complete" : "current"}>
-              <span>01</span>
-              <div>
-                <b>Finish one month of safety</b>
-                <small>
-                  {starterFundGapPaise > 0
-                    ? `${money(starterFundGapPaise)} more to cover one month of EMIs and expenses.`
-                    : "One full month of EMIs and expenses is protected."}
-                </small>
-              </div>
-              <strong>{percentage(emergencyAllocatedPaise, starterFundTargetPaise)}%</strong>
-            </div>
-            <div className={starterFundGapPaise === 0 ? "current" : ""}>
-              <span>02</span>
-              <div>
-                <b>Attack the snowball account</b>
-                <small>
-                  {snowballTarget
-                    ? `${snowballTarget.name} · ${money(snowballTarget.currentPrincipalPaise)} outstanding.`
-                    : "No active snowball account remains."}
-                </small>
-              </div>
-              <strong>{snowballTarget ? `#${snowballTarget.snowballRank}` : "DONE"}</strong>
-            </div>
-            <div>
-              <span>03</span>
-              <div>
-                <b>Build three months, then invest</b>
-                <small>
-                  Close the {money(fullEmergencyGapPaise)} emergency gap before adding aggressive investment goals.
-                </small>
-              </div>
-              <strong>{emergencyGoal?.progressPercentage ?? 0}%</strong>
-            </div>
-          </div>
-        </article>
-
-        <article className="panel goal-action-panel">
-          <div className="panel-heading compact">
-            <div>
-              <p className="eyebrow">CURRENT MONTH / DEPLOYABLE HEADROOM</p>
-              <h2>{money(currentPlanHeadroomPaise)}</h2>
-            </div>
-            <span className={dashboard.dangerAlert ? "goal-risk-pill danger" : "goal-risk-pill"}>LIVE PLAN</span>
-          </div>
-          <p className="goal-action-intro">
-            A practical sequence based on current plan headroom. Confirm the cash is genuinely free before moving it.
-          </p>
-          <div className="goal-action-stack">
-            <div>
-              <span>Starter emergency gap</span>
-              <strong>{money(starterAllocationPaise)}</strong>
-            </div>
-            <div>
-              <span>{snowballTarget ? `Extra to ${snowballTarget.name}` : "Snowball allocation"}</span>
-              <strong>{money(snowballAllocationPaise)}</strong>
-            </div>
-            <div>
-              <span>Still unassigned</span>
-              <strong>{money(remainingHeadroomPaise)}</strong>
-            </div>
-          </div>
-          <div className="goal-debt-warning">
-            <span>DEBT DRAG</span>
-            <b>
-              {highestRateDebt
-                ? `${highestRateDebt.name} costs ${((highestRateDebt.annualRateBps ?? 0) / 100).toFixed(2)}%`
-                : "No rated active debt"}
-            </b>
-            <small>High-interest repayment is a guaranteed return; keep it ahead of new risk investments.</small>
-          </div>
-        </article>
+      <section className="goal-guidance-bar" aria-label="Financial plan guidance">
+        <div>
+          <p className="eyebrow">NEXT BEST MOVE</p>
+          <strong>{nextMove}</strong>
+        </div>
+        <span>
+          <small>Plan headroom</small>
+          <b>{money(currentPlanHeadroomPaise)}</b>
+        </span>
+        <span>
+          <small>Highest debt rate</small>
+          <b>{highestRateDebt ? `${((highestRateDebt.annualRateBps ?? 0) / 100).toFixed(2)}%` : "—"}</b>
+        </span>
+        <button aria-expanded={strategyOpen} onClick={() => setStrategyOpen((open) => !open)} type="button">
+          {strategyOpen ? "Hide plan" : "View plan"}
+        </button>
       </section>
+
+      {strategyOpen && (
+        <section className="goal-command-grid" aria-label="Financial goal strategy">
+          <article className="panel goal-priority-panel">
+            <div className="panel-heading compact">
+              <div>
+                <p className="eyebrow">RECOMMENDED ORDER / SAFETY BEFORE GROWTH</p>
+                <h2>Your next three financial moves</h2>
+              </div>
+              <span className="goal-plan-pill">SNOWBALL PLAN</span>
+            </div>
+            <div className="goal-priority-steps">
+              <div className={starterFundGapPaise === 0 ? "complete" : "current"}>
+                <span>01</span>
+                <div>
+                  <b>Finish one month of safety</b>
+                  <small>
+                    {starterFundGapPaise > 0
+                      ? `${money(starterFundGapPaise)} more to cover one month of EMIs and expenses.`
+                      : "One full month of EMIs and expenses is protected."}
+                  </small>
+                </div>
+                <strong>{percentage(emergencyAllocatedPaise, starterFundTargetPaise)}%</strong>
+              </div>
+              <div className={starterFundGapPaise === 0 ? "current" : ""}>
+                <span>02</span>
+                <div>
+                  <b>Attack the snowball account</b>
+                  <small>
+                    {snowballTarget
+                      ? `${snowballTarget.name} · ${money(snowballTarget.currentPrincipalPaise)} outstanding.`
+                      : "No active snowball account remains."}
+                  </small>
+                </div>
+                <strong>{snowballTarget ? `#${snowballTarget.snowballRank}` : "DONE"}</strong>
+              </div>
+              <div>
+                <span>03</span>
+                <div>
+                  <b>Build three months, then invest</b>
+                  <small>
+                    Close the {money(fullEmergencyGapPaise)} emergency gap before adding aggressive investment goals.
+                  </small>
+                </div>
+                <strong>{emergencyGoal?.progressPercentage ?? 0}%</strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="panel goal-action-panel">
+            <div className="panel-heading compact">
+              <div>
+                <p className="eyebrow">CURRENT MONTH / DEPLOYABLE HEADROOM</p>
+                <h2>{money(currentPlanHeadroomPaise)}</h2>
+              </div>
+              <span className={dashboard.dangerAlert ? "goal-risk-pill danger" : "goal-risk-pill"}>LIVE PLAN</span>
+            </div>
+            <p className="goal-action-intro">
+              A practical sequence based on current plan headroom. Confirm the cash is genuinely free before moving it.
+            </p>
+            <div className="goal-action-stack">
+              <div>
+                <span>Starter emergency gap</span>
+                <strong>{money(starterAllocationPaise)}</strong>
+              </div>
+              <div>
+                <span>{snowballTarget ? `Extra to ${snowballTarget.name}` : "Snowball allocation"}</span>
+                <strong>{money(snowballAllocationPaise)}</strong>
+              </div>
+              <div>
+                <span>Still unassigned</span>
+                <strong>{money(remainingHeadroomPaise)}</strong>
+              </div>
+            </div>
+            <div className="goal-debt-warning">
+              <span>DEBT DRAG</span>
+              <b>
+                {highestRateDebt
+                  ? `${highestRateDebt.name} costs ${((highestRateDebt.annualRateBps ?? 0) / 100).toFixed(2)}%`
+                  : "No rated active debt"}
+              </b>
+              <small>High-interest repayment is a guaranteed return; keep it ahead of new risk investments.</small>
+            </div>
+          </article>
+        </section>
+      )}
 
       {(assetForm || goalForm || allocationGoal) && (
         <section className="panel wealth-editor" ref={editorRef}>
@@ -825,11 +842,10 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
             <span className="live-pill">INR ONLY</span>
           </div>
           <div className="wealth-mix">
-            <div className="wealth-donut" style={mixStyle}>
-              <span>
-                <strong>{data.assets.length}</strong>
-                positions
-              </span>
+            <div className="wealth-mix-bar" aria-label="Asset allocation mix" role="img">
+              <i className="savings" style={{ width: `${savingsMixPercentage}%` }} />
+              <i className="investments" style={{ width: `${investmentMixPercentage}%` }} />
+              <i className="restricted" style={{ width: `${walletMixPercentage}%` }} />
             </div>
             <div className="wealth-mix-legend">
               <div>
