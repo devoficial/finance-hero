@@ -3457,6 +3457,79 @@ h2 {
   background: #f2d3cb;
   color: var(--red);
 }
+.budget-overview-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 5px;
+}
+.budget-overview-actions > button {
+  border: 1px solid var(--green);
+  background: transparent;
+  color: var(--green);
+  padding: 4px 8px;
+  cursor: pointer;
+  font:
+    700 7px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.budget-planner-modal {
+  width: min(760px, 100%);
+}
+.budget-planner-modal .modal-title p:not(.eyebrow) {
+  margin: 4px 0 0;
+  color: #53645e;
+  font-size: 9px;
+}
+.budget-planner-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 14px 0;
+  padding: 11px 13px;
+  background: #e3eee8;
+}
+.budget-planner-total span {
+  font:
+    600 8px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.budget-planner-total strong {
+  color: var(--green);
+  font: 600 24px "Newsreader", serif;
+}
+.budget-planner-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+.budget-planner-grid label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.budget-planner-grid label > span {
+  overflow: hidden;
+  font-size: 8px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.budget-planner-grid .sheet-money-input {
+  min-height: 31px;
+}
+.budget-planner-grid .sheet-money-input input {
+  height: 29px;
+  font-size: 9px;
+}
 .plan-overview-metrics article + article {
   padding-left: 7px;
   border-left: 1px solid var(--line);
@@ -8583,6 +8656,14 @@ h2 {
   .wealth-modal {
     max-height: calc(100dvh - 16px);
     padding: 15px;
+  }
+
+  .budget-planner-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-planner-grid label {
+    grid-template-columns: minmax(0, 1fr) 108px;
   }
 
   .modal-title {
