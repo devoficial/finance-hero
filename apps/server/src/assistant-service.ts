@@ -195,13 +195,26 @@ function selectRecords(
       investmentINR: inr(wealth.investmentPaise),
       restrictedWalletINR: inr(wealth.restrictedWalletPaise),
       allocatableINR: inr(wealth.allocatablePaise),
+      availableCashINR: inr(wealth.availableCashPaise),
       allocatedINR: inr(wealth.allocatedPaise),
       debtINR: inr(wealth.debtPaise),
       receivableINR: inr(wealth.receivablePaise),
       netWorthINR: inr(wealth.netWorthPaise),
       monthlyContributionINR: inr(wealth.monthlyContributionPaise),
       assets: wealth.assets.map(
-        ({ id, name, assetType, currentValuePaise, monthlyContributionPaise, allocatedPaise, availablePaise }) => ({
+        ({
+          id,
+          name,
+          assetType,
+          currentValuePaise,
+          monthlyContributionPaise,
+          allocatedPaise,
+          availablePaise,
+          availableCashPaise,
+          allocationPolicy,
+          liquidity,
+          eligibleGoalTypes,
+        }) => ({
           id,
           name,
           assetType,
@@ -209,12 +222,17 @@ function selectRecords(
           monthlyContributionINR: inr(monthlyContributionPaise),
           allocatedINR: inr(allocatedPaise),
           availableINR: inr(availablePaise),
+          availableCashINR: inr(availableCashPaise),
+          allocationPolicy,
+          liquidity,
+          eligibleGoalTypes,
         }),
       ),
       goals: wealth.goals.map(
         ({
           id,
           name,
+          goalType,
           targetPaise,
           status,
           priority,
@@ -227,6 +245,7 @@ function selectRecords(
         }) => ({
           id,
           name,
+          goalType,
           targetINR: inr(targetPaise),
           status,
           priority,

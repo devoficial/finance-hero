@@ -2,6 +2,22 @@ import { randomUUID } from "node:crypto";
 import type { FinanceHeroDatabase } from "./encrypted-database";
 
 export type WealthAssetType = "savings" | "investment" | "emergency_fund" | "restricted_wallet";
+export type WealthGoalType =
+  | "emergency_fund"
+  | "home_construction"
+  | "retirement"
+  | "long_term_wealth"
+  | "short_term"
+  | "custom";
+export type WealthAllocationPolicy =
+  | "emergency_only"
+  | "construction_only"
+  | "retirement"
+  | "long_term_wealth"
+  | "short_term"
+  | "flexible"
+  | "none";
+export type WealthLiquidity = "liquid" | "market" | "locked" | "restricted";
 export type FinancialGoalStatus = "active" | "achieved" | "paused";
 export type FinancialGoalTargetMode = "fixed" | "emergency_cover";
 
@@ -15,6 +31,10 @@ export interface WealthAssetRecord {
   monthlyContributionPaise: number;
   allocatedPaise: number;
   availablePaise: number;
+  availableCashPaise: number;
+  allocationPolicy: WealthAllocationPolicy;
+  liquidity: WealthLiquidity;
+  eligibleGoalTypes: WealthGoalType[];
   restricted: boolean;
   asOfDate: string;
 }
@@ -22,6 +42,7 @@ export interface WealthAssetRecord {
 export interface FinancialGoalRecord {
   id: string;
   name: string;
+  goalType: WealthGoalType;
   targetPaise: number;
   targetMode: FinancialGoalTargetMode;
   coverageMonths: number | null;
@@ -45,6 +66,7 @@ export interface WealthRecord {
   investmentPaise: number;
   restrictedWalletPaise: number;
   allocatablePaise: number;
+  availableCashPaise: number;
   allocatedPaise: number;
   debtPaise: number;
   receivablePaise: number;
@@ -110,6 +132,72 @@ function currentLocalDate(): string {
   }).format(new Date());
 }
 
+const policyGoalTypes: Record<WealthAllocationPolicy, WealthGoalType[]> = {
+  emergency_only: ["emergency_fund"],
+  construction_only: ["home_construction"],
+  retirement: ["retirement"],
+  long_term_wealth: ["long_term_wealth"],
+  short_term: ["short_term", "custom"],
+  flexible: ["short_term", "long_term_wealth", "custom"],
+  none: [],
+};
+
+function normalizedAssetLabel(asset: Pick<StoredAssetRow, "name" | "institution">): string {
+  return `${asset.name} ${asset.institution ?? ""}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function inferAssetPolicy(asset: StoredAssetRow): {
+  allocationPolicy: WealthAllocationPolicy;
+  liquidity: WealthLiquidity;
+} {
+  const label = normalizedAssetLabel(asset);
+  if (asset.restricted === 1 || asset.assetType === "restricted_wallet" || /pluxee|food wallet/.test(label)) {
+    return { allocationPolicy: "none", liquidity: "restricted" };
+  }
+  if (/\b(epf|provident fund|nps|pension)\b/.test(label)) {
+    return { allocationPolicy: "retirement", liquidity: "locked" };
+  }
+  if (/retirement/.test(label)) {
+    return { allocationPolicy: "retirement", liquidity: asset.assetType === "investment" ? "market" : "locked" };
+  }
+  if (/jupiter|home construction|home build|construction fund/.test(label)) {
+    return { allocationPolicy: "construction_only", liquidity: "liquid" };
+  }
+  if (/icici/.test(label) || asset.assetType === "emergency_fund") {
+    return { allocationPolicy: "emergency_only", liquidity: "liquid" };
+  }
+  if (/liquid fund|short term|money market|cash fund|\bfd\b|fixed deposit|\brd\b/.test(label)) {
+    return { allocationPolicy: "short_term", liquidity: asset.assetType === "investment" ? "market" : "liquid" };
+  }
+  if (/mutual fund|\bmf\b|stock|equity|share|index fund/.test(label) || asset.assetType === "investment") {
+    return { allocationPolicy: "long_term_wealth", liquidity: "market" };
+  }
+  return { allocationPolicy: "flexible", liquidity: "liquid" };
+}
+
+function inferGoalType(goal: { name: string; targetMode: FinancialGoalTargetMode }): WealthGoalType {
+  const name = goal.name.toLowerCase();
+  if (goal.targetMode === "emergency_cover" || /emergency|safety reserve/.test(name)) {
+    return "emergency_fund";
+  }
+  if (/home construction|home build|construction/.test(name)) {
+    return "home_construction";
+  }
+  if (/retirement|pension|post retirement/.test(name)) {
+    return "retirement";
+  }
+  if (/wealth|long term|investment|financial independence/.test(name)) {
+    return "long_term_wealth";
+  }
+  if (/travel|vacation|car|vehicle|wedding|short term|purchase/.test(name)) {
+    return "short_term";
+  }
+  return "custom";
+}
+
 export class WealthRepository {
   constructor(private readonly database: FinanceHeroDatabase) {}
 
@@ -128,6 +216,7 @@ export class WealthRepository {
       .reduce((sum, asset) => sum + asset.currentValuePaise, 0);
     const allocatedPaise = assets.reduce((sum, asset) => sum + asset.allocatedPaise, 0);
     const allocatablePaise = assets.reduce((sum, asset) => sum + asset.availablePaise, 0);
+    const availableCashPaise = assets.reduce((sum, asset) => sum + asset.availableCashPaise, 0);
     const monthlyContributionPaise = assets.reduce((sum, asset) => sum + asset.monthlyContributionPaise, 0);
     const debt = this.database.connection
       .prepare(`
@@ -146,6 +235,7 @@ export class WealthRepository {
       investmentPaise,
       restrictedWalletPaise,
       allocatablePaise,
+      availableCashPaise,
       allocatedPaise,
       debtPaise: debt.debtPaise,
       receivablePaise: debt.receivablePaise,
@@ -382,6 +472,9 @@ export class WealthRepository {
       if (asset.restricted && allocation.amountPaise > 0) {
         throw new Error("Restricted wallets cannot fund financial goals.");
       }
+      if (allocation.amountPaise > 0 && !asset.eligibleGoalTypes.includes(goal.goalType)) {
+        throw new Error(`${asset.name} is reserved for ${this.policyLabel(asset.allocationPolicy)}, not ${goal.name}.`);
+      }
       const allocationToOtherGoals =
         asset.allocatedPaise - (goal.allocations.find((item) => item.assetId === asset.id)?.amountPaise ?? 0);
       if (allocationToOtherGoals + allocation.amountPaise > asset.currentValuePaise) {
@@ -419,21 +512,30 @@ export class WealthRepository {
   }
 
   private listAssets(): WealthAssetRecord[] {
-    return this.storedAssets().map((asset) => ({
-      id: asset.id,
-      accountId: asset.accountId,
-      name: asset.name,
-      assetType: asset.assetType,
-      institution: asset.institution,
-      currentValuePaise: Math.max(0, asset.baselineValuePaise + asset.movementPaise),
-      monthlyContributionPaise: asset.monthlyContributionPaise,
-      allocatedPaise: asset.allocatedPaise,
-      availablePaise: asset.restricted
-        ? 0
-        : Math.max(0, asset.baselineValuePaise + asset.movementPaise - asset.allocatedPaise),
-      restricted: asset.restricted === 1,
-      asOfDate: asset.asOfDate,
-    }));
+    return this.storedAssets().map((asset) => {
+      const currentValuePaise = Math.max(0, asset.baselineValuePaise + asset.movementPaise);
+      const availablePaise = asset.restricted ? 0 : Math.max(0, currentValuePaise - asset.allocatedPaise);
+      const { allocationPolicy, liquidity } = inferAssetPolicy(asset);
+      const availableCashPaise =
+        liquidity === "liquid" && ["flexible", "short_term"].includes(allocationPolicy) ? availablePaise : 0;
+      return {
+        id: asset.id,
+        accountId: asset.accountId,
+        name: asset.name,
+        assetType: asset.assetType,
+        institution: asset.institution,
+        currentValuePaise,
+        monthlyContributionPaise: asset.monthlyContributionPaise,
+        allocatedPaise: asset.allocatedPaise,
+        availablePaise,
+        availableCashPaise,
+        allocationPolicy,
+        liquidity,
+        eligibleGoalTypes: policyGoalTypes[allocationPolicy],
+        restricted: asset.restricted === 1,
+        asOfDate: asset.asOfDate,
+      };
+    });
   }
 
   private storedAssets(): StoredAssetRow[] {
@@ -514,6 +616,7 @@ export class WealthRepository {
       const forecastDate = months === null ? null : addMonths(today, months);
       return {
         ...row,
+        goalType: inferGoalType(row),
         targetPaise,
         coverageMonths: row.targetMode === "emergency_cover" ? (row.coverageMonths ?? 3) : null,
         monthlyNeedPaise: row.targetMode === "emergency_cover" ? monthlyNeedPaise : null,
@@ -583,6 +686,19 @@ export class WealthRepository {
       throw new Error("Financial goal does not exist.");
     }
     return goal;
+  }
+
+  private policyLabel(policy: WealthAllocationPolicy): string {
+    const labels: Record<WealthAllocationPolicy, string> = {
+      emergency_only: "the emergency fund",
+      construction_only: "home construction",
+      retirement: "retirement",
+      long_term_wealth: "long-term wealth",
+      short_term: "short-term goals",
+      flexible: "flexible goals",
+      none: "spending only",
+    };
+    return labels[policy];
   }
 
   private insertAudit(action: string, entityType: string, entityId: string, detail: unknown, createdAt: string): void {

@@ -272,7 +272,7 @@ describe("local API", () => {
       method: "POST",
       url: "/api/v1/wealth/goals",
       payload: {
-        name: "Test goal",
+        name: "Long-term wealth test goal",
         targetPaise: 10000000,
         targetDate: "2027-12-31",
         priority: 2,

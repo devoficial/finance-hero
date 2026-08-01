@@ -76,6 +76,29 @@ function assetTypeName(type: WealthAsset["assetType"]) {
   return labels[type];
 }
 
+function policyName(policy: WealthAsset["allocationPolicy"]) {
+  const labels: Record<WealthAsset["allocationPolicy"], string> = {
+    emergency_only: "Emergency fund only",
+    construction_only: "Home construction only",
+    retirement: "Retirement only",
+    long_term_wealth: "Long-term wealth",
+    short_term: "Short-term goals",
+    flexible: "Flexible allocation",
+    none: "Not allocatable",
+  };
+  return labels[policy];
+}
+
+function liquidityName(liquidity: WealthAsset["liquidity"]) {
+  const labels: Record<WealthAsset["liquidity"], string> = {
+    liquid: "Liquid",
+    market: "Market-linked",
+    locked: "Locked / retirement",
+    restricted: "Spending restricted",
+  };
+  return labels[liquidity];
+}
+
 function dateLabel(value: string | null) {
   if (!value) {
     return "No date set";
@@ -192,7 +215,7 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
     return <section className="panel loading-panel">Valuing savings and calculating goal forecasts...</section>;
   }
 
-  const unrestrictedAssets = data.assets.filter((asset) => !asset.restricted);
+  const allocatableAssets = data.assets.filter((asset) => asset.allocationPolicy !== "none");
   const activeGoals = data.goals.filter((goal) => goal.status === "active");
   const emergencyMonthlyNeedPaise =
     data.goals.find((goal) => goal.targetMode === "emergency_cover")?.monthlyNeedPaise ?? 0;
@@ -348,12 +371,20 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
     setGoalForm(null);
     setFormError(null);
     setAllocationGoal(goal);
+    const eligibleAssets = allocatableAssets.filter(
+      (asset) =>
+        asset.eligibleGoalTypes.includes(goal.goalType) ||
+        goal.allocations.some((allocation) => allocation.assetId === asset.id),
+    );
+    let defaultRemainingPaise = goal.allocations.length === 0 ? goal.targetPaise : 0;
     setAllocationValues(
       Object.fromEntries(
-        unrestrictedAssets.map((asset) => [
-          asset.id,
-          String((goal.allocations.find((allocation) => allocation.assetId === asset.id)?.amountPaise ?? 0) / 100),
-        ]),
+        eligibleAssets.map((asset) => {
+          const existing = goal.allocations.find((allocation) => allocation.assetId === asset.id)?.amountPaise ?? 0;
+          const suggested = existing > 0 ? existing : Math.min(asset.availablePaise, defaultRemainingPaise);
+          defaultRemainingPaise = Math.max(0, defaultRemainingPaise - suggested);
+          return [asset.id, String(suggested / 100)];
+        }),
       ),
     );
   }
@@ -363,7 +394,12 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
     if (!allocationGoal) {
       return;
     }
-    const allocations = unrestrictedAssets.map((asset) => ({
+    const eligibleAssets = allocatableAssets.filter(
+      (asset) =>
+        asset.eligibleGoalTypes.includes(allocationGoal.goalType) ||
+        allocationGoal.allocations.some((allocation) => allocation.assetId === asset.id),
+    );
+    const allocations = eligibleAssets.map((asset) => ({
       assetId: asset.id,
       amountPaise: rupeesToPaise(allocationValues[asset.id] ?? ""),
     }));
@@ -414,15 +450,35 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
           <small>{fundedPercentage}% of combined targets funded</small>
         </article>
         <article>
-          <span>Available to allocate</span>
-          <strong>{money(data.allocatablePaise)}</strong>
-          <small>Excludes food-only spending wallets</small>
+          <span>Available cash</span>
+          <strong>{money(data.availableCashPaise)}</strong>
+          <small>Excludes reserved, market-linked and locked assets</small>
         </article>
         <article className={data.netWorthPaise < 0 ? "negative" : "positive"}>
           <span>Tracked net worth</span>
           <strong>{money(data.netWorthPaise)}</strong>
           <small>Assets + receivables - obligations</small>
         </article>
+      </section>
+
+      <section className="goal-policy-strip" aria-label="Automatic account allocation policy">
+        <strong>ACCOUNT RULES</strong>
+        <span>
+          <b>Emergency</b> ICICI savings
+        </span>
+        <span>
+          <b>Construction</b> Jupiter only
+        </span>
+        <span>
+          <b>Retirement</b> EPF, NPS, retirement MFs
+        </span>
+        <span>
+          <b>Long-term</b> mutual funds and stocks
+        </span>
+        <span>
+          <b>Short-term</b> liquid funds and cash
+        </span>
+        <small>Pluxee is excluded; EPF and NPS are never available cash.</small>
       </section>
 
       <section className="goal-guidance-bar" aria-label="Financial plan guidance">
@@ -763,57 +819,64 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
               <div className="allocation-form-context">
                 <span>Goal target</span>
                 <strong>{money(allocationGoal.targetPaise)}</strong>
-                <small>Allocations earmark existing balances; they do not move or spend money.</small>
+                <small>
+                  {allocationGoal.goalType.replaceAll("_", " ")} policy · suggested values are not saved until you
+                  confirm.
+                </small>
               </div>
               <div className="allocation-fields">
-                {unrestrictedAssets.map((asset) => {
-                  const currentGoalAmount =
-                    allocationGoal.allocations.find((allocation) => allocation.assetId === asset.id)?.amountPaise ?? 0;
-                  const availableForGoal = asset.availablePaise + currentGoalAmount;
-                  return (
-                    <label key={asset.id}>
-                      <span>
-                        <b>{asset.name}</b>
-                        <small>{money(availableForGoal)} available for this goal</small>
-                      </span>
-                      <input
-                        aria-label={`${asset.name} allocation in INR`}
-                        max={availableForGoal / 100}
-                        min="0"
-                        step="0.01"
-                        type="number"
-                        value={allocationValues[asset.id] ?? ""}
-                        onChange={(event) =>
-                          setAllocationValues((current) => ({ ...current, [asset.id]: event.target.value }))
-                        }
-                      />
-                      <button
-                        disabled={availableForGoal <= 0}
-                        onClick={() =>
-                          setAllocationValues((current) => ({
-                            ...current,
-                            [asset.id]: String(
-                              Math.min(availableForGoal, allocationGoal.remainingPaise + currentGoalAmount) / 100,
-                            ),
-                          }))
-                        }
-                        type="button"
-                      >
-                        Use available
-                      </button>
-                    </label>
-                  );
-                })}
+                {allocatableAssets
+                  .filter(
+                    (asset) =>
+                      asset.eligibleGoalTypes.includes(allocationGoal.goalType) ||
+                      allocationGoal.allocations.some((allocation) => allocation.assetId === asset.id),
+                  )
+                  .map((asset) => {
+                    const currentGoalAmount =
+                      allocationGoal.allocations.find((allocation) => allocation.assetId === asset.id)?.amountPaise ??
+                      0;
+                    const availableForGoal = asset.availablePaise + currentGoalAmount;
+                    return (
+                      <label key={asset.id}>
+                        <span>
+                          <b>{asset.name}</b>
+                          <small>{money(availableForGoal)} available for this goal</small>
+                        </span>
+                        <input
+                          aria-label={`${asset.name} allocation in INR`}
+                          max={availableForGoal / 100}
+                          min="0"
+                          step="0.01"
+                          type="number"
+                          value={allocationValues[asset.id] ?? ""}
+                          onChange={(event) =>
+                            setAllocationValues((current) => ({ ...current, [asset.id]: event.target.value }))
+                          }
+                        />
+                        <button
+                          disabled={availableForGoal <= 0}
+                          onClick={() =>
+                            setAllocationValues((current) => ({
+                              ...current,
+                              [asset.id]: String(
+                                Math.min(availableForGoal, allocationGoal.remainingPaise + currentGoalAmount) / 100,
+                              ),
+                            }))
+                          }
+                          type="button"
+                        >
+                          Use available
+                        </button>
+                      </label>
+                    );
+                  })}
               </div>
-              {unrestrictedAssets.every((asset) => asset.availablePaise <= 0) && (
+              {allocatableAssets.every(
+                (asset) => !asset.eligibleGoalTypes.includes(allocationGoal.goalType) || asset.availablePaise <= 0,
+              ) && (
                 <div className="allocation-empty-state">
-                  <strong>No unallocated savings are currently recorded.</strong>
-                  <span>Update the current value of a savings or emergency-fund asset, then allocate it here.</span>
-                  {unrestrictedAssets[0] && (
-                    <button onClick={() => startAsset(unrestrictedAssets[0])} type="button">
-                      Update savings balance
-                    </button>
-                  )}
+                  <strong>No eligible balance is available for this goal.</strong>
+                  <span>Add or update an account whose purpose matches this goal.</span>
                 </div>
               )}
               <button className="wealth-save" disabled={allocationMutation.isPending} type="submit">
@@ -896,17 +959,9 @@ export function GoalsView({ data, dashboard, liabilities, loading, money }: Goal
                 </div>
                 <b>{money(asset.currentValuePaise)}</b>
                 <div className="asset-allocation">
-                  <span>
-                    {asset.restricted
-                      ? "Food spending only · excluded from goals"
-                      : `${money(asset.allocatedPaise)} allocated`}
-                  </span>
+                  <span>{policyName(asset.allocationPolicy)}</span>
                   <small>
-                    {asset.assetType === "restricted_wallet"
-                      ? "Use for orders and groceries"
-                      : asset.monthlyContributionPaise > 0
-                        ? `${money(asset.monthlyContributionPaise)} / month`
-                        : "No monthly plan"}
+                    {liquidityName(asset.liquidity)} · {money(asset.allocatedPaise)} allocated
                   </small>
                 </div>
                 <div className="asset-row-actions">

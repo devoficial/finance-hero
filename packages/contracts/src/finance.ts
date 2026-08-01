@@ -488,6 +488,24 @@ export const updateProjectCommitmentRequestSchema = z
   .refine((value) => Object.keys(value).length > 0, { message: "At least one commitment field is required." });
 
 export const wealthAssetTypeSchema = z.enum(["savings", "investment", "emergency_fund", "restricted_wallet"]);
+export const wealthGoalTypeSchema = z.enum([
+  "emergency_fund",
+  "home_construction",
+  "retirement",
+  "long_term_wealth",
+  "short_term",
+  "custom",
+]);
+export const wealthAllocationPolicySchema = z.enum([
+  "emergency_only",
+  "construction_only",
+  "retirement",
+  "long_term_wealth",
+  "short_term",
+  "flexible",
+  "none",
+]);
+export const wealthLiquiditySchema = z.enum(["liquid", "market", "locked", "restricted"]);
 
 export const wealthAssetSchema = z.object({
   id: z.string(),
@@ -499,6 +517,10 @@ export const wealthAssetSchema = z.object({
   monthlyContributionPaise: paiseSchema.nonnegative(),
   allocatedPaise: paiseSchema.nonnegative(),
   availablePaise: paiseSchema.nonnegative(),
+  availableCashPaise: paiseSchema.nonnegative(),
+  allocationPolicy: wealthAllocationPolicySchema,
+  liquidity: wealthLiquiditySchema,
+  eligibleGoalTypes: z.array(wealthGoalTypeSchema),
   restricted: z.boolean(),
   asOfDate: localDateSchema,
 });
@@ -506,6 +528,7 @@ export const wealthAssetSchema = z.object({
 export const financialGoalSchema = z.object({
   id: z.string(),
   name: z.string(),
+  goalType: wealthGoalTypeSchema,
   targetPaise: paiseSchema.positive(),
   targetMode: z.enum(["fixed", "emergency_cover"]),
   coverageMonths: z.number().int().min(1).max(24).nullable(),
@@ -535,6 +558,7 @@ export const wealthResponseSchema = z.object({
   investmentPaise: paiseSchema.nonnegative(),
   restrictedWalletPaise: paiseSchema.nonnegative(),
   allocatablePaise: paiseSchema.nonnegative(),
+  availableCashPaise: paiseSchema.nonnegative(),
   allocatedPaise: paiseSchema.nonnegative(),
   debtPaise: paiseSchema.nonnegative(),
   receivablePaise: paiseSchema.nonnegative(),
@@ -723,6 +747,9 @@ export type UpdateProjectCommitmentRequest = z.infer<typeof updateProjectCommitm
 export type WealthAsset = z.infer<typeof wealthAssetSchema>;
 export type FinancialGoal = z.infer<typeof financialGoalSchema>;
 export type WealthResponse = z.infer<typeof wealthResponseSchema>;
+export type WealthGoalType = z.infer<typeof wealthGoalTypeSchema>;
+export type WealthAllocationPolicy = z.infer<typeof wealthAllocationPolicySchema>;
+export type WealthLiquidity = z.infer<typeof wealthLiquiditySchema>;
 export type CreateWealthAssetRequest = z.infer<typeof createWealthAssetRequestSchema>;
 export type UpdateWealthAssetRequest = z.infer<typeof updateWealthAssetRequestSchema>;
 export type CreateFinancialGoalRequest = z.infer<typeof createFinancialGoalRequestSchema>;

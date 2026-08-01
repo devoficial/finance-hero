@@ -127,7 +127,7 @@ describe("wealth repository", () => {
     ).toThrow("Restricted wallets cannot fund financial goals.");
     expect(() =>
       wealth.updateGoalAllocations(goal.id, [{ assetId: "asset-savings", amountPaise: 10000 }], "2026-07-23"),
-    ).toThrow("Jupiter construction account does not have enough unallocated value.");
+    ).toThrow("Jupiter construction account is reserved for home construction");
 
     const asset = wealth.createAsset({
       name: "Travel fund",
@@ -145,6 +145,107 @@ describe("wealth repository", () => {
     );
     expect(allocated.progressPercentage).toBe(17);
     expect(allocated.forecastDate).toBe("2027-05-23");
+    database.close();
+  });
+
+  it("classifies account purposes and keeps retirement assets out of available cash", () => {
+    const { database, wealth } = createRepositories();
+    const icici = wealth.createAsset({
+      name: "ICICI Bank Account",
+      assetType: "savings",
+      institution: "ICICI Bank",
+      currentValuePaise: 2000000,
+      monthlyContributionPaise: 2000000,
+      restricted: false,
+      asOfDate: "2026-08-02",
+    });
+    const nps = wealth.createAsset({
+      name: "NPS Tier I",
+      assetType: "investment",
+      institution: "CRA",
+      currentValuePaise: 5000000,
+      monthlyContributionPaise: 1000000,
+      restricted: false,
+      asOfDate: "2026-08-02",
+    });
+    const stocks = wealth.createAsset({
+      name: "Direct stocks",
+      assetType: "investment",
+      institution: "Broker",
+      currentValuePaise: 3000000,
+      monthlyContributionPaise: 0,
+      restricted: false,
+      asOfDate: "2026-08-02",
+    });
+
+    const snapshot = wealth.getWealth("2026-08-02");
+    expect(snapshot.assets.find((asset) => asset.id === icici.id)).toMatchObject({
+      allocationPolicy: "emergency_only",
+      liquidity: "liquid",
+      availableCashPaise: 0,
+      eligibleGoalTypes: ["emergency_fund"],
+    });
+    expect(snapshot.assets.find((asset) => asset.id === nps.id)).toMatchObject({
+      allocationPolicy: "retirement",
+      liquidity: "locked",
+      availableCashPaise: 0,
+      eligibleGoalTypes: ["retirement"],
+    });
+    expect(snapshot.assets.find((asset) => asset.id === stocks.id)).toMatchObject({
+      allocationPolicy: "long_term_wealth",
+      liquidity: "market",
+      availableCashPaise: 0,
+      eligibleGoalTypes: ["long_term_wealth"],
+    });
+    database.close();
+  });
+
+  it("enforces emergency, retirement, and long-term goal account rules", () => {
+    const { database, wealth } = createRepositories();
+    const icici = wealth.createAsset({
+      name: "ICICI emergency savings",
+      assetType: "savings",
+      institution: "ICICI Bank",
+      currentValuePaise: 2000000,
+      monthlyContributionPaise: 2000000,
+      restricted: false,
+      asOfDate: "2026-08-02",
+    });
+    const epf = wealth.createAsset({
+      name: "EPF",
+      assetType: "investment",
+      institution: "EPFO",
+      currentValuePaise: 4000000,
+      monthlyContributionPaise: 1000000,
+      restricted: false,
+      asOfDate: "2026-08-02",
+    });
+    const emergency = wealth.getWealth("2026-08-02").goals.find((goal) => goal.targetMode === "emergency_cover");
+    if (!emergency) {
+      throw new Error("Expected seeded emergency goal.");
+    }
+    expect(
+      wealth.updateGoalAllocations(emergency.id, [{ assetId: icici.id, amountPaise: 2000000 }], "2026-08-02"),
+    ).toMatchObject({ allocatedPaise: 2000000, goalType: "emergency_fund" });
+    expect(() =>
+      wealth.updateGoalAllocations(emergency.id, [{ assetId: epf.id, amountPaise: 1000000 }], "2026-08-02"),
+    ).toThrow("EPF is reserved for retirement");
+
+    const retirement = wealth.createGoal(
+      {
+        name: "Retirement corpus",
+        targetPaise: 100000000,
+        priority: 2,
+        monthlyContributionPaise: 1000000,
+      },
+      "2026-08-02",
+    );
+    expect(
+      wealth.updateGoalAllocations(retirement.id, [{ assetId: epf.id, amountPaise: 4000000 }], "2026-08-02"),
+    ).toMatchObject({ allocatedPaise: 4000000, goalType: "retirement" });
+    expect(() =>
+      wealth.updateGoalAllocations(retirement.id, [{ assetId: icici.id, amountPaise: 1000000 }], "2026-08-02"),
+    ).toThrow("ICICI emergency savings is reserved for the emergency fund");
     database.close();
   });
 

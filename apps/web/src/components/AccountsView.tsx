@@ -48,6 +48,19 @@ function balanceSourceLabel(account: FinancialAccount): string {
   return "Direct valuation";
 }
 
+function allocationPolicyLabel(policy: WealthResponse["assets"][number]["allocationPolicy"]): string {
+  const labels = {
+    emergency_only: "Emergency only",
+    construction_only: "Construction only",
+    retirement: "Retirement only",
+    long_term_wealth: "Long-term wealth",
+    short_term: "Short-term goals",
+    flexible: "Flexible",
+    none: "Not allocatable",
+  } as const;
+  return labels[policy];
+}
+
 export function AccountsView({
   data,
   loading,
@@ -128,6 +141,10 @@ export function AccountsView({
       return filterMatches && searchMatches;
     });
   }, [data?.accounts, filter, search]);
+  const wealthByAccountId = useMemo(
+    () => new Map((wealth?.assets ?? []).map((asset) => [asset.accountId, asset])),
+    [wealth?.assets],
+  );
 
   if (loading || !data) {
     return <section className="panel loading-panel">Reading the account registry...</section>;
@@ -369,6 +386,14 @@ export function AccountsView({
                     {account.transactionCount} {account.transactionCount === 1 ? "entry" : "entries"}
                   </strong>
                 </span>
+                {wealthByAccountId.get(account.id) && (
+                  <span>
+                    <small>GOAL RULE</small>
+                    <strong>
+                      {allocationPolicyLabel(wealthByAccountId.get(account.id)?.allocationPolicy ?? "none")}
+                    </strong>
+                  </span>
+                )}
               </div>
               <div className="account-row-actions">
                 <button className="table-action" onClick={() => openEditForm(account)} type="button">

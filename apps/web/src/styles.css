@@ -8729,6 +8729,33 @@ h2 {
   color: var(--red);
 }
 
+.goal-policy-strip {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-top: 0;
+  background: color-mix(in srgb, var(--green) 7%, var(--paper));
+  white-space: nowrap;
+}
+
+.goal-policy-strip > * {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  border-right: 1px solid var(--line);
+}
+
+.goal-policy-strip strong,
+.goal-policy-strip b {
+  color: var(--green);
+}
+
+.goal-policy-strip span,
+.goal-policy-strip small {
+  font-size: 12px;
+}
+
 @media (max-width: 1050px) {
   .goal-guidance-bar {
     grid-template-columns: minmax(0, 1fr) repeat(2, minmax(110px, 0.3fr)) auto;
