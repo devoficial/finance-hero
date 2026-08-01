@@ -106,7 +106,7 @@ export function changedBudgetLine(
   comment: string,
 ): BudgetLineUpdate | null {
   const changedActual = actualPaise !== line.spentPaise;
-  const changedLimit = line.budgetEligible && plannedPaise !== line.plannedPaise;
+  const changedLimit = plannedPaise !== line.plannedPaise;
   const changedComment = comment !== line.comment;
   if (!changedActual && !changedLimit && !changedComment) return null;
 
@@ -431,7 +431,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
       const draft = lineValues[line.categoryId] ?? draftFor(line);
       const actualPaise = parseRupeeExpression(draft.actual);
       const plannedPaise = parseRupeeExpression(draft.limit);
-      if (actualPaise == null || (line.budgetEligible && plannedPaise == null)) {
+      if (actualPaise == null || plannedPaise == null) {
         setValidationError(`Enter valid non-negative INR amounts for ${line.categoryName}.`);
         return;
       }
@@ -827,38 +827,30 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
                     </div>
                   </td>
                   <td>
-                    {line.budgetEligible ? (
-                      <div className="sheet-money-input">
-                        <b>₹</b>
-                        <input
-                          aria-label={`${line.categoryName} limit in INR`}
-                          inputMode="decimal"
-                          onBlur={() => normalizeDraftMoney(line.categoryId, "limit")}
-                          onChange={(event) => updateDraft(line.categoryId, "limit", event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              event.currentTarget.blur();
-                            }
-                          }}
-                          placeholder="20500+1000"
-                          type="text"
-                          value={draft.limit}
-                        />
-                      </div>
-                    ) : (
-                      <span className="sheet-not-applicable">—</span>
-                    )}
+                    <div className="sheet-money-input">
+                      <b>₹</b>
+                      <input
+                        aria-label={`${line.categoryName} limit in INR`}
+                        inputMode="decimal"
+                        onBlur={() => normalizeDraftMoney(line.categoryId, "limit")}
+                        onChange={(event) => updateDraft(line.categoryId, "limit", event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            event.currentTarget.blur();
+                          }
+                        }}
+                        placeholder="0"
+                        type="text"
+                        value={draft.limit}
+                      />
+                    </div>
                   </td>
                   <td>
-                    {line.budgetEligible ? (
-                      <strong className={remaining < 0 ? "sheet-over" : "sheet-short"}>
-                        {remaining < 0 ? "-" : "+"}
-                        {money(Math.abs(remaining))}
-                      </strong>
-                    ) : (
-                      <span className="sheet-not-applicable">Tracked total</span>
-                    )}
+                    <strong className={remaining < 0 ? "sheet-over" : "sheet-short"}>
+                      {remaining < 0 ? "-" : "+"}
+                      {money(Math.abs(remaining))}
+                    </strong>
                   </td>
                   <td>
                     <input

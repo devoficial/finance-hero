@@ -228,9 +228,6 @@ export class BudgetRepository {
       if (seen.has(line.categoryId)) {
         throw new Error("Expense sheet category was provided more than once.");
       }
-      if (line.plannedPaise !== undefined && category.budgetEligible !== 1 && line.plannedPaise !== 0) {
-        throw new Error("Only regular expense categories can have a monthly limit.");
-      }
       seen.add(line.categoryId);
     }
     for (const adjustment of input.cashAdjustments ?? []) {
@@ -267,7 +264,7 @@ export class BudgetRepository {
         `)
         .run(month, input.plannedIncomePaise ?? before.plannedIncomePaise, now);
 
-      // A new month starts with the latest saved limit for every regular category.
+      // A new month starts with the latest saved limit for every tracker category.
       // Once materialized, each row remains independently editable for that month.
       this.database.connection
         .prepare(`
@@ -281,8 +278,7 @@ export class BudgetRepository {
                    LIMIT 1
                  ), 0)
           FROM categories c
-          WHERE c.budget_eligible = 1
-            AND NOT EXISTS (
+          WHERE NOT EXISTS (
               SELECT 1 FROM budget_lines current
               WHERE current.month = ? AND current.category_id = c.id
             )
@@ -324,7 +320,7 @@ export class BudgetRepository {
       for (const line of input.lines ?? []) {
         const category = categoryById.get(line.categoryId);
         if (!category) continue;
-        if (line.plannedPaise !== undefined && category.budgetEligible === 1) {
+        if (line.plannedPaise !== undefined) {
           upsertLine.run(month, line.categoryId, line.plannedPaise);
         }
         if (line.actualPaise !== undefined) {

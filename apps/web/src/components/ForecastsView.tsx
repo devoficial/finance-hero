@@ -35,6 +35,12 @@ function paiseFromRupees(value: string): number {
   return Number.isSafeInteger(paise) && paise >= 0 ? paise : 0;
 }
 
+export const PERSONAL_MONTHLY_SALARY_PAISE = 30089300;
+
+export function forecastIncomeDefault(dashboard?: DashboardResponse): number {
+  return dashboard && dashboard.plannedIncomePaise > 0 ? dashboard.plannedIncomePaise : PERSONAL_MONTHLY_SALARY_PAISE;
+}
+
 export function ForecastsView({
   dashboard,
   liabilities,
@@ -55,7 +61,7 @@ export function ForecastsView({
     if (!dashboard) {
       return;
     }
-    setScenarioIncome(String(dashboard.plannedIncomePaise / 100));
+    setScenarioIncome(String(forecastIncomeDefault(dashboard) / 100));
     setScenarioExpense(String(dashboard.regularBudgetPaise / 100));
     setExtraDebtPayment("0");
     setIncomeGrowth("0");
@@ -66,7 +72,7 @@ export function ForecastsView({
     if (!dashboard) {
       return;
     }
-    setScenarioIncome(String(dashboard.plannedIncomePaise / 100));
+    setScenarioIncome(String(forecastIncomeDefault(dashboard) / 100));
     setScenarioExpense(String(dashboard.regularBudgetPaise / 100));
     setExtraDebtPayment("0");
     setIncomeGrowth("0");
@@ -74,7 +80,7 @@ export function ForecastsView({
   }, [dashboard]);
 
   const scenarioIncomePaise =
-    scenarioIncome === "" ? (dashboard?.plannedIncomePaise ?? 0) : paiseFromRupees(scenarioIncome);
+    scenarioIncome === "" ? forecastIncomeDefault(dashboard) : paiseFromRupees(scenarioIncome);
   const scenarioExpensePaise =
     scenarioExpense === "" ? (dashboard?.regularBudgetPaise ?? 0) : paiseFromRupees(scenarioExpense);
   const extraDebtPaymentPaise = paiseFromRupees(extraDebtPayment);
@@ -149,7 +155,7 @@ export function ForecastsView({
     (item) => item.status === "active" && item.currentPrincipalPaise > 0 && item.annualRateBps == null,
   ).length;
   const scenarioChanged =
-    scenarioIncomePaise !== dashboard.plannedIncomePaise ||
+    scenarioIncomePaise !== forecastIncomeDefault(dashboard) ||
     scenarioExpensePaise !== dashboard.regularBudgetPaise ||
     extraDebtPaymentPaise !== 0 ||
     Number(incomeGrowth) !== 0 ||

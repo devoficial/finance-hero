@@ -371,11 +371,22 @@ describe("budget repository", () => {
     expect(ledger.getExpenseYear("2026").months[7]).toMatchObject({ regularBudgetPaise: 6004800 });
 
     repository.updateMonth("2026-08", {
-      lines: [{ categoryId: "category-rent", plannedPaise: 2200000 }],
+      lines: [
+        { categoryId: "category-rent", plannedPaise: 2200000 },
+        { categoryId: "category-home-construction", plannedPaise: 5000000 },
+      ],
     });
     expect(repository.getMonth("2026-08").regularBudgetPaise).toBe(6154800);
+    expect(
+      repository.getMonth("2026-08").lines.find((line) => line.categoryId === "category-home-construction")
+        ?.plannedPaise,
+    ).toBe(5000000);
     expect(repository.getMonth("2026-07").regularBudgetPaise).toBe(6004800);
     expect(repository.getMonth("2026-09").regularBudgetPaise).toBe(6154800);
+    expect(
+      repository.getMonth("2026-09").lines.find((line) => line.categoryId === "category-home-construction")
+        ?.plannedPaise,
+    ).toBe(5000000);
     database.close();
   });
 

@@ -15,6 +15,18 @@ const rentLine: BudgetLine = {
   updatedAt: null,
 };
 
+const homeConstructionLine: BudgetLine = {
+  ...rentLine,
+  categoryId: "category-home-construction",
+  categoryName: "Home construction",
+  broadBucket: "asset_building",
+  budgetEligible: false,
+  alertEligible: false,
+  plannedPaise: 0,
+  spentPaise: 0,
+  remainingPaise: 0,
+};
+
 describe("expense sheet updates", () => {
   it("includes the changed monthly limit in the save payload", () => {
     expect(changedBudgetLine(rentLine, rentLine.spentPaise, 2_050_100, "")).toEqual({
@@ -25,5 +37,12 @@ describe("expense sheet updates", () => {
 
   it("does not emit a row when nothing changed", () => {
     expect(changedBudgetLine(rentLine, rentLine.spentPaise, rentLine.plannedPaise, "")).toBeNull();
+  });
+
+  it("saves a plan limit for non-regular tracker categories", () => {
+    expect(changedBudgetLine(homeConstructionLine, 0, 500_000, "")).toEqual({
+      categoryId: "category-home-construction",
+      plannedPaise: 500_000,
+    });
   });
 });
