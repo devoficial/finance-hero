@@ -1148,6 +1148,57 @@ h2 {
   font-size: 10px;
   font-weight: 800;
 }
+.month-command-brief {
+  display: grid;
+  grid-template-columns: minmax(185px, 0.85fr) repeat(4, minmax(0, 1fr));
+  margin: -1px 0 16px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--green);
+  background: rgba(247, 244, 236, 0.96);
+}
+.month-command-brief > header,
+.month-command-brief > div {
+  min-width: 0;
+  padding: 11px 14px;
+  border-right: 1px solid var(--line);
+}
+.month-command-brief > div:last-child {
+  border-right: 0;
+}
+.month-command-brief header,
+.month-command-brief > div {
+  display: grid;
+  gap: 3px;
+  align-content: center;
+}
+.month-command-brief span,
+.month-command-brief small {
+  color: #52645c;
+  font:
+    8px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.month-command-brief strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.month-command-brief header strong {
+  font:
+    17px "Newsreader",
+    serif;
+}
+.month-command-brief.danger {
+  border-left-color: var(--red);
+}
+.month-command-brief .negative strong,
+.month-command-brief .negative small {
+  color: var(--red);
+}
 .finance-kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3863,6 +3914,69 @@ h2 {
   width: 100%;
   min-width: 0;
 }
+.project-command-bar {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.8fr) minmax(580px, 2fr) auto;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--green);
+  background: rgba(247, 244, 236, 0.96);
+}
+.project-command-title {
+  display: grid;
+  align-content: center;
+  padding: 15px 18px;
+  border-right: 1px solid var(--line);
+}
+.project-command-title h2 {
+  font-size: clamp(24px, 2.4vw, 34px);
+}
+.project-command-title p:last-child {
+  margin: 3px 0 0;
+  color: #52645c;
+  font-size: 10px;
+}
+.project-command-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
+}
+.project-command-metrics article {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  align-content: center;
+  padding: 12px 10px;
+  border-right: 1px solid var(--line);
+}
+.project-command-metrics article.forecast {
+  box-shadow: inset 0 4px var(--yellow);
+}
+.project-command-metrics article.review {
+  background: #f4e8c0;
+}
+.project-command-metrics span,
+.project-command-metrics small {
+  color: #52645c;
+  font:
+    8px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.project-command-metrics strong {
+  overflow: hidden;
+  font:
+    clamp(15px, 1.3vw, 19px) "Newsreader",
+    serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-command-bar .project-status-stack {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 10px;
+}
 .project-brief {
   display: flex;
   justify-content: space-between;
@@ -3981,11 +4095,34 @@ h2 {
   background: var(--green);
   color: white;
 }
-.project-trend .panel-heading > span {
+.project-trend {
+  padding: 0;
+  overflow: hidden;
+}
+.project-trend > summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+.project-trend > summary::-webkit-details-marker {
+  display: none;
+}
+.project-trend > summary strong {
+  font-size: 13px;
+}
+.project-trend > summary > span {
   color: #52655c;
   font:
     10px "DM Mono",
     monospace;
+}
+.project-trend[open] > summary {
+  border-bottom: 1px solid var(--line);
+  background: #e8eee9;
 }
 .project-bars {
   height: 220px;
@@ -4060,6 +4197,9 @@ h2 {
 .project-tabs button.active {
   border-bottom-color: var(--green);
   color: var(--green);
+}
+.project-tabs button.project-review-tab {
+  color: #8d5515;
 }
 .project-tabs span {
   margin-left: 5px;
@@ -5831,6 +5971,16 @@ h2 {
   .metric-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+  .month-command-brief {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .month-command-brief > header {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--line);
+  }
+  .month-command-brief > div:nth-child(3) {
+    border-right: 0;
+  }
   .finance-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -6074,6 +6224,17 @@ h2 {
   .expense-sheet-summary > div:last-child {
     grid-column: 1 / -1;
     border-bottom: 0;
+  }
+  .project-command-bar {
+    grid-template-columns: 1fr auto;
+  }
+  .project-command-title {
+    border-right: 0;
+  }
+  .project-command-metrics {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    border-top: 1px solid var(--line);
   }
 }
 
@@ -6324,6 +6485,15 @@ h2 {
   .financial-signal button {
     justify-self: start;
   }
+  .month-command-brief {
+    grid-template-columns: 1fr 1fr;
+  }
+  .month-command-brief > header {
+    grid-column: 1 / -1;
+  }
+  .month-command-brief > div {
+    padding: 10px;
+  }
   .finance-kpi-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -6515,6 +6685,39 @@ h2 {
     display: grid;
     min-width: 0;
     padding: 18px;
+  }
+  .project-command-bar {
+    grid-template-columns: 1fr;
+  }
+  .project-command-title,
+  .project-command-bar .project-status-stack {
+    grid-column: 1;
+  }
+  .project-command-title {
+    grid-row: 1;
+  }
+  .project-command-bar .project-status-stack {
+    display: flex;
+    grid-row: 2;
+    padding-top: 0;
+  }
+  .project-command-metrics {
+    grid-column: 1;
+    grid-row: 3;
+    grid-template-columns: 1fr 1fr;
+  }
+  .project-command-metrics article:nth-child(2) {
+    border-right: 0;
+  }
+  .project-command-metrics article:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+  .project-trend > summary {
+    align-items: flex-start;
+  }
+  .project-trend > summary > span {
+    max-width: 48%;
+    text-align: right;
   }
   .project-brief > div,
   .project-alert > div,

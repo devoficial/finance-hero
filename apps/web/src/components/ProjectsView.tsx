@@ -189,69 +189,50 @@ export function ProjectsView({ data, referenceData, loading, money }: ProjectsVi
 
   return (
     <section className="project-workspace">
-      <div className="project-brief">
-        <div>
+      <header className="project-command-bar">
+        <div className="project-command-title">
           <p className="eyebrow">PROJECT CONTROL / MIGRATED SOURCE SNAPSHOT</p>
           <h2>{data.name}</h2>
-          <p>Construction is active. The old sheet is preserved as-is; new entries update your financial records.</p>
+          <p>
+            Active build · latest source entry {data.latestExpenseOn ? displayDate(data.latestExpenseOn) : "not dated"}
+          </p>
+        </div>
+        <div className="project-command-metrics">
+          <article>
+            <span>ACTUAL</span>
+            <strong>{money(data.actualExpensePaise)}</strong>
+            <small>{money(data.excludedPaise)} excluded</small>
+          </article>
+          <article>
+            <span>PENDING</span>
+            <strong>{money(data.pendingCommitmentPaise)}</strong>
+            <small>{data.commitments.filter((item) => item.status !== "settled").length} vendors</small>
+          </article>
+          <article className="forecast">
+            <span>FORECAST</span>
+            <strong>{money(data.forecastPaise)}</strong>
+            <small>actual + pending</small>
+          </article>
+          <article className={data.needsReviewCount > 0 ? "review" : ""}>
+            <span>REVIEW</span>
+            <strong>{data.needsReviewCount}</strong>
+            <small>rows need decisions</small>
+          </article>
         </div>
         <div className="project-status-stack">
-          <span className="project-status active">ACTIVE PROJECT</span>
-          <span className="project-status stale">NEEDS UPDATE</span>
+          <span className="project-status active">ACTIVE</span>
+          <span className="project-status stale">SOURCE STALE</span>
         </div>
-      </div>
+      </header>
 
-      <div className="project-kpis">
-        <article>
-          <span>SOURCE RECORDED</span>
-          <strong>{money(data.sourceExpensePaise)}</strong>
-          <small>{data.expenses.length} migrated expense rows</small>
-        </article>
-        <article>
-          <span>INCLUDED ACTUAL</span>
-          <strong>{money(data.actualExpensePaise)}</strong>
-          <small>{money(data.excludedPaise)} explicitly excluded</small>
-        </article>
-        <article>
-          <span>PENDING COMMITMENTS</span>
-          <strong>{money(data.pendingCommitmentPaise)}</strong>
-          <small>{data.commitments.filter((item) => item.status !== "settled").length} vendor balances</small>
-        </article>
-        <article className="forecast">
-          <span>PRELIMINARY FORECAST</span>
-          <strong>{money(data.forecastPaise)}</strong>
-          <small>Included actual + current pending</small>
-        </article>
-      </div>
-
-      <div className="project-alert">
-        <b>{data.needsReviewCount}</b>
-        <div>
-          <strong>Imported rows still need a decision</strong>
-          <span>
-            Latest source entry: {data.latestExpenseOn ? displayDate(data.latestExpenseOn) : "None"}. Forecast remains
-            preliminary until vendor balances are refreshed.
-          </span>
-        </div>
-        <button
-          onClick={() => {
-            setTab("expenses");
-            setExpenseFilter("needs_review");
-          }}
-          type="button"
-        >
-          Review flagged rows
-        </button>
-      </div>
-
-      <article className="panel project-trend">
-        <div className="panel-heading compact">
+      <details className="panel project-trend">
+        <summary>
           <div>
             <p className="eyebrow">MONTHLY BUILD COST</p>
-            <h2>Spend velocity</h2>
+            <strong>Spend velocity</strong>
           </div>
-          <span>{money(data.actualExpensePaise)} included</span>
-        </div>
+          <span>{money(data.sourceExpensePaise)} source recorded · expand chart</span>
+        </summary>
         <div className="project-bars" aria-label="Monthly Home Construction spend chart" role="img">
           {data.monthlySpend.map((item) => (
             <div key={item.month}>
@@ -265,7 +246,7 @@ export function ProjectsView({ data, referenceData, loading, money }: ProjectsVi
             </div>
           ))}
         </div>
-      </article>
+      </details>
 
       <article className="panel project-register">
         <div className="project-register-head">
@@ -276,6 +257,18 @@ export function ProjectsView({ data, referenceData, loading, money }: ProjectsVi
             <button className={tab === "vendors" ? "active" : ""} onClick={() => setTab("vendors")} type="button">
               Vendors <span>{data.commitments.length}</span>
             </button>
+            {data.needsReviewCount > 0 && (
+              <button
+                className="project-review-tab"
+                onClick={() => {
+                  setTab("expenses");
+                  setExpenseFilter("needs_review");
+                }}
+                type="button"
+              >
+                Needs review <span>{data.needsReviewCount}</span>
+              </button>
+            )}
           </div>
           <button
             className="project-primary-action"

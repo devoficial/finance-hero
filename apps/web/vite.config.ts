@@ -7,7 +7,14 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
-      includeAssets: ["finance-hero.svg", "finance-hero-192.png", "finance-hero-512.png", "apple-touch-icon.png"],
+      includeAssets: [
+        "finance-hero.svg",
+        "finance-hero-maskable.svg",
+        "finance-hero-192.png",
+        "finance-hero-512.png",
+        "apple-touch-icon.png",
+        "favicon-32.png",
+      ],
       devOptions: {
         enabled: true,
         type: "module",
@@ -37,9 +44,9 @@ export default defineConfig({
             purpose: "any",
           },
           {
-            src: "/finance-hero-512.png",
-            sizes: "512x512",
-            type: "image/png",
+            src: "/finance-hero-maskable.svg",
+            sizes: "any",
+            type: "image/svg+xml",
             purpose: "maskable",
           },
         ],

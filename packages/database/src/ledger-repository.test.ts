@@ -40,6 +40,8 @@ describe("ledger repository", () => {
     expect(dashboard.assetBuildingPaise).toBe(4595300);
     expect(dashboard.regularBudgetPaise).toBe(6004800);
     expect(dashboard.budgetUsedPercentage).toBe(76);
+    expect(dashboard.dangerAlert).toBe(true);
+    expect(repository.getDashboard("2026-07", 20).dangerAlert).toBe(false);
     expect(dashboard.totalEmiPaise).toBe(12745100);
     expect(dashboard.debtPrincipalPaise).toBe(724854600);
     expect(dashboard.availableAfterPlanPaise).toBe(9630100);

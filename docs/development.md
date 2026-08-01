@@ -123,6 +123,6 @@ before updating it.
 - Additional institution-specific fixtures, Gmail discovery, and iPhone Shortcut ingestion remain pending.
   Unsupported layouts stay outside the financial record.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
-- PWA SVG branding is sufficient for development; release-quality iOS PNG icons are pending.
+- PWA branding includes install icons, an iOS touch icon, a fallback favicon, and a safe-zone maskable icon.
 - The local assistant uses bounded read-only repository context. Official external finance
   knowledge ingestion and evaluation fixtures remain an incremental content-maintenance task.

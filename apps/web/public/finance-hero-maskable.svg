@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Finance Hero maskable icon</title>
+  <rect width="512" height="512" fill="#173f35"/>
+  <path d="M136 148h240v48H136zm0 84h170v48H136zm0 84h240v48H136z" fill="#f4b942"/>
+  <circle cx="351" cy="256" r="45" fill="#f1eee5"/>
+  <path d="M351 228v56m-20-37h32c16 0 16 19 0 19h-24c-17 0-17 19 0 19h33" fill="none" stroke="#173f35" stroke-width="12" stroke-linecap="round"/>
+</svg>

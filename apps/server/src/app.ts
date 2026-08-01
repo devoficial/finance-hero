@@ -276,9 +276,16 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
     const query = request.query as { month?: string };
     const month = monthSchema.parse(query.month ?? "2026-07");
-    const localDay = Number(
-      new Intl.DateTimeFormat("en-IN", { day: "numeric", timeZone: "Asia/Kolkata" }).format(new Date()),
-    );
+    const now = new Date();
+    const localMonth = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      timeZone: "Asia/Kolkata",
+    }).format(now);
+    const localDay =
+      month === localMonth
+        ? Number(new Intl.DateTimeFormat("en-IN", { day: "numeric", timeZone: "Asia/Kolkata" }).format(now))
+        : 31;
     return reply
       .header("cache-control", "no-store")
       .send(dashboardResponseSchema.parse(ledger.getDashboard(month, localDay)));

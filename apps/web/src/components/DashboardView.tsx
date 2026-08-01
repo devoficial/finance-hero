@@ -44,6 +44,15 @@ function currentMonth(): string {
   }).format(new Date());
 }
 
+function currentDay(): number {
+  return Number(
+    new Intl.DateTimeFormat("en-IN", {
+      day: "numeric",
+      timeZone: "Asia/Kolkata",
+    }).format(new Date()),
+  );
+}
+
 function productName(productType: string) {
   return productType.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -81,6 +90,13 @@ export function DashboardView({
   const lowCash = income > 0 && currentCashPaise <= income * 0.1;
   const financialRisk = dashboard.dangerAlert || budgetExceeded || lowCash;
   const budgetVariancePaise = dashboard.regularBudgetPaise - dashboard.regularExpensePaise;
+  const [dashboardYear, dashboardMonth] = dashboard.month.split("-").map(Number);
+  const dayOfMonth = historical
+    ? new Date(Date.UTC(dashboardYear ?? 2026, dashboardMonth ?? 1, 0)).getUTCDate()
+    : currentDay();
+  const thresholdPaise = Math.round(dashboard.regularBudgetPaise * 0.6);
+  const thresholdVariancePaise = thresholdPaise - dashboard.regularExpensePaise;
+  const monthStart = !historical && dayOfMonth <= 5;
   const receivableCoverage = percentage(liabilities.receivablePaise, liabilities.otherLiabilityPaise);
   const snowballTarget = liabilities.liabilities.find((liability) => liability.snowballRank === 1);
   const goalTargetPaise = wealth.goals.reduce((sum, goal) => sum + goal.targetPaise, 0);
@@ -144,7 +160,9 @@ export function DashboardView({
         </div>
         <p>
           {dashboard.dangerAlert
-            ? `${dashboard.budgetUsedPercentage}% of the regular budget is already consumed before day 20.`
+            ? `${money(dashboard.regularExpensePaise)} is already spent: ${money(
+                Math.abs(thresholdVariancePaise),
+              )} beyond the 60% early-warning line before day 20.`
             : budgetExceeded
               ? `Regular spending is ${money(dashboard.regularExpensePaise)} against ${money(
                   dashboard.regularBudgetPaise,
@@ -158,6 +176,33 @@ export function DashboardView({
         <button onClick={onOpenExpenses} type="button">
           Open expense register
         </button>
+      </section>
+
+      <section className={`month-command-brief ${dashboard.dangerAlert ? "danger" : ""}`}>
+        <header>
+          <span>{monthStart ? "MONTH-START BRIEF" : "MONTHLY CHECKPOINT"}</span>
+          <strong>{monthLabel(dashboard.month, "long")} in one line</strong>
+        </header>
+        <div>
+          <span>Bank cash</span>
+          <strong>{money(currentCashPaise)}</strong>
+          <small>{dashboard.cashBalanceSource === "bank_statement" ? "confirmed" : "calculated"}</small>
+        </div>
+        <div className={budgetVariancePaise < 0 ? "negative" : ""}>
+          <span>Regular budget</span>
+          <strong>{money(Math.abs(budgetVariancePaise))}</strong>
+          <small>{budgetVariancePaise < 0 ? "over plan" : "still available"}</small>
+        </div>
+        <div>
+          <span>Fixed EMI</span>
+          <strong>{money(displayedEmiPaise)}</strong>
+          <small>{emiBurden}% of planned income</small>
+        </div>
+        <div>
+          <span>Debt focus</span>
+          <strong>{snowballTarget?.name ?? "No active target"}</strong>
+          <small>{snowballTarget ? money(snowballTarget.currentPrincipalPaise) : "Nothing queued"}</small>
+        </div>
       </section>
 
       <section className="finance-kpi-grid" aria-label="Core financial indicators">
