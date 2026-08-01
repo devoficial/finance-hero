@@ -583,7 +583,11 @@ export class BudgetRepository {
                        WHEN a.account_class = 'expense' AND p.amount_paise > 0
                          THEN p.amount_paise
                        ELSE 0
-                     END), 0) AS aggregate_outflow
+                     END), 0) AS aggregate_outflow,
+                     MAX(CASE
+                       WHEN p.category_id = 'category-home-construction' THEN 1
+                       ELSE 0
+                     END) AS is_home_construction_sheet
               FROM journal_transactions t
               JOIN postings p ON p.transaction_id = t.id
               JOIN accounts a ON a.id = p.account_id
@@ -593,6 +597,7 @@ export class BudgetRepository {
             SELECT month, SUM(CASE
               WHEN origin = 'manual_transfer' THEN 0
               WHEN direct_primary_outflow > 0 THEN direct_primary_outflow
+              WHEN origin = 'expense_sheet_aggregate' AND is_home_construction_sheet = 1 THEN 0
               WHEN origin IN ('historical_aggregate', 'expense_sheet_aggregate') THEN aggregate_outflow
               ELSE 0
             END) AS amountPaise
@@ -694,7 +699,7 @@ export class BudgetRepository {
           `monthly-expense-sheet:${month}:${category.id}`,
           existingAggregate.id,
         );
-      this.insertAggregatePostings(existingAggregate.id, category.id, aggregatePaise, now);
+      this.insertAggregatePostings(existingAggregate.id, category.id, aggregatePaise, now, month, desiredPaise);
       return;
     }
 
@@ -716,10 +721,17 @@ export class BudgetRepository {
         `monthly-expense-sheet:${month}:${category.id}`,
         now,
       );
-    this.insertAggregatePostings(sheetId, category.id, aggregatePaise, now);
+    this.insertAggregatePostings(sheetId, category.id, aggregatePaise, now, month, desiredPaise);
   }
 
-  private insertAggregatePostings(transactionId: string, categoryId: string, amountPaise: number, createdAt: string) {
+  private insertAggregatePostings(
+    transactionId: string,
+    categoryId: string,
+    amountPaise: number,
+    createdAt: string,
+    month: string,
+    desiredPaise: number,
+  ) {
     this.database.connection
       .prepare(`
         INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
@@ -744,6 +756,14 @@ export class BudgetRepository {
           ? "account-savings"
           : null;
     if (destinationAccountId) {
+      const existingTransferPaise =
+        categoryId === "category-home-construction"
+          ? this.getPrimaryToDestinationTransfers(month, destinationAccountId)
+          : 0;
+      const fundingPaise = Math.max(0, desiredPaise - existingTransferPaise);
+      if (fundingPaise === 0) {
+        return;
+      }
       this.database.connection
         .prepare(`
           INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
@@ -753,14 +773,33 @@ export class BudgetRepository {
         .run(
           randomUUID(),
           transactionId,
-          -amountPaise,
+          -fundingPaise,
           createdAt,
           randomUUID(),
           transactionId,
           destinationAccountId,
-          amountPaise,
+          fundingPaise,
           createdAt,
         );
     }
+  }
+
+  private getPrimaryToDestinationTransfers(month: string, destinationAccountId: string): number {
+    const row = this.database.connection
+      .prepare(`
+        SELECT COALESCE(SUM(-source.amount_paise), 0) AS amountPaise
+        FROM journal_transactions t
+        JOIN postings source ON source.transaction_id = t.id
+        WHERE t.effective_month = ? AND t.status = 'posted' AND t.origin = 'manual_transfer'
+          AND source.account_id = 'account-primary-bank' AND source.amount_paise < 0
+          AND EXISTS (
+            SELECT 1
+            FROM postings destination
+            WHERE destination.transaction_id = t.id
+              AND destination.account_id = ? AND destination.amount_paise > 0
+          )
+      `)
+      .get(month, destinationAccountId) as { amountPaise: number };
+    return row.amountPaise;
   }
 }

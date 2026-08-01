@@ -275,6 +275,62 @@ describe("budget repository", () => {
     database.close();
   });
 
+  it("counts an existing Axis to Jupiter transfer once and repairs legacy duplicate funding", () => {
+    const { database, ledger, repository } = createRepository();
+    repository.updateMonth("2026-07", {
+      reconciliation: {
+        statementBalancePaise: 147047900,
+        reconciledOn: "2026-07-31",
+      },
+    });
+    ledger.createManualTransaction({
+      occurredOn: "2026-08-01",
+      payee: "Fund Jupiter construction account",
+      kind: "transfer",
+      amountPaise: 70147500,
+      accountId: "account-primary-bank",
+      destinationAccountId: "account-savings",
+      idempotencyKey: "budget-test:august-jupiter-transfer",
+    });
+    repository.updateMonth("2026-08", {
+      lines: [
+        { categoryId: "category-groceries", actualPaise: 3561100 },
+        { categoryId: "category-home-construction", actualPaise: 70147500 },
+      ],
+    });
+
+    const correct = repository.getMonth("2026-08");
+    expect(correct.cashBridge).toMatchObject({
+      carryoverPaise: 147047900,
+      cashOutflowPaise: 73708600,
+      primaryAccountOutflowPaise: 3561100,
+      primaryTransferMovementPaise: -70147500,
+      calculatedClosingBalancePaise: 73339300,
+    });
+
+    database.connection
+      .prepare(`
+        INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
+        VALUES ('legacy-home-primary', 'expense-sheet-2026-08-category-home-construction',
+                'account-primary-bank', NULL, -70147500, '2026-08-01T00:00:00.000Z'),
+               ('legacy-home-jupiter', 'expense-sheet-2026-08-category-home-construction',
+                'account-savings', NULL, 70147500, '2026-08-01T00:00:00.000Z')
+      `)
+      .run();
+    expect(repository.getMonth("2026-08").cashBridge.calculatedClosingBalancePaise).toBe(3191800);
+
+    seedAcceptedOpeningSnapshot(database);
+    const repaired = repository.getMonth("2026-08");
+    const jupiterMovement = database.connection
+      .prepare(
+        "SELECT COALESCE(SUM(amount_paise), 0) AS amountPaise FROM postings WHERE account_id = 'account-savings'",
+      )
+      .get() as { amountPaise: number };
+    expect(repaired.cashBridge.calculatedClosingBalancePaise).toBe(73339300);
+    expect(jupiterMovement.amountPaise).toBe(70147500);
+    database.close();
+  });
+
   it("shows approved imported credits as editable extra income without duplicating cash", () => {
     const { database, imports, ledger, repository } = createRepository();
     imports.createArtifact({

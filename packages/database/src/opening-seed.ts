@@ -744,6 +744,79 @@ function seedOwnerCashAccountPlan(database: FinanceHeroDatabase): void {
   seed.immediate();
 }
 
+function reconcileHomeConstructionFunding(database: FinanceHeroDatabase): void {
+  const now = new Date().toISOString();
+  const rows = database.connection
+    .prepare(`
+      SELECT sheet.id AS transactionId, sheet.effective_month AS month,
+             COALESCE((
+               SELECT SUM(category_posting.amount_paise)
+               FROM journal_transactions category_transaction
+               JOIN postings category_posting ON category_posting.transaction_id = category_transaction.id
+               WHERE category_transaction.effective_month = sheet.effective_month
+                 AND category_transaction.status = 'posted'
+                 AND category_posting.category_id = 'category-home-construction'
+                 AND category_posting.amount_paise > 0
+             ), 0) AS desiredPaise
+      FROM journal_transactions sheet
+      WHERE sheet.status = 'posted' AND sheet.origin = 'expense_sheet_aggregate'
+        AND EXISTS (
+          SELECT 1 FROM postings sheet_posting
+          WHERE sheet_posting.transaction_id = sheet.id
+            AND sheet_posting.category_id = 'category-home-construction'
+        )
+    `)
+    .all() as Array<{ transactionId: string; month: string; desiredPaise: number }>;
+
+  const reconcile = database.connection.transaction(() => {
+    for (const row of rows) {
+      const transfer = database.connection
+        .prepare(`
+          SELECT COALESCE(SUM(-source.amount_paise), 0) AS amountPaise
+          FROM journal_transactions transfer_transaction
+          JOIN postings source ON source.transaction_id = transfer_transaction.id
+          WHERE transfer_transaction.effective_month = ?
+            AND transfer_transaction.status = 'posted'
+            AND transfer_transaction.origin = 'manual_transfer'
+            AND source.account_id = 'account-primary-bank' AND source.amount_paise < 0
+            AND EXISTS (
+              SELECT 1 FROM postings destination
+              WHERE destination.transaction_id = transfer_transaction.id
+                AND destination.account_id = 'account-savings' AND destination.amount_paise > 0
+            )
+        `)
+        .get(row.month) as { amountPaise: number };
+      const supplementalFundingPaise = Math.max(0, row.desiredPaise - transfer.amountPaise);
+
+      database.connection
+        .prepare(`
+          DELETE FROM postings
+          WHERE transaction_id = ? AND account_id IN ('account-primary-bank', 'account-savings')
+        `)
+        .run(row.transactionId);
+      if (supplementalFundingPaise > 0) {
+        database.connection
+          .prepare(`
+            INSERT INTO postings (id, transaction_id, account_id, category_id, amount_paise, created_at)
+            VALUES (?, ?, 'account-primary-bank', NULL, ?, ?),
+                   (?, ?, 'account-savings', NULL, ?, ?)
+          `)
+          .run(
+            randomUUID(),
+            row.transactionId,
+            -supplementalFundingPaise,
+            now,
+            randomUUID(),
+            row.transactionId,
+            supplementalFundingPaise,
+            now,
+          );
+      }
+    }
+  });
+  reconcile.immediate();
+}
+
 export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void {
   seedAcceptedLiabilities(database);
   seedAcceptedPersonalBalances(database);
@@ -872,4 +945,5 @@ export function seedAcceptedOpeningSnapshot(database: FinanceHeroDatabase): void
   seedAcceptedCashBridge(database);
   seedAcceptedWealthSnapshot(database);
   seedOwnerCashAccountPlan(database);
+  reconcileHomeConstructionFunding(database);
 }
