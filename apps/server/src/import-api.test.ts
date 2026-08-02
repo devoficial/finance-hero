@@ -96,6 +96,46 @@ describe("statement import API", () => {
     await app.close();
   });
 
+  it("deletes selected unposted statement sources in one request", async () => {
+    const dataDirectory = mkdtempSync(join(tmpdir(), "finance-hero-import-api-"));
+    temporaryDirectories.push(dataDirectory);
+    const app = await buildApp({
+      config: {
+        host: "127.0.0.1",
+        port: 4317,
+        dataDirectory,
+        databaseKey: "server-import-test-key-with-at-least-32-characters",
+      },
+    });
+    const upload = async (filename: string, payee: string) =>
+      statementUploadResponseSchema.parse(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/api/v1/statement-uploads?filename=${filename}&accountId=account-primary-bank`,
+            headers: { "content-type": "application/octet-stream" },
+            payload: Buffer.from(
+              ["Transaction Date,Narration,Debit Amount,Credit Amount", `01/08/2026,${payee},100,`].join("\n"),
+            ),
+          })
+        ).json(),
+      );
+    const first = await upload("first.csv", "FIRST MERCHANT");
+    const second = await upload("second.csv", "SECOND MERCHANT");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/imports/delete",
+      payload: { ids: [first.artifact.id, second.artifact.id] },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toEqual({ deleted: true, ids: [first.artifact.id, second.artifact.id] });
+    expect(
+      importQueueResponseSchema.parse((await app.inject({ method: "GET", url: "/api/v1/imports" })).json()).artifacts,
+    ).toHaveLength(0);
+    await app.close();
+  });
+
   it("extracts, verifies, and applies a statement closing balance to the next month carryover", async () => {
     const dataDirectory = mkdtempSync(join(tmpdir(), "finance-hero-import-api-"));
     temporaryDirectories.push(dataDirectory);

@@ -27,7 +27,8 @@ const RECOVERY_DIRECTORY = join(DATA_DIRECTORY, "recovery");
 const KEYCHAIN_SERVICE = "finance-hero.database";
 const KEYCHAIN_ACCOUNT = "primary";
 const API_URL = "http://127.0.0.1:4317/api/v1/health";
-const WEB_URL = "http://127.0.0.1:4318/";
+const WEB_URL = process.env.FINANCE_HERO_WEB_PUBLIC_URL ?? "http://127.0.0.1:4318/";
+const WEB_SECURE = Boolean(process.env.FINANCE_HERO_WEB_CERT && process.env.FINANCE_HERO_WEB_KEY);
 const OLLAMA_URL = "http://127.0.0.1:11434/api/tags";
 
 function print(message = "") {
@@ -96,6 +97,23 @@ function readDotEnvKey() {
     return undefined;
   }
   return match[1].replace(/^(['"])(.*)\1$/, "$2");
+}
+
+function readDotEnvEnvironment() {
+  const path = join(ROOT, ".env");
+  if (!existsSync(path)) {
+    return {};
+  }
+
+  const environment = {};
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!match) continue;
+
+    const [, name, rawValue] = match;
+    environment[name] = rawValue.replace(/^(['"])(.*)\1$/, "$2");
+  }
+  return environment;
 }
 
 function promptHidden(message) {
@@ -313,6 +331,14 @@ function portIsOpen(port) {
   });
 }
 
+async function webIsReady(secure = WEB_SECURE, url = WEB_URL) {
+  // Node does not consistently use the macOS trust store for a local mkcert
+  // certificate. A successful TLS listener is sufficient for launcher health;
+  // the browser still performs the certificate validation.
+  if (secure) return portIsOpen(4318);
+  return (await fetchState(url))?.ok === true;
+}
+
 function readRuntime() {
   if (!existsSync(RUNTIME_PATH)) {
     return null;
@@ -352,7 +378,18 @@ function writeRuntime(pid, ollamaPid = null) {
   mkdirSync(DATA_DIRECTORY, { recursive: true, mode: 0o700 });
   writeFileSync(
     RUNTIME_PATH,
-    `${JSON.stringify({ pid, ollamaPid, startedAt: new Date().toISOString(), logPath: LOG_PATH }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        pid,
+        ollamaPid,
+        startedAt: new Date().toISOString(),
+        logPath: LOG_PATH,
+        webUrl: WEB_URL,
+        webSecure: WEB_SECURE,
+      },
+      null,
+      2,
+    )}\n`,
     { mode: 0o600 },
   );
   chmodSync(RUNTIME_PATH, 0o600);
@@ -375,8 +412,8 @@ function delay(milliseconds) {
 async function waitForReady(timeoutMilliseconds = 40_000) {
   const deadline = Date.now() + timeoutMilliseconds;
   while (Date.now() < deadline) {
-    const [health, web] = await Promise.all([fetchState(API_URL), fetchState(WEB_URL)]);
-    if (health?.body?.status === "ok" && health.body.database === "encrypted" && web?.ok) {
+    const [health, webReady] = await Promise.all([fetchState(API_URL), webIsReady()]);
+    if (health?.body?.status === "ok" && health.body.database === "encrypted" && webReady) {
       return true;
     }
     await delay(500);
@@ -394,11 +431,15 @@ function recentLogs(lines = 30) {
 async function start() {
   ensureMacOS();
   const runtime = clearStaleRuntime();
-  const [health, web] = await Promise.all([fetchState(API_URL), fetchState(WEB_URL)]);
-  const alreadyHealthy = health?.body?.status === "ok" && health.body.database === "encrypted" && web?.ok;
+  const runningWebUrl = runtime?.webUrl ?? WEB_URL;
+  const [health, webReady] = await Promise.all([
+    fetchState(API_URL),
+    webIsReady(runtime?.webSecure ?? WEB_SECURE, runningWebUrl),
+  ]);
+  const alreadyHealthy = health?.body?.status === "ok" && health.body.database === "encrypted" && webReady;
   if (alreadyHealthy) {
     print("Finance Hero is already running securely.");
-    print(WEB_URL);
+    print(runningWebUrl);
     if (!keychainHasKey()) {
       print("Warning: run `pnpm setup:local` before the next Mac restart.");
     }
@@ -418,7 +459,9 @@ async function start() {
   mkdirSync(LOG_DIRECTORY, { recursive: true, mode: 0o700 });
   const logDescriptor = openSync(LOG_PATH, "a", 0o600);
   chmodSync(LOG_PATH, 0o600);
-  const environment = { ...process.env };
+  // The secure launcher does not inherit variables from an interactive shell.
+  // Load the uncommitted local configuration while preserving explicit overrides.
+  const environment = { ...readDotEnvEnvironment(), ...process.env };
   delete environment.FINANCE_HERO_DATABASE_KEY;
   // Turbo runs each workspace task from its package directory. Keep every
   // process pinned to the single canonical encrypted database at the repo root.
@@ -498,7 +541,10 @@ async function stop() {
 
 async function status() {
   const runtime = clearStaleRuntime();
-  const [health, web] = await Promise.all([fetchState(API_URL), fetchState(WEB_URL)]);
+  const [health, webReady] = await Promise.all([
+    fetchState(API_URL),
+    webIsReady(runtime?.webSecure ?? WEB_SECURE, runtime?.webUrl ?? WEB_URL),
+  ]);
   print(`Keychain: ${keychainHasKey() ? "configured" : "missing"}`);
   print(
     `API: ${
@@ -509,7 +555,7 @@ async function status() {
           : "stopped"
     }`,
   );
-  print(`PWA: ${web?.ok ? "running" : "stopped"}`);
+  print(`PWA: ${webReady ? `running at ${runtime?.webUrl ?? WEB_URL}` : "stopped"}`);
   const ollama = await fetchState(OLLAMA_URL);
   print(`Assistant: ${ollama?.ok ? "local model service running" : "stopped"}`);
   print(`Launcher: ${runtime ? `managed (PID ${runtime.pid})` : "not managing a process"}`);

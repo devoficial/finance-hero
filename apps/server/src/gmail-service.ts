@@ -8,6 +8,9 @@ const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const KEYCHAIN_SERVICE = "finance-hero.gmail";
 const KEYCHAIN_ACCOUNT = "primary";
 
+export const DEFAULT_GMAIL_STATEMENT_QUERY =
+  "newer_than:1y has:attachment subject:statement -subject:securities -subject:mutual -subject:payslip -subject:salary -subject:employment -subject:invoice -subject:receipt";
+
 export interface StoredGmailCredential {
   refreshToken: string;
   email: string;
@@ -107,7 +110,13 @@ function decodeBase64Url(value: string): Buffer {
 }
 
 function supportedAttachment(filename: string): boolean {
-  return /\.(csv|tsv|pdf|xls|xlsx)$/i.test(filename);
+  if (!/\.(csv|tsv|pdf|xls|xlsx)$/i.test(filename)) return false;
+
+  // A statement email can contain unrelated supporting documents. Keep the
+  // filter deny-list based so masked/numeric bank statement names still work.
+  return !/(?:payslip|salary[ _-]?slip|employment|employement|offer[ _-]?letter|invoice|receipt|securities|mutual[ _-]?fund|contract[ _-]?note|tax[ _-]?invoice|order[ _-]?id|holding[ _-]?statement|retention[ _-]?(?:account[ _-]?)?statement|quarterly[ _-]?account[ _-]?statement|cdsl)/i.test(
+    filename,
+  );
 }
 
 export class GmailService implements GmailConnector {
@@ -212,7 +221,7 @@ export class GmailService implements GmailConnector {
     if (!credential) throw new Error("Gmail is not connected.");
     const accessToken = await this.refreshAccessToken(credential.refreshToken);
     const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
-    listUrl.searchParams.set("q", query ?? "newer_than:1y has:attachment");
+    listUrl.searchParams.set("q", query ?? DEFAULT_GMAIL_STATEMENT_QUERY);
     listUrl.searchParams.set("maxResults", String(Math.min(Math.max(maxMessages ?? 100, 1), 100)));
     const listed = await this.gmailJson<{ messages?: Array<{ id?: string }> }>(listUrl, accessToken);
     const attachments: GmailAttachment[] = [];

@@ -55,6 +55,12 @@ export interface ImportArtifactSource {
   approvedCount: number;
 }
 
+export interface RemovedImportArtifact {
+  id: string;
+  filename: string;
+  contentHash: string;
+}
+
 export interface ImportCandidateRecord {
   id: string;
   artifactId: string;
@@ -689,6 +695,115 @@ export class ImportRepository {
       throw new Error("Statement artifact does not exist.");
     }
     return artifact;
+  }
+
+  removeEmptyGmailArtifacts(): RemovedImportArtifact[] {
+    const artifacts = this.database.connection
+      .prepare(`
+        SELECT a.id, a.filename, a.content_hash AS contentHash
+        FROM import_artifacts a
+        WHERE a.parser_message LIKE '% Gmail message %'
+          AND NOT EXISTS (
+            SELECT 1 FROM import_candidates c WHERE c.artifact_id = a.id
+          )
+        ORDER BY a.created_at
+      `)
+      .all() as RemovedImportArtifact[];
+    if (artifacts.length === 0) return [];
+
+    const now = new Date().toISOString();
+    const remove = this.database.connection.transaction(() => {
+      const deleteArtifact = this.database.connection.prepare("DELETE FROM import_artifacts WHERE id = ?");
+      for (const artifact of artifacts) {
+        deleteArtifact.run(artifact.id);
+        this.audit(
+          "import.gmail_empty_artifact_removed",
+          "import_artifact",
+          artifact.id,
+          { filename: artifact.filename, contentHash: artifact.contentHash },
+          now,
+        );
+      }
+    });
+    remove.immediate();
+    return artifacts;
+  }
+
+  rejectArtifact(id: string): ImportArtifactRecord {
+    const artifact = this.getArtifactSource(id);
+    if (artifact.approvedCount > 0) {
+      throw new Error("A statement with posted transactions cannot be rejected.");
+    }
+    const now = new Date().toISOString();
+    const reject = this.database.connection.transaction(() => {
+      this.database.connection
+        .prepare(`
+          UPDATE import_candidates
+          SET status = 'rejected', rejection_reason = 'Source statement rejected',
+              version = version + 1, updated_at = ?
+          WHERE artifact_id = ? AND status = 'pending'
+        `)
+        .run(now, id);
+      this.database.connection
+        .prepare(`
+          UPDATE import_artifacts
+          SET parser_message = CASE
+                WHEN parser_message LIKE 'Source statement rejected.%' THEN parser_message
+                ELSE 'Source statement rejected. ' || COALESCE(parser_message, '')
+              END,
+              reconciled_at = NULL
+          WHERE id = ?
+        `)
+        .run(id);
+      this.audit("import.artifact_rejected", "import_artifact", id, { filename: artifact.filename }, now);
+    });
+    reject.immediate();
+    return this.getArtifact(id);
+  }
+
+  deleteArtifact(id: string): RemovedImportArtifact {
+    const artifact = this.deleteArtifacts([id])[0];
+    if (!artifact) throw new Error("Statement artifact does not exist.");
+    return artifact;
+  }
+
+  deleteArtifacts(ids: string[]): RemovedImportArtifact[] {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return [];
+
+    const artifacts = uniqueIds.map((id) => this.getArtifactSource(id));
+    if (artifacts.some((artifact) => artifact.approvedCount > 0)) {
+      throw new Error("A statement with posted transactions cannot be deleted.");
+    }
+    const now = new Date().toISOString();
+    const remove = this.database.connection.transaction(() => {
+      for (const artifact of artifacts) {
+        this.database.connection
+          .prepare(`
+            UPDATE import_candidates
+            SET duplicate_of_candidate_id = NULL, duplicate_confidence = NULL, duplicate_resolution = 'none'
+            WHERE duplicate_of_candidate_id IN (
+              SELECT id FROM import_candidates WHERE artifact_id = ?
+            )
+          `)
+          .run(artifact.id);
+        this.database.connection.prepare("DELETE FROM import_candidates WHERE artifact_id = ?").run(artifact.id);
+        this.database.connection.prepare("DELETE FROM import_artifacts WHERE id = ?").run(artifact.id);
+        this.audit(
+          "import.artifact_deleted",
+          "import_artifact",
+          artifact.id,
+          { filename: artifact.filename, contentHash: artifact.contentHash },
+          now,
+        );
+      }
+    });
+    remove.immediate();
+    return artifacts.map((artifact) => ({
+      id: artifact.id,
+      filename: artifact.filename,
+      contentHash: artifact.contentHash,
+    }));
   }
 
   getQueue(): ImportQueueRecord {

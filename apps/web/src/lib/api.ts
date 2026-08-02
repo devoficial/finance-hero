@@ -95,6 +95,7 @@ export interface GmailDiscoveryResult {
   attachmentsFound: number;
   imported: number;
   duplicates: number;
+  needsAttention: number;
   failed: number;
 }
 
@@ -310,6 +311,36 @@ export async function parseStatementArtifact(id: string, input: StatementParseRe
     throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
   }
   return importArtifactSchema.parse(await response.json());
+}
+
+export async function rejectStatementArtifact(id: string): Promise<ImportArtifact> {
+  const response = await fetch(`/api/v1/imports/${encodeURIComponent(id)}/reject`, { method: "POST" });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return importArtifactSchema.parse(await response.json());
+}
+
+export async function deleteStatementArtifact(id: string): Promise<void> {
+  const response = await fetch(`/api/v1/imports/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+}
+
+export async function deleteStatementArtifacts(ids: string[]): Promise<{ deleted: boolean; ids: string[] }> {
+  const response = await fetch("/api/v1/imports/delete", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return (await response.json()) as { deleted: boolean; ids: string[] };
 }
 
 export async function updateStatementReconciliation(

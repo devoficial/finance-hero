@@ -1,5 +1,14 @@
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
   assistantChatRequestSchema,
@@ -74,7 +83,9 @@ import {
 import Fastify, { type FastifyInstance } from "fastify";
 import { AssistantService } from "./assistant-service";
 import type { ServerConfig } from "./config";
+import { DevicePairingService } from "./device-pairing-service";
 import { type GmailConnector, GmailService } from "./gmail-service";
+import { type IosMessageInput, parseIosMessage } from "./ios-message-parser";
 import { parseScannedPdfWithLocalOcr } from "./local-ocr";
 import {
   type ParsedStatementReconciliation,
@@ -198,6 +209,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   let wealth: WealthRepository | undefined;
   let assistant: AssistantService | undefined;
   const gmail = options.gmailService ?? new GmailService(options.config);
+  const devices = new DevicePairingService(options.config.dataDirectory);
   let backupBeforeRisk: ((reason: string) => void) | undefined;
 
   if (options.config.databaseKey) {
@@ -291,6 +303,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       const attachments = await gmail.discoverAttachments(query, maxMessages);
       let imported = 0;
       let duplicates = 0;
+      let needsAttention = 0;
       let failed = 0;
       for (const attachment of attachments) {
         if (!isValidStatementFilename(attachment.filename) || attachment.content.length > MAX_STATEMENT_BYTES) {
@@ -318,7 +331,6 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
                 ? "needs_parser"
                 : "failed";
             parserMessage = message;
-            failed += 1;
           }
         }
         const quarantineDirectory = join(options.config.dataDirectory, "imports", "quarantine");
@@ -336,13 +348,117 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
           reconciliation,
           rows,
         });
-        if (result.duplicate) duplicates += 1;
-        else imported += 1;
+        if (result.duplicate) {
+          duplicates += 1;
+        } else {
+          imported += 1;
+          if (status === "needs_parser") needsAttention += 1;
+          if (status === "failed") failed += 1;
+        }
       }
-      return reply.send({ attachmentsFound: attachments.length, imported, duplicates, failed });
+      return reply.send({ attachmentsFound: attachments.length, imported, duplicates, needsAttention, failed });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Gmail discovery failed.";
       return reply.code(400).send({ error: { code: "GMAIL_DISCOVERY_FAILED", message } });
+    }
+  });
+
+  app.post("/api/v1/gmail/cleanup-empty-artifacts", async (_request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+
+    backupBeforeRisk?.("before-gmail-empty-artifact-cleanup");
+    const removed = imports.removeEmptyGmailArtifacts();
+    const quarantineDirectory = join(options.config.dataDirectory, "imports", "quarantine");
+    let filesRemoved = 0;
+    if (existsSync(quarantineDirectory)) {
+      const filenames = readdirSync(quarantineDirectory);
+      for (const artifact of removed) {
+        for (const filename of filenames) {
+          if (!filename.startsWith(`${artifact.contentHash}.`)) continue;
+          const quarantinePath = join(quarantineDirectory, filename);
+          if (existsSync(quarantinePath)) {
+            unlinkSync(quarantinePath);
+            filesRemoved += 1;
+          }
+        }
+      }
+    }
+
+    return reply.send({ removed: removed.length, filesRemoved });
+  });
+
+  app.post("/api/v1/devices/pairing-code", async (_request, reply) => {
+    return reply.header("cache-control", "no-store").send(devices.createPairingCode());
+  });
+
+  app.post("/api/v1/devices/pair", async (request, reply) => {
+    try {
+      const input = (request.body ?? {}) as { code?: string; name?: string };
+      if (!input.code || !input.name) throw new Error("Pairing code and device name are required.");
+      return reply.send(devices.pair(input.code, input.name));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Device pairing failed.";
+      return reply.code(400).send({ error: { code: "PAIRING_FAILED", message } });
+    }
+  });
+
+  app.get("/api/v1/devices", async (_request, reply) => {
+    return reply.header("cache-control", "no-store").send({ devices: devices.list() });
+  });
+
+  app.delete("/api/v1/devices/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    return devices.revoke(id)
+      ? reply.code(204).send()
+      : reply.code(404).send({ error: { code: "NOT_FOUND", message: "Paired device does not exist." } });
+  });
+
+  app.post("/api/v1/import-hooks/ios-message", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    const authorization = request.headers.authorization ?? "";
+    const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+    if (!token || !devices.authenticate(token)) {
+      return reply
+        .code(401)
+        .send({ error: { code: "UNAUTHORIZED", message: "Pair this iPhone before importing messages." } });
+    }
+    try {
+      const input = (request.body ?? {}) as IosMessageInput;
+      const parsed = parseIosMessage(input);
+      const suggestedCategory = parsed.row.direction === "debit" ? suggestCategoryId(parsed.row.payee) : undefined;
+      const row = {
+        ...parsed.row,
+        categoryId: suggestedCategory,
+        confidence: suggestedCategory ? parsed.row.confidence : Math.min(parsed.row.confidence, 60),
+        warnings: suggestedCategory ? parsed.row.warnings : [...parsed.row.warnings, "Choose an expense category"],
+        source: Object.fromEntries(
+          Object.entries(parsed.row.source).map(([key, value]) => [key, value == null ? "" : String(value)]),
+        ),
+      };
+      const evidence = Buffer.from(JSON.stringify(input));
+      const quarantineDirectory = join(options.config.dataDirectory, "imports", "quarantine");
+      mkdirSync(quarantineDirectory, { recursive: true, mode: 0o700 });
+      const quarantinePath = join(quarantineDirectory, `${parsed.contentHash}.json`);
+      writeFileSync(quarantinePath, evidence, { mode: 0o600 });
+      chmodSync(quarantinePath, 0o600);
+      const result = imports.createArtifact({
+        filename: parsed.filename,
+        contentHash: parsed.contentHash,
+        mimeType: "application/json",
+        sizeBytes: evidence.length,
+        accountId: parsed.accountId,
+        status: "parsed",
+        parserMessage: "Imported from a paired iPhone Shortcut. Review is required before posting.",
+        rows: [row],
+      });
+      return reply.code(result.duplicate ? 200 : 201).send(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "iPhone message import failed.";
+      return reply.code(400).send({ error: { code: "IOS_IMPORT_FAILED", message } });
     }
   });
 
@@ -637,6 +753,81 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       const message = error instanceof Error ? error.message : "Statement could not be parsed.";
       const statusCode = message === "Statement artifact does not exist." ? 404 : 400;
       return reply.code(statusCode).send({ error: { code: "STATEMENT_PARSE_FAILED", message } });
+    }
+  });
+
+  app.post("/api/v1/imports/delete", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const body = request.body as { ids?: unknown };
+      if (
+        !Array.isArray(body?.ids) ||
+        body.ids.length === 0 ||
+        !body.ids.every((id) => typeof id === "string" && id.length > 0)
+      ) {
+        throw new Error("Choose at least one statement to delete.");
+      }
+      backupBeforeRisk?.("before-import-source-bulk-delete");
+      const removed = imports.deleteArtifacts(body.ids);
+      const quarantineDirectory = join(options.config.dataDirectory, "imports", "quarantine");
+      if (existsSync(quarantineDirectory)) {
+        const filenames = readdirSync(quarantineDirectory);
+        for (const artifact of removed) {
+          for (const filename of filenames) {
+            if (filename.startsWith(`${artifact.contentHash}.`)) {
+              unlinkSync(join(quarantineDirectory, filename));
+            }
+          }
+        }
+      }
+      return reply
+        .header("cache-control", "no-store")
+        .send({ deleted: true, ids: removed.map((artifact) => artifact.id) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Statements could not be deleted.";
+      const statusCode = message === "Statement artifact does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "STATEMENT_DELETE_FAILED", message } });
+    }
+  });
+
+  app.post("/api/v1/imports/:id/reject", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const { id } = request.params as { id: string };
+      backupBeforeRisk?.("before-import-source-reject");
+      return reply.header("cache-control", "no-store").send(importArtifactSchema.parse(imports.rejectArtifact(id)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Statement could not be rejected.";
+      const statusCode = message === "Statement artifact does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "STATEMENT_REJECTION_FAILED", message } });
+    }
+  });
+
+  app.delete("/api/v1/imports/:id", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const { id } = request.params as { id: string };
+      backupBeforeRisk?.("before-import-source-delete");
+      const removed = imports.deleteArtifact(id);
+      const quarantineDirectory = join(options.config.dataDirectory, "imports", "quarantine");
+      if (existsSync(quarantineDirectory)) {
+        for (const filename of readdirSync(quarantineDirectory)) {
+          if (filename.startsWith(`${removed.contentHash}.`)) {
+            unlinkSync(join(quarantineDirectory, filename));
+          }
+        }
+      }
+      return reply.header("cache-control", "no-store").send({ deleted: true, id: removed.id });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Statement could not be deleted.";
+      const statusCode = message === "Statement artifact does not exist." ? 404 : 400;
+      return reply.code(statusCode).send({ error: { code: "STATEMENT_DELETE_FAILED", message } });
     }
   });
 

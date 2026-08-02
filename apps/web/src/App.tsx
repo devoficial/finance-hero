@@ -23,6 +23,7 @@ import {
   getReferenceData,
   getWealth,
 } from "./lib/api";
+import { evaluateFinanceNotifications, requestFinanceNotifications } from "./lib/finance-notifications";
 
 const navItems = ["Home", "Accounts", "Expenses", "Imports", "Liabilities", "Goals", "Forecasts", "Projects"] as const;
 type NavItem = (typeof navItems)[number];
@@ -97,6 +98,9 @@ export function App() {
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [reportStatus, setReportStatus] = useState<"idle" | "generating" | "error">("idle");
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(
+    "Notification" in window ? Notification.permission : "unsupported",
+  );
   const health = useQuery({ queryKey: ["health"], queryFn: ({ signal }) => getHealth(signal) });
   const assistantStatus = useQuery({
     queryKey: ["assistant", "status"],
@@ -189,6 +193,22 @@ export function App() {
       window.removeEventListener("appinstalled", markInstalled);
     };
   }, []);
+
+  useEffect(() => {
+    if (reportDashboard.data) evaluateFinanceNotifications(reportDashboard.data);
+  }, [reportDashboard.data]);
+
+  useEffect(() => {
+    const refreshAlerts = () => {
+      if (document.visibilityState === "visible") void reportDashboard.refetch();
+    };
+    window.addEventListener("focus", refreshAlerts);
+    document.addEventListener("visibilitychange", refreshAlerts);
+    return () => {
+      window.removeEventListener("focus", refreshAlerts);
+      document.removeEventListener("visibilitychange", refreshAlerts);
+    };
+  }, [reportDashboard.refetch]);
 
   const money = (paise: number) => (privacy ? "Rs --,---" : formatInr(paise / 100));
   const visibleMonth = selectedMonth;
@@ -312,6 +332,16 @@ export function App() {
             <h1>{activeNav === "Home" ? `${greeting}, Debasis.` : activeNav}</h1>
           </div>
           <div className="top-actions">
+            {notificationPermission !== "granted" && (
+              <button
+                className="ghost-button"
+                onClick={async () => setNotificationPermission(await requestFinanceNotifications())}
+                title="Enable local budget and month-start alerts"
+                type="button"
+              >
+                Enable alerts
+              </button>
+            )}
             <button
               aria-label="Download complete financial summary PDF"
               className="report-button"

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ServerConfig } from "./config";
-import { GmailService, type GmailTokenStore, type StoredGmailCredential } from "./gmail-service";
+import {
+  DEFAULT_GMAIL_STATEMENT_QUERY,
+  GmailService,
+  type GmailTokenStore,
+  type StoredGmailCredential,
+} from "./gmail-service";
 
 const READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
@@ -110,6 +115,7 @@ describe("GmailService", () => {
             payload: {
               parts: [
                 { filename: "statement.csv", mimeType: "text/csv", body: { data: statement } },
+                { filename: "Employment Letter.pdf", mimeType: "application/pdf", body: { data: "cGRm" } },
                 { filename: "logo.png", mimeType: "image/png", body: { data: "aW1hZ2U" } },
               ],
             },
@@ -125,5 +131,27 @@ describe("GmailService", () => {
     expect(attachments[0]).toMatchObject({ messageId: "message-1", filename: "statement.csv", mimeType: "text/csv" });
     expect(attachments[0]?.content.toString()).toContain("Tea,50");
     expect(String(fetcher.mock.calls[1]?.[0])).toContain("maxResults=5");
+  });
+
+  it("uses a statement-specific Gmail query by default", async () => {
+    const store = new MemoryTokenStore();
+    store.credential = {
+      refreshToken: "refresh",
+      email: "owner@example.com",
+      subject: "owner-subject",
+      scope: READONLY_SCOPE,
+      updatedAt: new Date().toISOString(),
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "access" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ messages: [] }), { status: 200 }));
+    const service = new GmailService(config(), store, fetcher);
+
+    await service.discoverAttachments(undefined, 25);
+
+    const requestUrl = new URL(String(fetcher.mock.calls[1]?.[0]));
+    expect(requestUrl.searchParams.get("q")).toBe(DEFAULT_GMAIL_STATEMENT_QUERY);
+    expect(requestUrl.searchParams.get("maxResults")).toBe("25");
   });
 });

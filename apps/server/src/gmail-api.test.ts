@@ -81,7 +81,13 @@ describe("Gmail import API", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ attachmentsFound: 0, imported: 0, duplicates: 0, failed: 0 });
+    expect(response.json()).toEqual({
+      attachmentsFound: 0,
+      imported: 0,
+      duplicates: 0,
+      needsAttention: 0,
+      failed: 0,
+    });
     expect(gmail.discoverAttachments).toHaveBeenCalledWith("newer_than:30d has:attachment", 25);
     await app.close();
   });

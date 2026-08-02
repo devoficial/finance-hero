@@ -1,6 +1,19 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["FINANCE_HERO_DATABASE_KEY", "FINANCE_HERO_DATA_DIR", "FINANCE_HERO_HOST", "FINANCE_HERO_PORT"],
+  "globalEnv": [
+    "FINANCE_HERO_DATABASE_KEY",
+    "FINANCE_HERO_DATA_DIR",
+    "FINANCE_HERO_HOST",
+    "FINANCE_HERO_PORT",
+    "FINANCE_HERO_GOOGLE_CLIENT_ID",
+    "FINANCE_HERO_GOOGLE_CLIENT_SECRET",
+    "FINANCE_HERO_GOOGLE_OWNER_EMAIL",
+    "FINANCE_HERO_GOOGLE_REDIRECT_URI",
+    "FINANCE_HERO_WEB_HOST",
+    "FINANCE_HERO_WEB_CERT",
+    "FINANCE_HERO_WEB_KEY",
+    "FINANCE_HERO_WEB_PUBLIC_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

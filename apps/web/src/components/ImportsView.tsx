@@ -10,11 +10,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   approveImportCandidates,
+  deleteStatementArtifact,
+  deleteStatementArtifacts,
   discoverGmailStatements,
   getGmailStatus,
   parseStatementArtifact,
   reconcileStatement,
   rejectImportCandidates,
+  rejectStatementArtifact,
   resetImportCandidatesToPending,
   resolveImportDuplicate,
   updateImportCandidate,
@@ -82,6 +85,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const [file, setFile] = useState<File | null>(null);
   const [uploadAccountId, setUploadAccountId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectedArtifacts, setSelectedArtifacts] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<"pending" | "credits" | "approved" | "rejected" | "all">("pending");
   const [editing, setEditing] = useState<ImportCandidate | null>(null);
   const [editDate, setEditDate] = useState("");
@@ -138,6 +142,17 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     }
   }, [primarySalaryAccount, uploadAccountId]);
 
+  useEffect(() => {
+    const deletableIds = new Set(
+      (data?.artifacts ?? []).filter((artifact) => artifact.approvedCount === 0).map((artifact) => artifact.id),
+    );
+    setSelectedArtifacts((current) => {
+      const next = new Set([...current].filter((id) => deletableIds.has(id)));
+      if (next.size === current.size && [...next].every((id) => current.has(id))) return current;
+      return next;
+    });
+  }, [data?.artifacts]);
+
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["imports"] }),
@@ -164,7 +179,7 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
     onSuccess: async (result) => {
       setActionError(null);
       setGmailMessage(
-        `Found ${result.attachmentsFound}; added ${result.imported}, skipped ${result.duplicates} duplicates, ${result.failed} failed.`,
+        `Found ${result.attachmentsFound}; added ${result.imported}, skipped ${result.duplicates} duplicates, ${result.needsAttention} need unlock or review, ${result.failed} failed.`,
       );
       await refresh();
     },
@@ -180,6 +195,31 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
       await refresh();
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : "Statement extraction failed."),
+  });
+  const rejectArtifactMutation = useMutation({
+    mutationFn: rejectStatementArtifact,
+    onSuccess: async () => {
+      setActionError(null);
+      await refresh();
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : "Statement rejection failed."),
+  });
+  const deleteArtifactMutation = useMutation({
+    mutationFn: deleteStatementArtifact,
+    onSuccess: async () => {
+      setActionError(null);
+      await refresh();
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : "Statement deletion failed."),
+  });
+  const deleteArtifactsMutation = useMutation({
+    mutationFn: deleteStatementArtifacts,
+    onSuccess: async () => {
+      setSelectedArtifacts(new Set());
+      setActionError(null);
+      await refresh();
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : "Statement deletion failed."),
   });
   const assignmentMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateImportCandidateRequest }) =>
@@ -310,10 +350,62 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const allReadySelected =
     readyPendingVisible.length > 0 && readyPendingVisible.every((candidate) => selected.has(candidate.id));
   const assignmentIsPending = (id: string) => assignmentMutation.isPending && assignmentMutation.variables?.id === id;
+  const artifacts = data?.artifacts ?? [];
+  const deletableArtifacts = artifacts.filter((artifact) => artifact.approvedCount === 0);
+  const allDeletableSelected =
+    deletableArtifacts.length > 0 && deletableArtifacts.every((artifact) => selectedArtifacts.has(artifact.id));
 
   function changeFilter(nextFilter: "pending" | "credits" | "approved" | "rejected" | "all") {
     setFilter(nextFilter);
     setSelected(new Set());
+  }
+
+  function rejectArtifact(artifact: ImportArtifact) {
+    if (artifact.approvedCount > 0) return;
+    if (
+      !window.confirm(
+        `Reject ${artifact.filename}? The file will remain as evidence, but its pending rows will be rejected.`,
+      )
+    ) {
+      return;
+    }
+    rejectArtifactMutation.mutate(artifact.id);
+  }
+
+  function deleteArtifact(artifact: ImportArtifact) {
+    if (artifact.approvedCount > 0) return;
+    if (
+      !window.confirm(`Permanently delete ${artifact.filename} and all of its unposted rows? This cannot be undone.`)
+    ) {
+      return;
+    }
+    deleteArtifactMutation.mutate(artifact.id);
+  }
+
+  function toggleArtifactSelection(id: string) {
+    setSelectedArtifacts((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllArtifacts() {
+    setSelectedArtifacts(allDeletableSelected ? new Set() : new Set(deletableArtifacts.map((artifact) => artifact.id)));
+  }
+
+  function deleteSelectedArtifacts() {
+    const ids = [...selectedArtifacts];
+    if (ids.length === 0) return;
+    if (
+      !window.confirm(
+        `Permanently delete ${ids.length} selected statement${ids.length === 1 ? "" : "s"} and all unposted rows? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    deleteArtifactsMutation.mutate(ids);
   }
 
   function beginEdit(candidate: ImportCandidate) {
@@ -592,58 +684,117 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
             <p className="eyebrow">SOURCE REGISTER</p>
             <h2>Recent statements</h2>
           </div>
+          <div className="import-source-bulk-actions">
+            <label className="artifact-select-all">
+              <input
+                checked={allDeletableSelected}
+                disabled={deletableArtifacts.length === 0 || deleteArtifactsMutation.isPending}
+                onChange={toggleAllArtifacts}
+                type="checkbox"
+              />
+              Select all deletable
+            </label>
+            <span className="artifact-selection-count">{selectedArtifacts.size} selected</span>
+            <button
+              className="artifact-bulk-delete-button"
+              disabled={selectedArtifacts.size === 0 || deleteArtifactsMutation.isPending}
+              onClick={deleteSelectedArtifacts}
+              type="button"
+            >
+              {deleteArtifactsMutation.isPending ? "Deleting..." : "Delete selected"}
+            </button>
+          </div>
         </div>
         <div className="import-artifact-list">
-          {(data?.artifacts ?? []).length === 0 ? (
+          {artifacts.length === 0 ? (
             <p className="empty-state">No statement files have been uploaded yet.</p>
           ) : (
-            data?.artifacts.map((artifact) => (
-              <article key={artifact.id}>
-                <div>
-                  <strong>{artifact.filename}</strong>
-                  <small>
-                    {new Date(artifact.createdAt).toLocaleString("en-IN")} · {Math.ceil(artifact.sizeBytes / 1024)} KB ·{" "}
-                    {artifact.accountName ?? "Account not assigned"}
-                  </small>
-                </div>
-                <span className={`artifact-status ${artifact.status}`}>{artifact.status.replace("_", " ")}</span>
-                <div className="artifact-counts">
-                  <b>{artifact.pendingCount} pending</b>
-                  <span>{artifact.approvedCount} posted</span>
-                </div>
-                <div className="artifact-parser">
-                  <div className="artifact-parser-copy">
-                    <small>{artifact.parserMessage}</small>
-                    <span className={`reconciliation-status ${artifact.reconciliation.status}`}>
-                      {reconciliationCopy[artifact.reconciliation.status].label}
-                    </span>
+            artifacts.map((artifact) => {
+              const isRejected = artifact.parserMessage?.startsWith("Source statement rejected.") ?? false;
+              const isProtected = artifact.approvedCount > 0;
+              const sourceActionPending =
+                deleteArtifactsMutation.isPending ||
+                (rejectArtifactMutation.isPending && rejectArtifactMutation.variables === artifact.id) ||
+                (deleteArtifactMutation.isPending && deleteArtifactMutation.variables === artifact.id);
+              return (
+                <article className={isRejected ? "source-rejected" : undefined} key={artifact.id}>
+                  <div className="artifact-identity">
+                    <input
+                      aria-label={`Select ${artifact.filename} for deletion`}
+                      checked={selectedArtifacts.has(artifact.id)}
+                      disabled={isProtected || deleteArtifactsMutation.isPending}
+                      onChange={() => toggleArtifactSelection(artifact.id)}
+                      type="checkbox"
+                    />
+                    <div>
+                      <strong>{artifact.filename}</strong>
+                      <small>
+                        {new Date(artifact.createdAt).toLocaleString("en-IN")} · {Math.ceil(artifact.sizeBytes / 1024)}{" "}
+                        KB · {artifact.accountName ?? "Account not assigned"}
+                      </small>
+                    </div>
                   </div>
-                  {(artifact.status === "failed" || artifact.status === "needs_parser") && (
+                  <span className={`artifact-status ${isRejected ? "rejected" : artifact.status}`}>
+                    {isRejected ? "rejected" : artifact.status.replace("_", " ")}
+                  </span>
+                  <div className="artifact-counts">
+                    <b>{artifact.pendingCount} pending</b>
+                    <span>{artifact.approvedCount} posted</span>
+                  </div>
+                  <div className="artifact-parser">
+                    <div className="artifact-parser-copy">
+                      <small>{isRejected ? "Retained as rejected evidence." : artifact.parserMessage}</small>
+                      <span className={`reconciliation-status ${artifact.reconciliation.status}`}>
+                        {reconciliationCopy[artifact.reconciliation.status].label}
+                      </span>
+                    </div>
+                    {!isRejected && (artifact.status === "failed" || artifact.status === "needs_parser") && (
+                      <button
+                        className="artifact-parse-button"
+                        disabled={parseMutation.isPending}
+                        onClick={() => retryExtraction(artifact.id, artifact.parserMessage)}
+                        type="button"
+                      >
+                        {parseMutation.isPending
+                          ? "Extracting..."
+                          : artifact.parserMessage?.toLowerCase().includes("password")
+                            ? "Unlock PDF"
+                            : "Retry extraction"}
+                      </button>
+                    )}
+                    {!isRejected && artifact.status === "parsed" && (
+                      <button
+                        className="artifact-reconcile-button"
+                        onClick={() => beginReconciliation(artifact)}
+                        type="button"
+                      >
+                        {artifact.reconciliation.status === "reconciled" ? "View balance" : "Review balance"}
+                      </button>
+                    )}
+                  </div>
+                  <div className="artifact-source-actions">
                     <button
-                      className="artifact-parse-button"
-                      disabled={parseMutation.isPending}
-                      onClick={() => retryExtraction(artifact.id, artifact.parserMessage)}
+                      className="artifact-reject-button"
+                      disabled={isProtected || isRejected || sourceActionPending}
+                      onClick={() => rejectArtifact(artifact)}
+                      title={isProtected ? "Posted transactions protect this statement from rejection." : undefined}
                       type="button"
                     >
-                      {parseMutation.isPending
-                        ? "Extracting..."
-                        : artifact.parserMessage?.toLowerCase().includes("password")
-                          ? "Unlock PDF"
-                          : "Retry extraction"}
+                      {isRejected ? "Rejected" : "Reject"}
                     </button>
-                  )}
-                  {artifact.status === "parsed" && (
                     <button
-                      className="artifact-reconcile-button"
-                      onClick={() => beginReconciliation(artifact)}
+                      className="artifact-delete-button"
+                      disabled={isProtected || sourceActionPending}
+                      onClick={() => deleteArtifact(artifact)}
+                      title={isProtected ? "Posted transactions protect this statement from deletion." : undefined}
                       type="button"
                     >
-                      {artifact.reconciliation.status === "reconciled" ? "View balance" : "Review balance"}
+                      Delete
                     </button>
-                  )}
-                </div>
-              </article>
-            ))
+                  </div>
+                </article>
+              );
+            })
           )}
         </div>
       </section>

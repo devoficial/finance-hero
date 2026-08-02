@@ -48,6 +48,24 @@ Write the final user-facing answer from the supplied context and private analysi
 private analysis process. Verify its conclusions against the supplied records, correct any draft mistake, and include the
 essential arithmetic or assumptions that make the answer understandable.`;
 
+export function assistantSafetyResponse(input: string): string | undefined {
+  const question = input.toLowerCase();
+  if (
+    /\b(password|passcode|otp|one[- ]time password|api key|secret key|full account number|card pin|cvv)\b/.test(
+      question,
+    )
+  ) {
+    return "I cannot collect or process passwords, OTPs, PINs, API keys, or full account numbers. Keep those credentials outside Finance Hero.";
+  }
+  if (
+    /\b(delete|remove|approve|reject|post|edit|change|update|clear|reverse|transfer|send|move)\b/.test(question) &&
+    /\b(transaction|entry|account|liability|loan|goal|budget|money|funds?|payment)\b/.test(question)
+  ) {
+    return "I am read-only, so I cannot change financial records or move money. I can explain the relevant records and suggest the exact action for you to review in Finance Hero.";
+  }
+  return undefined;
+}
+
 function localDay(): number {
   return Number(new Intl.DateTimeFormat("en-IN", { day: "numeric", timeZone: "Asia/Kolkata" }).format(new Date()));
 }
@@ -334,6 +352,18 @@ export class AssistantService {
         ? input.conversationId
         : this.options.assistant.createConversation(input.message);
     this.options.assistant.addMessage(conversationId, "user", input.message);
+
+    const guardedResponse = assistantSafetyResponse(input.message);
+    if (guardedResponse) {
+      const message = this.options.assistant.addMessage(
+        conversationId,
+        "assistant",
+        guardedResponse,
+        [],
+        [{ tool: "safety_guard", label: "Blocked a credential or write-action request" }],
+      );
+      return { conversationId, message, model: this.model, localOnly: true };
+    }
 
     const { records, trace } = selectRecords(input, this.options);
     const knowledge = this.options.assistant.searchKnowledge(input.message);

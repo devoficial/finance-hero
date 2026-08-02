@@ -1,6 +1,17 @@
+import { readFileSync } from "node:fs";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+
+const certificatePath = process.env.FINANCE_HERO_WEB_CERT;
+const keyPath = process.env.FINANCE_HERO_WEB_KEY;
+const https =
+  certificatePath && keyPath
+    ? {
+        cert: readFileSync(certificatePath),
+        key: readFileSync(keyPath),
+      }
+    : undefined;
 
 export default defineConfig({
   plugins: [
@@ -58,7 +69,8 @@ export default defineConfig({
     }),
   ],
   server: {
-    host: "127.0.0.1",
+    host: process.env.FINANCE_HERO_WEB_HOST ?? "127.0.0.1",
+    https,
     port: 4318,
     proxy: {
       "/api": "http://127.0.0.1:4317",

@@ -8002,14 +8002,69 @@ h2 {
   border-top: 1px solid var(--line);
   display: grid;
   gap: 18px;
-  grid-template-columns: minmax(220px, 1fr) auto minmax(130px, 0.25fr) minmax(260px, 0.7fr);
+  grid-template-columns: minmax(210px, 1fr) auto minmax(110px, 0.22fr) minmax(230px, 0.62fr) auto;
   padding: 18px 0;
 }
 
-.import-artifact-list article > div:first-child {
+.artifact-identity {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.artifact-identity > div {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.artifact-identity input,
+.artifact-select-all input {
+  accent-color: var(--green);
+  flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
+}
+
+.import-source-bulk-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.artifact-select-all {
+  align-items: center;
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.artifact-selection-count {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.artifact-bulk-delete-button {
+  background: transparent;
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 9px 11px;
+  text-transform: uppercase;
+}
+
+.artifact-bulk-delete-button:disabled {
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 .import-artifact-list article strong {
@@ -8047,6 +8102,7 @@ h2 {
 }
 
 .artifact-status.failed,
+.artifact-status.rejected,
 .candidate-status.rejected {
   background: var(--red-soft);
   color: var(--red);
@@ -8106,6 +8162,35 @@ h2 {
   font-weight: 700;
   padding: 9px 11px;
   text-transform: uppercase;
+}
+
+.artifact-source-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.artifact-reject-button,
+.artifact-delete-button {
+  background: transparent;
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 8px 10px;
+  text-transform: uppercase;
+}
+
+.artifact-reject-button:disabled,
+.artifact-delete-button:disabled {
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.import-artifact-list article.source-rejected {
+  background: color-mix(in srgb, var(--red-soft) 45%, transparent);
 }
 
 .artifact-reconcile-button {
@@ -8806,6 +8891,11 @@ h2 {
     grid-column: 1 / -1;
   }
 
+  .artifact-source-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
   .import-table {
     min-width: 850px;
   }
@@ -8820,6 +8910,17 @@ h2 {
 }
 
 @media (max-width: 900px) {
+  .import-sources-panel .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .import-source-bulk-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
   .import-table-wrap {
     overflow: visible;
   }
@@ -8956,7 +9057,8 @@ h2 {
   }
 
   .artifact-counts,
-  .artifact-parser {
+  .artifact-parser,
+  .artifact-source-actions {
     grid-column: 1 / -1;
   }
 

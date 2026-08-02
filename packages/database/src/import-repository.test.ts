@@ -29,6 +29,226 @@ function createRepository() {
 }
 
 describe("import repository", () => {
+  it("removes only empty Gmail artifacts and keeps imports with candidates or other sources", () => {
+    const { database, repository } = createRepository();
+    repository.createArtifact({
+      filename: "unrelated.pdf",
+      contentHash: "empty-gmail-hash",
+      mimeType: "application/pdf",
+      sizeBytes: 100,
+      status: "needs_parser",
+      parserMessage: "No transaction table was detected. Gmail message gmail-empty.",
+      rows: [],
+    });
+    repository.createArtifact({
+      filename: "manual.pdf",
+      contentHash: "manual-empty-hash",
+      mimeType: "application/pdf",
+      sizeBytes: 100,
+      status: "needs_parser",
+      parserMessage: "No transaction table was detected.",
+      rows: [],
+    });
+    repository.createArtifact({
+      filename: "statement.csv",
+      contentHash: "gmail-candidate-hash",
+      mimeType: "text/csv",
+      sizeBytes: 120,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      parserMessage: "1 candidate extracted. Gmail message gmail-statement.",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-08-01",
+          payee: "Grocer",
+          amountPaise: 5000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+
+    expect(repository.removeEmptyGmailArtifacts()).toEqual([
+      expect.objectContaining({ filename: "unrelated.pdf", contentHash: "empty-gmail-hash" }),
+    ]);
+    const queue = repository.getQueue();
+    expect(queue.artifacts.map((artifact) => artifact.filename)).toEqual(
+      expect.arrayContaining(["manual.pdf", "statement.csv"]),
+    );
+    expect(queue.artifacts.map((artifact) => artifact.filename)).not.toContain("unrelated.pdf");
+    expect(queue.candidates).toHaveLength(1);
+    database.close();
+  });
+
+  it("rejects a source and all of its pending candidates while retaining the artifact", () => {
+    const { database, repository } = createRepository();
+    const created = repository.createArtifact({
+      filename: "protected.pdf",
+      contentHash: "source-reject-hash",
+      mimeType: "application/pdf",
+      sizeBytes: 192000,
+      status: "needs_parser",
+      parserMessage: "This PDF is password protected.",
+      rows: [
+        {
+          sourceRow: 1,
+          occurredOn: "2026-08-01",
+          payee: "Detected merchant",
+          amountPaise: 10000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+
+    expect(repository.rejectArtifact(created.artifact.id)).toMatchObject({
+      id: created.artifact.id,
+      pendingCount: 0,
+      rejectedCount: 1,
+      parserMessage: expect.stringMatching(/^Source statement rejected\./),
+    });
+    expect(repository.getQueue().candidates[0]).toMatchObject({
+      status: "rejected",
+      rejectionReason: "Source statement rejected",
+    });
+    database.close();
+  });
+
+  it("permanently deletes an unposted source and its candidates", () => {
+    const { database, repository } = createRepository();
+    const created = repository.createArtifact({
+      filename: "delete-me.pdf",
+      contentHash: "source-delete-hash",
+      mimeType: "application/pdf",
+      sizeBytes: 192000,
+      status: "needs_parser",
+      rows: [],
+    });
+
+    expect(repository.deleteArtifact(created.artifact.id)).toMatchObject({
+      id: created.artifact.id,
+      filename: "delete-me.pdf",
+      contentHash: "source-delete-hash",
+    });
+    expect(repository.getQueue().artifacts).toHaveLength(0);
+    expect(() => repository.deleteArtifact(created.artifact.id)).toThrow("Statement artifact does not exist.");
+    database.close();
+  });
+
+  it("permanently deletes multiple unposted sources in one operation", () => {
+    const { database, repository } = createRepository();
+    const first = repository.createArtifact({
+      filename: "first.pdf",
+      contentHash: "bulk-delete-first-hash",
+      mimeType: "application/pdf",
+      sizeBytes: 100,
+      status: "needs_parser",
+      rows: [],
+    });
+    const second = repository.createArtifact({
+      filename: "second.pdf",
+      contentHash: "bulk-delete-second-hash",
+      mimeType: "application/pdf",
+      sizeBytes: 200,
+      status: "needs_parser",
+      rows: [],
+    });
+
+    expect(repository.deleteArtifacts([first.artifact.id, second.artifact.id])).toEqual([
+      expect.objectContaining({ id: first.artifact.id, filename: "first.pdf" }),
+      expect.objectContaining({ id: second.artifact.id, filename: "second.pdf" }),
+    ]);
+    expect(repository.getQueue().artifacts).toHaveLength(0);
+    database.close();
+  });
+
+  it("keeps every selected source when a bulk deletion contains a posted source", () => {
+    const { database, repository } = createRepository();
+    const unposted = repository.createArtifact({
+      filename: "unposted.pdf",
+      contentHash: "bulk-atomic-unposted-hash",
+      mimeType: "application/pdf",
+      sizeBytes: 100,
+      status: "needs_parser",
+      rows: [],
+    });
+    const posted = repository.createArtifact({
+      filename: "posted.csv",
+      contentHash: "bulk-atomic-posted-hash",
+      mimeType: "text/csv",
+      sizeBytes: 120,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-08-01",
+          payee: "Grocer",
+          amountPaise: 5000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    const candidate = repository.getQueue().candidates[0];
+    if (!candidate) throw new Error("Expected posted candidate.");
+    repository.approveCandidates([candidate.id]);
+
+    expect(() => repository.deleteArtifacts([unposted.artifact.id, posted.artifact.id])).toThrow(
+      "A statement with posted transactions cannot be deleted.",
+    );
+    expect(repository.getQueue().artifacts.map((artifact) => artifact.id)).toEqual(
+      expect.arrayContaining([unposted.artifact.id, posted.artifact.id]),
+    );
+    database.close();
+  });
+
+  it("protects sources that already have posted transactions from rejection and deletion", () => {
+    const { database, repository } = createRepository();
+    const created = repository.createArtifact({
+      filename: "posted.csv",
+      contentHash: "posted-source-hash",
+      mimeType: "text/csv",
+      sizeBytes: 120,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-08-01",
+          payee: "Grocer",
+          amountPaise: 5000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    const candidate = repository.getQueue().candidates[0];
+    if (!candidate) throw new Error("Expected posted candidate.");
+    repository.approveCandidates([candidate.id]);
+
+    expect(() => repository.rejectArtifact(created.artifact.id)).toThrow(
+      "A statement with posted transactions cannot be rejected.",
+    );
+    expect(() => repository.deleteArtifact(created.artifact.id)).toThrow(
+      "A statement with posted transactions cannot be deleted.",
+    );
+    database.close();
+  });
+
   it("creates a review queue and treats the same file hash as a duplicate", () => {
     const { database, repository } = createRepository();
     const input = {
