@@ -64,3 +64,23 @@ FINANCE_HERO_OLLAMA_FINALIZER_MODEL=qwen3:4b-instruct-2507-q4_K_M
 ```
 
 Do not point `FINANCE_HERO_OLLAMA_URL` at a remote host.
+
+## QA and failure behavior
+
+- Indirect wording is routed to the same bounded repositories as explicit finance terms.
+  Goal questions include target progress and `forecastDate`; project-adjacent questions can
+  inspect construction account balances. The project expense ledger is not currently exposed
+  to the assistant, so it must not claim to have checked project rows.
+- Transaction payees, notes, and imported descriptions are enclosed inside the read-only
+  context and explicitly treated as untrusted data. Text such as “ignore previous instructions”
+  in a statement description cannot authorize a tool or write action.
+- Ollama timeout, non-JSON, HTTP error, or empty output fails closed with
+  `LOCAL_MODEL_UNAVAILABLE`. No assistant answer is persisted after a failed model call.
+- Automated tests assert that model calls use the configured loopback Ollama URL. There is no
+  OpenAI fallback, remote model fallback, or Gmail access in the assistant service.
+
+Run the focused assistant checks with:
+
+```bash
+pnpm --filter @finance-hero/server test -- assistant-safety.test.ts assistant-api.test.ts
+```

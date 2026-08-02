@@ -17,6 +17,7 @@ relevant document and add or supersede an ADR.
 9. `migration-plan.md`
 10. `delivery-plan.md`
 11. `development.md`
+12. `final-release-checklist.md`
 
 ## Decision vocabulary
 

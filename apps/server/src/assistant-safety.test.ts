@@ -10,6 +10,12 @@ describe("assistantSafetyResponse", () => {
     expect(assistantSafetyResponse("Delete this transaction for me")).toMatch(/read-only/i);
   });
 
+  it("blocks indirectly worded requests to move money", () => {
+    expect(assistantSafetyResponse("Could you take care of the transfer into my emergency fund for me?")).toMatch(
+      /read-only/i,
+    );
+  });
+
   it("allows analysis and what-if questions", () => {
     expect(assistantSafetyResponse("What if I pay Rs 10,000 extra toward my home loan?")).toBeUndefined();
   });

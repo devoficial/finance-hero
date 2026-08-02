@@ -1,19 +1,24 @@
 import { spawn, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   chmodSync,
   closeSync,
+  constants,
+  copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { createConnection } from "node:net";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -24,6 +29,7 @@ const LOG_DIRECTORY = join(DATA_DIRECTORY, "logs");
 const LOG_PATH = join(LOG_DIRECTORY, "finance-hero.log");
 const BACKUP_DIRECTORY = join(DATA_DIRECTORY, "backups");
 const RECOVERY_DIRECTORY = join(DATA_DIRECTORY, "recovery");
+const PHONE_ACCESS_CONFIG_PATH = join(ROOT, "data", "local-tls", "phone-access.json");
 const KEYCHAIN_SERVICE = "finance-hero.database";
 const KEYCHAIN_ACCOUNT = "primary";
 const API_URL = "http://127.0.0.1:4317/api/v1/health";
@@ -116,6 +122,17 @@ function readDotEnvEnvironment() {
   return environment;
 }
 
+function readPhoneAccessConfig() {
+  if (!existsSync(PHONE_ACCESS_CONFIG_PATH)) return {};
+
+  try {
+    const config = JSON.parse(readFileSync(PHONE_ACCESS_CONFIG_PATH, "utf8"));
+    return config && typeof config === "object" ? config : {};
+  } catch {
+    return {};
+  }
+}
+
 function promptHidden(message) {
   if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== "function") {
     throw new Error("run setup from an interactive Terminal to enter the existing database key securely.");
@@ -157,11 +174,11 @@ function promptHidden(message) {
   });
 }
 
-function ensureDatabaseBuild() {
+function ensureDatabaseBuild({ quiet = false } = {}) {
   const databaseModule = join(ROOT, "packages/database/dist/index.js");
   const result = spawnSync("pnpm", ["--filter", "@finance-hero/database", "build"], {
     cwd: ROOT,
-    stdio: "inherit",
+    stdio: quiet ? "ignore" : "inherit",
   });
   if (result.status !== 0 || !existsSync(databaseModule)) {
     throw new Error("the encrypted database verifier could not be built.");
@@ -270,6 +287,115 @@ async function stageRestore(requestedPath) {
   print("Verified restore staged without changing the active database.");
   print(result.recoveryDirectory);
   print("Review RESTORE_READY.json and the recovery runbook before any manual activation.");
+}
+
+function resolveStagedRestore(requestedDirectory) {
+  if (!requestedDirectory) throw new Error("provide the staged restore directory to activate.");
+  mkdirSync(RECOVERY_DIRECTORY, { recursive: true, mode: 0o700 });
+  const root = realpathSync(RECOVERY_DIRECTORY);
+  const requested = resolve(requestedDirectory);
+  if (!existsSync(requested) || lstatSync(requested).isSymbolicLink() || !lstatSync(requested).isDirectory()) {
+    throw new Error("the staged restore directory is missing or unsafe.");
+  }
+  const staged = realpathSync(requested);
+  const child = relative(root, staged);
+  if (!child || child.startsWith("..") || child.includes("/") || dirname(staged) !== root) {
+    throw new Error("the staged restore must be a direct child of the configured recovery directory.");
+  }
+  const receiptPath = join(staged, "RESTORE_READY.json");
+  if (!existsSync(receiptPath) || lstatSync(receiptPath).isSymbolicLink()) {
+    throw new Error("the staged restore readiness receipt is missing or unsafe.");
+  }
+  const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
+  if (receipt?.formatVersion !== 1 || basename(receipt.databaseFilename ?? "") !== receipt.databaseFilename) {
+    throw new Error("the staged restore readiness receipt is invalid.");
+  }
+  const databasePath = join(staged, receipt.databaseFilename);
+  if (!existsSync(databasePath) || lstatSync(databasePath).isSymbolicLink() || !lstatSync(databasePath).isFile()) {
+    throw new Error("the staged database is missing or unsafe.");
+  }
+  return { databasePath, receipt };
+}
+
+async function activateRestore(requestedDirectory) {
+  ensureMacOS();
+  await requireStoppedApp();
+  if (!existsSync(DATABASE_PATH) || statSync(DATABASE_PATH).size === 0) {
+    throw new Error("the active encrypted database does not exist or is empty.");
+  }
+  const { databasePath: stagedPath, receipt } = resolveStagedRestore(requestedDirectory);
+  const key = Buffer.from(readKeychainKey(), "utf8");
+  const databaseModule = ensureDatabaseBuild();
+  const { createVerifiedEncryptedBackup, openEncryptedDatabase, verifyEncryptedDatabaseFile } = await import(
+    pathToFileURL(databaseModule).href
+  );
+  const stagedVerification = verifyEncryptedDatabaseFile(stagedPath, key);
+  if (stagedVerification.sha256 !== receipt.sha256 || stagedVerification.sizeBytes !== receipt.sizeBytes) {
+    throw new Error("the staged database no longer matches its readiness receipt.");
+  }
+
+  const active = openEncryptedDatabase(DATABASE_PATH, key);
+  let preRestoreBackup;
+  try {
+    preRestoreBackup = createVerifiedEncryptedBackup({
+      database: active,
+      databasePath: DATABASE_PATH,
+      key,
+      backupDirectory: join(BACKUP_DIRECTORY, "manual"),
+      reason: "pre-restore",
+    });
+  } finally {
+    active.close();
+  }
+
+  const id = randomUUID();
+  const candidate = `${DATABASE_PATH}.restore-${id}.tmp`;
+  const rollback = `${DATABASE_PATH}.rollback-${id}`;
+  const sidecars = [];
+  let activeMoved = false;
+  let candidateActivated = false;
+  try {
+    copyFileSync(stagedPath, candidate, constants.COPYFILE_EXCL);
+    chmodSync(candidate, 0o600);
+    const candidateVerification = verifyEncryptedDatabaseFile(candidate, key);
+    if (candidateVerification.sha256 !== receipt.sha256) throw new Error("the restore candidate changed.");
+    for (const suffix of ["-wal", "-shm"]) {
+      const original = `${DATABASE_PATH}${suffix}`;
+      if (!existsSync(original)) continue;
+      const saved = `${rollback}${suffix}`;
+      renameSync(original, saved);
+      sidecars.push({ original, saved });
+    }
+    renameSync(DATABASE_PATH, rollback);
+    activeMoved = true;
+    renameSync(candidate, DATABASE_PATH);
+    candidateActivated = true;
+    const verification = verifyEncryptedDatabaseFile(DATABASE_PATH, key);
+    if (verification.sha256 !== receipt.sha256 || verification.sizeBytes !== receipt.sizeBytes) {
+      throw new Error("the activated database failed verification.");
+    }
+    rmSync(rollback);
+    activeMoved = false;
+    for (const sidecar of sidecars) rmSync(sidecar.saved, { force: true });
+    print("Staged restore activated and verified.");
+    print(`Pre-restore backup: ${basename(preRestoreBackup.backupPath)}`);
+  } catch (error) {
+    if (activeMoved && existsSync(rollback)) {
+      if (candidateActivated) rmSync(DATABASE_PATH, { force: true });
+      renameSync(rollback, DATABASE_PATH);
+      activeMoved = false;
+    }
+    for (const sidecar of sidecars) {
+      if (existsSync(sidecar.saved)) {
+        rmSync(sidecar.original, { force: true });
+        renameSync(sidecar.saved, sidecar.original);
+      }
+    }
+    verifyEncryptedDatabaseFile(DATABASE_PATH, key);
+    throw error;
+  } finally {
+    rmSync(candidate, { force: true });
+  }
 }
 
 async function setup() {
@@ -566,6 +692,93 @@ function logs() {
   print(output || "No managed Finance Hero logs are available.");
 }
 
+function fileMode(path) {
+  return existsSync(path) ? statSync(path).mode & 0o777 : null;
+}
+
+async function doctor() {
+  ensureMacOS();
+  const checks = [];
+  const check = (label, ok, detail) => checks.push({ label, ok, detail });
+  const dotEnv = readDotEnvEnvironment();
+  const phoneAccess = readPhoneAccessConfig();
+  const tlsCertificate = dotEnv.FINANCE_HERO_WEB_CERT ?? phoneAccess.certificatePath;
+  const tlsKey = dotEnv.FINANCE_HERO_WEB_KEY ?? phoneAccess.keyPath;
+  const phoneUrl = dotEnv.FINANCE_HERO_WEB_PUBLIC_URL ?? phoneAccess.url ?? WEB_URL;
+  const databaseExists = existsSync(DATABASE_PATH) && statSync(DATABASE_PATH).size > 0;
+
+  check("Node.js", Number(process.versions.node.split(".")[0]) >= 22, process.versions.node);
+  check("macOS Keychain", keychainHasKey(), keychainHasKey() ? "configured" : "missing");
+  check("Encrypted database", databaseExists, databaseExists ? "present" : "missing or empty");
+  check(
+    "Data directory permissions",
+    !existsSync(DATA_DIRECTORY) || (fileMode(DATA_DIRECTORY) & 0o077) === 0,
+    existsSync(DATA_DIRECTORY) ? fileMode(DATA_DIRECTORY).toString(8) : "created on first setup",
+  );
+
+  if (databaseExists && keychainHasKey()) {
+    try {
+      await validateExistingDatabaseKey(readKeychainKey());
+      check("Database key verification", true, "database opens successfully");
+    } catch (error) {
+      check("Database key verification", false, error instanceof Error ? error.message : "verification failed");
+    }
+  } else {
+    check("Database key verification", false, "requires both the database and Keychain item");
+  }
+
+  const backups = availableBackups();
+  if (backups.length > 0 && keychainHasKey()) {
+    try {
+      const databaseModule = ensureDatabaseBuild();
+      const { verifyEncryptedBackup } = await import(pathToFileURL(databaseModule).href);
+      verifyEncryptedBackup({ backupPath: backups[0], key: Buffer.from(readKeychainKey(), "utf8") });
+      check("Latest encrypted backup", true, `${backups.length} available; latest verifies`);
+    } catch (error) {
+      check("Latest encrypted backup", false, error instanceof Error ? error.message : "verification failed");
+    }
+  } else {
+    check("Latest encrypted backup", false, "no verifiable backup is available");
+  }
+
+  check(
+    "Phone TLS certificate",
+    Boolean(tlsCertificate && existsSync(tlsCertificate)),
+    tlsCertificate && existsSync(tlsCertificate) ? "present" : "not configured",
+  );
+  check(
+    "Phone TLS private key",
+    Boolean(tlsKey && existsSync(tlsKey) && (fileMode(tlsKey) & 0o077) === 0),
+    tlsKey && existsSync(tlsKey) ? `present; mode ${fileMode(tlsKey).toString(8)}` : "not configured",
+  );
+
+  const runtime = clearStaleRuntime();
+  const [apiOpen, webOpen, health, webReady] = await Promise.all([
+    portIsOpen(4317),
+    portIsOpen(4318),
+    fetchState(API_URL),
+    webIsReady(Boolean(tlsCertificate && tlsKey), phoneUrl),
+  ]);
+  const runtimeDetail = runtime ? `managed PID ${runtime.pid}` : "launcher stopped";
+  check(
+    "API port 4317",
+    !apiOpen || health?.body?.database === "encrypted",
+    apiOpen ? "healthy encrypted API" : runtimeDetail,
+  );
+  check(
+    "Web port 4318",
+    !webOpen || webReady,
+    webOpen ? (webReady ? "healthy web app" : "listener failed readiness check") : "available",
+  );
+
+  for (const result of checks) {
+    print(`${result.ok ? "PASS" : "FAIL"}  ${result.label}: ${result.detail}`);
+  }
+  const failures = checks.filter((result) => !result.ok).length;
+  print(`\nDoctor result: ${checks.length - failures}/${checks.length} checks passed.`);
+  if (failures > 0) process.exitCode = 1;
+}
+
 async function main() {
   const command = process.argv[2] ?? "help";
   if (command === "setup") {
@@ -584,9 +797,13 @@ async function main() {
     await verifyBackup(process.argv[3]);
   } else if (command === "stage-restore") {
     await stageRestore(process.argv[3]);
+  } else if (command === "activate-restore") {
+    await activateRestore(process.argv[3]);
+  } else if (command === "doctor") {
+    await doctor();
   } else {
     print(
-      "Usage: node scripts/local-control.mjs <setup|start|stop|status|logs|backup|verify-backup|stage-restore> [backup-path]",
+      "Usage: node scripts/local-control.mjs <setup|start|stop|status|logs|backup|verify-backup|stage-restore|activate-restore|doctor> [backup-or-staged-restore-path]",
     );
   }
 }

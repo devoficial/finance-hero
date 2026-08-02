@@ -16,6 +16,8 @@
     "backup:local": "node scripts/local-control.mjs backup",
     "verify-backup:local": "node scripts/local-control.mjs verify-backup",
     "stage-restore:local": "node scripts/local-control.mjs stage-restore",
+    "activate-restore:local": "node scripts/local-control.mjs activate-restore",
+    "doctor:local": "node scripts/local-control.mjs doctor",
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "lint": "biome check .",

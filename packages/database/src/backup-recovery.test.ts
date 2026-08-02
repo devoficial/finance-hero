@@ -1,9 +1,20 @@
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  activateStagedDatabaseRestore,
   createVerifiedEncryptedBackup,
+  pruneEncryptedBackups,
   stageVerifiedDatabaseRestore,
   verifyEncryptedBackup,
   verifyEncryptedDatabaseFile,
@@ -29,6 +40,18 @@ function createFixture() {
     .prepare("INSERT INTO categories (id, name, broad_bucket, created_at) VALUES (?, ?, ?, ?)")
     .run("test-category", "Test category", "test", "2026-08-02T00:00:00.000Z");
   return { directory, databasePath, key, database };
+}
+
+function readTestCategory(databasePath: string, key: Buffer): string {
+  const database = openEncryptedDatabase(databasePath, key);
+  try {
+    const row = database.connection.prepare("SELECT name FROM categories WHERE id = 'test-category'").get() as {
+      name: string;
+    };
+    return row.name;
+  } finally {
+    database.close();
+  }
 }
 
 describe("encrypted backup and recovery", () => {
@@ -111,5 +134,115 @@ describe("encrypted backup and recovery", () => {
     expect(readFileSync(staged.readinessPath, "utf8")).toContain("active database has not been replaced or deleted");
     expect(verifyEncryptedDatabaseFile(fixture.databasePath, fixture.key).sha256).toBe(activeHashBefore);
     fixture.database.close();
+  });
+
+  it("prunes only the oldest complete backup pairs", () => {
+    const fixture = createFixture();
+    const backupDirectory = join(fixture.directory, "backups");
+    const backups = ["2026-08-01T00:00:00.000Z", "2026-08-02T00:00:00.000Z", "2026-08-03T00:00:00.000Z"].map(
+      (createdAt) =>
+        createVerifiedEncryptedBackup({
+          database: fixture.database,
+          databasePath: fixture.databasePath,
+          key: fixture.key,
+          backupDirectory,
+          reason: "retention test",
+          now: new Date(createdAt),
+          retentionCount: 10,
+        }),
+    );
+    writeFileSync(join(backupDirectory, "orphan.db"), "preserve me");
+
+    const result = pruneEncryptedBackups({ backupDirectory, keepCount: 2 });
+    const [oldest, middle, newest] = backups;
+    if (!oldest || !middle || !newest) {
+      throw new Error("Expected three backup fixtures");
+    }
+
+    expect(result).toEqual({ keptCount: 2, removedCount: 1, skippedCount: 1 });
+    expect(existsSync(oldest.backupPath)).toBe(false);
+    expect(existsSync(oldest.manifestPath)).toBe(false);
+    expect(existsSync(middle.backupPath)).toBe(true);
+    expect(existsSync(newest.backupPath)).toBe(true);
+    expect(existsSync(join(backupDirectory, "orphan.db"))).toBe(true);
+    fixture.database.close();
+  });
+
+  it("activates only a staged restore under the configured recovery root and preserves a pre-restore backup", () => {
+    const active = createFixture();
+    active.database.connection
+      .prepare("UPDATE categories SET name = ? WHERE id = 'test-category'")
+      .run("Active category");
+    const source = createFixture();
+    source.database.connection
+      .prepare("UPDATE categories SET name = ? WHERE id = 'test-category'")
+      .run("Restored category");
+    const sourceBackup = createVerifiedEncryptedBackup({
+      database: source.database,
+      databasePath: source.databasePath,
+      key: source.key,
+      backupDirectory: join(source.directory, "backups"),
+      reason: "restore source",
+    });
+    const recoveryRoot = join(active.directory, "recovery");
+    const staged = stageVerifiedDatabaseRestore({
+      backupPath: sourceBackup.backupPath,
+      key: active.key,
+      recoveryRoot,
+    });
+    const activeHash = verifyEncryptedDatabaseFile(active.databasePath, active.key).sha256;
+    active.database.close();
+    source.database.close();
+
+    const activated = activateStagedDatabaseRestore({
+      stagedRestoreDirectory: staged.recoveryDirectory,
+      recoveryRoot,
+      databasePath: active.databasePath,
+      backupDirectory: join(active.directory, "backups", "manual"),
+      key: active.key,
+    });
+
+    expect(readTestCategory(active.databasePath, active.key)).toBe("Restored category");
+    expect(verifyEncryptedBackup({ backupPath: activated.preRestoreBackup.backupPath, key: active.key }).sha256).toBe(
+      activeHash,
+    );
+    const differentRecoveryRoot = join(active.directory, "different-recovery");
+    mkdirSync(differentRecoveryRoot, { recursive: true });
+    expect(() =>
+      activateStagedDatabaseRestore({
+        stagedRestoreDirectory: staged.recoveryDirectory,
+        recoveryRoot: differentRecoveryRoot,
+        databasePath: active.databasePath,
+        backupDirectory: join(active.directory, "backups"),
+        key: active.key,
+      }),
+    ).toThrow(/configured recovery root/i);
+  });
+
+  it("refuses a tampered staged restore without changing the active database", () => {
+    const fixture = createFixture();
+    const backup = createVerifiedEncryptedBackup({
+      database: fixture.database,
+      databasePath: fixture.databasePath,
+      key: fixture.key,
+      backupDirectory: join(fixture.directory, "backups"),
+      reason: "tamper test",
+    });
+    const recoveryRoot = join(fixture.directory, "recovery");
+    const staged = stageVerifiedDatabaseRestore({ backupPath: backup.backupPath, key: fixture.key, recoveryRoot });
+    const activeHash = verifyEncryptedDatabaseFile(fixture.databasePath, fixture.key).sha256;
+    fixture.database.close();
+    appendFileSync(staged.databasePath, "tamper");
+
+    expect(() =>
+      activateStagedDatabaseRestore({
+        stagedRestoreDirectory: staged.recoveryDirectory,
+        recoveryRoot,
+        databasePath: fixture.databasePath,
+        backupDirectory: join(fixture.directory, "pre-restore"),
+        key: fixture.key,
+      }),
+    ).toThrow(/readiness receipt/i);
+    expect(verifyEncryptedDatabaseFile(fixture.databasePath, fixture.key).sha256).toBe(activeHash);
   });
 });

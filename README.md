@@ -44,6 +44,7 @@ For owner-focused Keychain setup, one-click start/stop, and troubleshooting, use
 | [Frontend architecture](docs/frontend-architecture.md) | PWA information architecture and responsive behavior |
 | [Forecasting and alerts](docs/forecasting-and-alerts.md) | Predictions, snowball planning, and notifications |
 | [Security and operations](docs/security-and-operations.md) | Threat model, keys, backups, and local operation |
+| [Final release checklist](docs/final-release-checklist.md) | Recovery, security, device, diagnostics, and release gates |
 | [Migration plan](docs/migration-plan.md) | Google Sheet mapping and reconciliation |
 | [Delivery plan](docs/delivery-plan.md) | Phases, tests, gates, and proposed repository layout |
 | [Development setup](docs/development.md) | Install, run, verification, and current limitations |

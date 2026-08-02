@@ -80,7 +80,7 @@ import {
   seedAcceptedOpeningSnapshot,
   WealthRepository,
 } from "@finance-hero/database";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { AssistantService } from "./assistant-service";
 import type { ServerConfig } from "./config";
 import { DevicePairingService } from "./device-pairing-service";
@@ -104,6 +104,62 @@ export interface BuildAppOptions {
 }
 
 const MAX_STATEMENT_BYTES = 10 * 1024 * 1024;
+
+const PRIVATE_SECURITY_HEADERS = {
+  "cache-control": "private, no-store, max-age=0",
+  pragma: "no-cache",
+  expires: "0",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "no-referrer",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "cross-origin-resource-policy": "same-origin",
+} as const;
+
+export function redactRequestUrl(url: string | undefined): string {
+  if (!url) return "[unknown]";
+  const queryIndex = url.indexOf("?");
+  return queryIndex === -1 ? url : `${url.slice(0, queryIndex)}?[redacted]`;
+}
+
+function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  const normalized = address.toLowerCase();
+  return normalized === "::1" || normalized.startsWith("127.") || normalized.startsWith("::ffff:127.");
+}
+
+async function requireLocalPairingAdministrator(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (isLoopbackAddress(request.ip)) return;
+  reply.code(403).send({
+    error: {
+      code: "LOCAL_ADMIN_REQUIRED",
+      message: "Pairing administration is only available from this Mac.",
+    },
+  });
+}
+
+function createRateLimiter(options: { name: string; limit: number; windowMs: number }) {
+  const buckets = new Map<string, { count: number; resetAt: number }>();
+
+  return async function rateLimit(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const now = Date.now();
+    const key = `${options.name}:${request.ip}`;
+    const current = buckets.get(key);
+    const bucket = !current || current.resetAt <= now ? { count: 0, resetAt: now + options.windowMs } : current;
+
+    if (bucket.count >= options.limit) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1_000));
+      reply
+        .header("retry-after", String(retryAfterSeconds))
+        .code(429)
+        .send({ error: { code: "RATE_LIMITED", message: "Too many requests. Try again shortly." } });
+      return;
+    }
+
+    bucket.count += 1;
+    buckets.set(key, bucket);
+  };
+}
 
 function isValidStatementFilename(filename: string): boolean {
   return Boolean(filename) && filename.length <= 240 && !filename.includes("/") && !filename.includes("\\");
@@ -199,7 +255,61 @@ async function parseStatementContent(
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger: options.logger ?? false, bodyLimit: 10 * 1024 * 1024 });
+  const app = Fastify({
+    logger: options.logger
+      ? {
+          serializers: {
+            req(request: {
+              method?: string;
+              url?: string;
+              headers?: { host?: string };
+              socket?: { remoteAddress?: string };
+            }) {
+              return {
+                method: request.method,
+                url: redactRequestUrl(request.url),
+                host: request.headers?.host,
+                remoteAddress: request.socket?.remoteAddress,
+              };
+            },
+          },
+        }
+      : false,
+    bodyLimit: 10 * 1024 * 1024,
+  });
+  const pairingAdminRateLimit = createRateLimiter({ name: "pairing-admin", limit: 10, windowMs: 60_000 });
+  const pairingExchangeRateLimit = createRateLimiter({ name: "pairing-exchange", limit: 20, windowMs: 60_000 });
+  const assistantRateLimit = createRateLimiter({ name: "assistant", limit: 30, windowMs: 60_000 });
+  const statementUploadRateLimit = createRateLimiter({ name: "statement-upload", limit: 12, windowMs: 60_000 });
+  const statementParseRateLimit = createRateLimiter({ name: "statement-parse", limit: 20, windowMs: 60_000 });
+
+  app.addHook("onSend", async (_request, reply, payload) => {
+    for (const [name, value] of Object.entries(PRIVATE_SECURITY_HEADERS)) {
+      reply.header(name, value);
+    }
+    return payload;
+  });
+
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    const statusCode = error.statusCode && error.statusCode >= 400 && error.statusCode < 500 ? error.statusCode : 500;
+    if (statusCode < 500) {
+      return reply.code(statusCode).send({
+        statusCode,
+        error: statusCode === 429 ? "Too Many Requests" : "Bad Request",
+        message: error.message,
+      });
+    }
+
+    request.log.error(
+      { error: { name: error.name, code: (error as Error & { code?: string }).code } },
+      "Unhandled API request failure.",
+    );
+    return reply.code(500).send({
+      statusCode: 500,
+      error: "Internal Server Error",
+      message: "The request could not be completed.",
+    });
+  });
   let database: FinanceHeroDatabase | undefined;
   let budgets: BudgetRepository | undefined;
   let accounts: AccountRepository | undefined;
@@ -389,11 +499,17 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     return reply.send({ removed: removed.length, filesRemoved });
   });
 
-  app.post("/api/v1/devices/pairing-code", async (_request, reply) => {
-    return reply.header("cache-control", "no-store").send(devices.createPairingCode());
-  });
+  // Finance data routes intentionally retain trusted-LAN access until the phone UI can send a token.
+  // Pairing administration is more dangerous because it mints and revokes credentials, so it is Mac-only now.
+  app.post(
+    "/api/v1/devices/pairing-code",
+    { preHandler: [requireLocalPairingAdministrator, pairingAdminRateLimit] },
+    async (_request, reply) => {
+      return reply.header("cache-control", "no-store").send(devices.createPairingCode());
+    },
+  );
 
-  app.post("/api/v1/devices/pair", async (request, reply) => {
+  app.post("/api/v1/devices/pair", { preHandler: pairingExchangeRateLimit }, async (request, reply) => {
     try {
       const input = (request.body ?? {}) as { code?: string; name?: string };
       if (!input.code || !input.name) throw new Error("Pairing code and device name are required.");
@@ -404,11 +520,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
   });
 
-  app.get("/api/v1/devices", async (_request, reply) => {
+  app.get("/api/v1/devices", { preHandler: requireLocalPairingAdministrator }, async (_request, reply) => {
     return reply.header("cache-control", "no-store").send({ devices: devices.list() });
   });
 
-  app.delete("/api/v1/devices/:id", async (request, reply) => {
+  app.delete("/api/v1/devices/:id", { preHandler: requireLocalPairingAdministrator }, async (request, reply) => {
     const { id } = request.params as { id: string };
     return devices.revoke(id)
       ? reply.code(204).send()
@@ -487,7 +603,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     return reply.header("cache-control", "no-store").send(assistantConversationSchema.parse(conversation));
   });
 
-  app.post("/api/v1/assistant/chat", async (request, reply) => {
+  app.post("/api/v1/assistant/chat", { preHandler: assistantRateLimit }, async (request, reply) => {
     if (!assistant) {
       return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
     }
@@ -496,8 +612,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       const response = await assistant.chat(input);
       return reply.header("cache-control", "no-store").send(assistantChatResponseSchema.parse(response));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "The local assistant could not answer.";
-      return reply.code(502).send({ error: { code: "LOCAL_MODEL_UNAVAILABLE", message } });
+      request.log.warn({ error: { name: error instanceof Error ? error.name : "UnknownError" } }, "Assistant failed.");
+      return reply.code(502).send({
+        error: { code: "LOCAL_MODEL_UNAVAILABLE", message: "The local assistant could not answer." },
+      });
     }
   });
 
@@ -646,7 +764,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     return reply.header("cache-control", "no-store").send(importQueueResponseSchema.parse(imports.getQueue()));
   });
 
-  app.post("/api/v1/statement-uploads", async (request, reply) => {
+  app.post("/api/v1/statement-uploads", { preHandler: statementUploadRateLimit }, async (request, reply) => {
     if (!imports) {
       return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
     }
@@ -712,7 +830,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
   });
 
-  app.post("/api/v1/imports/:id/parse", async (request, reply) => {
+  app.post("/api/v1/imports/:id/parse", { preHandler: statementParseRateLimit }, async (request, reply) => {
     if (!imports) {
       return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
     }
