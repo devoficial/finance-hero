@@ -83,6 +83,38 @@ async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
   return response.json();
 }
 
+export interface GmailConnectionStatus {
+  configured: boolean;
+  connected: boolean;
+  ownerEmail: string | null;
+  scope: string;
+  message: string;
+}
+
+export interface GmailDiscoveryResult {
+  attachmentsFound: number;
+  imported: number;
+  duplicates: number;
+  failed: number;
+}
+
+export async function getGmailStatus(signal?: AbortSignal): Promise<GmailConnectionStatus> {
+  return (await getJson("/api/v1/gmail/status", signal)) as GmailConnectionStatus;
+}
+
+export async function discoverGmailStatements(): Promise<GmailDiscoveryResult> {
+  const response = await fetch("/api/v1/gmail/discover", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ maxMessages: 100 }),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `Local API returned ${response.status}`);
+  }
+  return (await response.json()) as GmailDiscoveryResult;
+}
+
 export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return healthResponseSchema.parse(await getJson("/api/v1/health", signal));
 }

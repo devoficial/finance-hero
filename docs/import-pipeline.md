@@ -39,8 +39,10 @@ flowchart LR
 - Attachments enter the same statement pipeline as manual files.
 - Schedule: every second day at 08:00 IST, manual Sync, and startup catch-up.
 
-The Gmail connection is established on the Mac. Google credentials are encrypted
-with a key held in macOS Keychain and never synchronize to the phone.
+The Gmail connection is established on the Mac. The refresh token is held by macOS
+Keychain and never synchronizes to the phone. The first implementation supports owner-restricted
+OAuth, connection status, and manual attachment discovery; Gmail history cursors and scheduled
+catch-up remain later increments.
 
 ### iPhone messages
 

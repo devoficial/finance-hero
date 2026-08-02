@@ -7837,6 +7837,51 @@ h2 {
   max-width: 760px;
 }
 
+.gmail-source-panel {
+  align-items: center;
+  display: grid;
+  gap: 1rem 1.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 1.25rem 1.5rem;
+}
+
+.gmail-source-copy h2,
+.gmail-source-copy p {
+  margin: 0.25rem 0;
+}
+
+.gmail-source-copy small {
+  color: var(--muted);
+}
+
+.gmail-source-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: flex-end;
+}
+
+.gmail-source-result {
+  color: var(--green);
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .gmail-source-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .gmail-source-actions {
+    justify-content: stretch;
+  }
+
+  .gmail-source-actions button {
+    flex: 1 1 auto;
+  }
+}
+
 .import-safety {
   align-content: center;
   border: 1px solid rgba(255, 255, 255, 0.3);

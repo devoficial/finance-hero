@@ -5,11 +5,13 @@ import type {
   ReferenceDataResponse,
   UpdateImportCandidateRequest,
 } from "@finance-hero/contracts";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   approveImportCandidates,
+  discoverGmailStatements,
+  getGmailStatus,
   parseStatementArtifact,
   reconcileStatement,
   rejectImportCandidates,
@@ -100,6 +102,11 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
   const [reconcileOpening, setReconcileOpening] = useState("");
   const [reconcileClosing, setReconcileClosing] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [gmailMessage, setGmailMessage] = useState<string | null>(null);
+  const gmailStatus = useQuery({
+    queryKey: ["gmail", "status"],
+    queryFn: ({ signal }) => getGmailStatus(signal),
+  });
   const accounts = referenceData?.accounts ?? [];
   const categories = referenceData?.categories ?? [];
   const primarySalaryAccount = accounts.find(
@@ -151,6 +158,20 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
       await refresh();
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : "Statement upload failed."),
+  });
+  const gmailDiscoveryMutation = useMutation({
+    mutationFn: discoverGmailStatements,
+    onSuccess: async (result) => {
+      setActionError(null);
+      setGmailMessage(
+        `Found ${result.attachmentsFound}; added ${result.imported}, skipped ${result.duplicates} duplicates, ${result.failed} failed.`,
+      );
+      await refresh();
+    },
+    onError: (error) => {
+      setGmailMessage(null);
+      setActionError(error instanceof Error ? error.message : "Gmail discovery failed.");
+    },
   });
   const parseMutation = useMutation({
     mutationFn: ({ id, password }: { id: string; password?: string }) => parseStatementArtifact(id, { password }),
@@ -479,6 +500,44 @@ export function ImportsView({ data, loading, money, referenceData }: ImportsView
           <strong>{data?.artifacts.length ?? 0}</strong>
           <small>Content-hash deduplicated</small>
         </article>
+      </section>
+
+      <section className="panel gmail-source-panel">
+        <div className="gmail-source-copy">
+          <p className="eyebrow">GMAIL / READ ONLY</p>
+          <h2>Discover statement attachments</h2>
+          <p>{gmailStatus.data?.message ?? "Checking the local Gmail connection..."}</p>
+          {gmailStatus.data?.ownerEmail && <small>Allowed account: {gmailStatus.data.ownerEmail}</small>}
+        </div>
+        <div className="gmail-source-actions">
+          <span className={`status-chip ${gmailStatus.data?.connected ? "connected" : ""}`}>
+            {gmailStatus.data?.connected
+              ? "CONNECTED"
+              : gmailStatus.data?.configured
+                ? "NOT CONNECTED"
+                : "SETUP NEEDED"}
+          </span>
+          {gmailStatus.data?.configured && !gmailStatus.data.connected && (
+            <button
+              className="secondary-button"
+              onClick={() => {
+                window.location.href = "/api/v1/gmail/oauth/start";
+              }}
+              type="button"
+            >
+              Connect Gmail
+            </button>
+          )}
+          <button
+            className="add-button"
+            disabled={!gmailStatus.data?.connected || gmailDiscoveryMutation.isPending}
+            onClick={() => gmailDiscoveryMutation.mutate()}
+            type="button"
+          >
+            {gmailDiscoveryMutation.isPending ? "Checking Gmail..." : "Discover now"}
+          </button>
+        </div>
+        {gmailMessage && <p className="gmail-source-result">{gmailMessage}</p>}
       </section>
 
       <section className="panel import-upload-panel">

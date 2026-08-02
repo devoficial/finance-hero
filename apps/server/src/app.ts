@@ -74,6 +74,7 @@ import {
 import Fastify, { type FastifyInstance } from "fastify";
 import { AssistantService } from "./assistant-service";
 import type { ServerConfig } from "./config";
+import { type GmailConnector, GmailService } from "./gmail-service";
 import { parseScannedPdfWithLocalOcr } from "./local-ocr";
 import {
   type ParsedStatementReconciliation,
@@ -88,6 +89,13 @@ export interface BuildAppOptions {
   config: ServerConfig;
   version?: string;
   logger?: boolean;
+  gmailService?: GmailConnector;
+}
+
+const MAX_STATEMENT_BYTES = 10 * 1024 * 1024;
+
+function isValidStatementFilename(filename: string): boolean {
+  return Boolean(filename) && filename.length <= 240 && !filename.includes("/") && !filename.includes("\\");
 }
 
 const CATEGORY_RULES: Array<{ categoryId: string; terms: string[] }> = [
@@ -189,6 +197,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   let projects: ProjectRepository | undefined;
   let wealth: WealthRepository | undefined;
   let assistant: AssistantService | undefined;
+  const gmail = options.gmailService ?? new GmailService(options.config);
   let backupBeforeRisk: ((reason: string) => void) | undefined;
 
   if (options.config.databaseKey) {
@@ -243,6 +252,98 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     });
 
     return reply.header("cache-control", "no-store").send(payload);
+  });
+
+  app.get("/api/v1/gmail/status", async (_request, reply) => {
+    return reply.header("cache-control", "no-store").send(await gmail.status());
+  });
+
+  app.get("/api/v1/gmail/oauth/start", async (_request, reply) => {
+    try {
+      return reply.redirect(gmail.createAuthorizationUrl());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Gmail OAuth could not start.";
+      return reply.code(503).send({ error: { code: "GMAIL_NOT_CONFIGURED", message } });
+    }
+  });
+
+  app.get("/api/v1/gmail/oauth/callback", async (request, reply) => {
+    try {
+      const query = request.query as { code?: string; state?: string; error?: string };
+      if (query.error) throw new Error(`Google authorization was declined (${query.error}).`);
+      if (!query.code || !query.state) throw new Error("Google did not return a valid authorization response.");
+      await gmail.completeAuthorization(query.code, query.state);
+      return reply.redirect("http://127.0.0.1:4318/#/imports?gmail=connected");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Gmail OAuth could not be completed.";
+      return reply.code(400).send({ error: { code: "GMAIL_OAUTH_FAILED", message } });
+    }
+  });
+
+  app.post("/api/v1/gmail/discover", async (request, reply) => {
+    if (!imports) {
+      return reply.code(503).send({ error: { code: "DATABASE_UNAVAILABLE", message: "Database is not configured." } });
+    }
+    try {
+      const input = (request.body ?? {}) as { query?: string; maxMessages?: number };
+      const query = typeof input.query === "string" && input.query.trim() ? input.query.trim() : undefined;
+      const maxMessages = Number.isInteger(input.maxMessages) ? input.maxMessages : undefined;
+      const attachments = await gmail.discoverAttachments(query, maxMessages);
+      let imported = 0;
+      let duplicates = 0;
+      let failed = 0;
+      for (const attachment of attachments) {
+        if (!isValidStatementFilename(attachment.filename) || attachment.content.length > MAX_STATEMENT_BYTES) {
+          failed += 1;
+          continue;
+        }
+        const contentHash = createHash("sha256").update(attachment.content).digest("hex");
+        const extension = attachment.filename.toLowerCase().split(".").pop() ?? "";
+        const fileType = detectStatementType(attachment.content, extension);
+        let rows: ReturnType<typeof prepareImportRows> = [];
+        let reconciliation: ParsedStatementReconciliation | undefined;
+        let status: "parsed" | "needs_parser" | "failed" = "failed";
+        let parserMessage = "Unsupported Gmail attachment type.";
+        if (fileType !== "unknown") {
+          try {
+            const parsed = await parseStatementContent(attachment.content, fileType, attachment.filename);
+            rows = prepareImportRows(parsed.rows);
+            reconciliation = parsed.reconciliation;
+            status = "parsed";
+            parserMessage = parsed.message;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Gmail attachment could not be parsed.";
+            status =
+              error instanceof StatementPasswordRequiredError || message.includes("OCR is required")
+                ? "needs_parser"
+                : "failed";
+            parserMessage = message;
+            failed += 1;
+          }
+        }
+        const quarantineDirectory = join(options.config.dataDirectory, "imports", "quarantine");
+        mkdirSync(quarantineDirectory, { recursive: true, mode: 0o700 });
+        const quarantinePath = join(quarantineDirectory, `${contentHash}.${fileType === "unknown" ? "bin" : fileType}`);
+        writeFileSync(quarantinePath, attachment.content, { mode: 0o600 });
+        chmodSync(quarantinePath, 0o600);
+        const result = imports.createArtifact({
+          filename: attachment.filename,
+          contentHash,
+          mimeType: statementMimeType(fileType),
+          sizeBytes: attachment.content.length,
+          status,
+          parserMessage: `${parserMessage} Gmail message ${attachment.messageId}.`,
+          reconciliation,
+          rows,
+        });
+        if (result.duplicate) duplicates += 1;
+        else imported += 1;
+      }
+      return reply.send({ attachmentsFound: attachments.length, imported, duplicates, failed });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Gmail discovery failed.";
+      return reply.code(400).send({ error: { code: "GMAIL_DISCOVERY_FAILED", message } });
+    }
   });
 
   app.get("/api/v1/assistant/status", async (_request, reply) => {
@@ -436,7 +537,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     try {
       const query = request.query as { filename?: string; accountId?: string };
       const filename = (query.filename ?? "").trim();
-      if (!filename || filename.length > 240 || filename.includes("/") || filename.includes("\\")) {
+      if (!isValidStatementFilename(filename)) {
         throw new Error("A valid statement filename is required.");
       }
       const content = request.body;

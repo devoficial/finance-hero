@@ -9,6 +9,10 @@ export interface ServerConfig {
   ollamaUrl?: string;
   ollamaModel?: string;
   ollamaFinalizerModel?: string;
+  googleClientId?: string;
+  googleClientSecret?: string;
+  googleOwnerEmail?: string;
+  googleRedirectUri?: string;
 }
 
 export function readConfig(environment = process.env): ServerConfig {
@@ -26,6 +30,11 @@ export function readConfig(environment = process.env): ServerConfig {
     ollamaUrl: environment.FINANCE_HERO_OLLAMA_URL ?? "http://127.0.0.1:11434",
     ollamaModel: environment.FINANCE_HERO_OLLAMA_MODEL ?? "qwen3:4b-thinking-2507-q4_K_M",
     ollamaFinalizerModel: environment.FINANCE_HERO_OLLAMA_FINALIZER_MODEL ?? "qwen3:4b-instruct-2507-q4_K_M",
+    googleClientId: environment.FINANCE_HERO_GOOGLE_CLIENT_ID,
+    googleClientSecret: environment.FINANCE_HERO_GOOGLE_CLIENT_SECRET,
+    googleOwnerEmail: environment.FINANCE_HERO_GOOGLE_OWNER_EMAIL,
+    googleRedirectUri:
+      environment.FINANCE_HERO_GOOGLE_REDIRECT_URI ?? `http://127.0.0.1:${parsedPort}/api/v1/gmail/oauth/callback`,
   };
 }
 

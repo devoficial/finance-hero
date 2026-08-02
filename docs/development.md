@@ -55,12 +55,32 @@ pnpm start:local
 - Candidate approval/rejection: `POST /api/v1/candidate-actions/approve`, `POST /api/v1/candidate-actions/reject`
 - Assistant status: `GET /api/v1/assistant/status`
 - Read-only local assistant: `POST /api/v1/assistant/chat`
+- Gmail connection status: `GET /api/v1/gmail/status`
+- Gmail owner authorization: `GET /api/v1/gmail/oauth/start`
+- Manual Gmail attachment discovery: `POST /api/v1/gmail/discover`
 
 The secure launcher starts Ollama on demand with cloud access disabled. There is no
 OpenAI or cloud-model fallback. See [local finance assistant](local-finance-assistant.md).
 
 Development binds only to loopback. LAN HTTPS, Bonjour discovery, and iPhone certificate
 installation remain a Phase 0 spike and must not be simulated by exposing the HTTP server.
+
+## Gmail statement discovery
+
+Create a Google OAuth **Web application** client and register this exact redirect URI:
+
+```text
+http://127.0.0.1:4317/api/v1/gmail/oauth/callback
+```
+
+Set `FINANCE_HERO_GOOGLE_CLIENT_ID`, `FINANCE_HERO_GOOGLE_CLIENT_SECRET`, and
+`FINANCE_HERO_GOOGLE_OWNER_EMAIL` in the uncommitted local `.env`. Restart Finance Hero, open
+Imports, and choose **Connect Gmail**. The connector requests Gmail read-only access, verifies the
+signed-in email against the configured owner, and stores the offline refresh token in macOS
+Keychain under service `finance-hero.gmail` and account `primary`.
+
+**Discover now** searches for supported statement attachments and places them in the existing
+review-gated import pipeline. Discovery never approves or posts transactions automatically.
 
 ## Verify
 
@@ -138,7 +158,9 @@ then perform a separately authorized recovery operation.
 - Debt snowball/avalanche scenarios and the twelve-month forecast are deterministic browser calculations over
   current API data. Forecast assumptions remain editable and construction commitments are disclosed but excluded
   until their payment dates are known.
-- Google login, device pairing, LAN HTTPS, Gmail, and SMS are not connected yet.
+- Google login, device pairing, LAN HTTPS, scheduled Gmail sync, and SMS are not connected yet.
+- Gmail owner OAuth, read-only connection status, and manual statement-attachment discovery are available. Gmail
+  history cursors, sender rules, startup catch-up, and the every-two-days scheduler remain pending.
 - Local CSV, TSV, text-PDF, XLS, and XLSX extraction is connected to the approval queue. Originals are preserved in
   `data/imports/quarantine`; password-protected PDFs can be retried with a password held only in process memory.
 - Scanned PDFs use a fully local macOS PDFKit/Apple Vision helper. Cross-source semantic duplicates require an
@@ -147,7 +169,7 @@ then perform a separately authorized recovery operation.
 - Statement opening/closing-balance reconciliation is implemented with independent extraction and approved-record
   checks. The primary salary account's reconciled close drives the next month's carryover; reopening a candidate
   invalidates the completed reconciliation.
-- Additional institution-specific fixtures, Gmail discovery, and iPhone Shortcut ingestion remain pending.
+- Additional institution-specific fixtures, Gmail incremental discovery, and iPhone Shortcut ingestion remain pending.
   Unsupported layouts stay outside the financial record.
 - IndexedDB contains only metadata and mutation-outbox tables; cache encryption is not complete.
 - PWA branding includes install icons, an iOS touch icon, a fallback favicon, and a safe-zone maskable icon.
