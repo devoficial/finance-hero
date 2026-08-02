@@ -14,12 +14,29 @@ export {
   type KnowledgeRecord,
 } from "./assistant-repository";
 export {
+  type BackupManifest,
+  type CreatedDatabaseBackup,
+  createVerifiedEncryptedBackup,
+  type StagedDatabaseRestore,
+  stageVerifiedDatabaseRestore,
+  type VerifiedDatabaseFile,
+  verifyEncryptedBackup,
+  verifyEncryptedDatabaseFile,
+} from "./backup-recovery";
+export {
   type BudgetLineRecord,
   type BudgetMonthRecord,
   BudgetRepository,
   type UpdateBudgetMonthInput,
 } from "./budget-repository";
-export { type FinanceHeroDatabase, initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
+export {
+  DatabaseUnlockError,
+  type FinanceHeroDatabase,
+  FOUNDATION_SCHEMA_VERSION,
+  foundationSchemaNeedsMigration,
+  initializeFoundationSchema,
+  openEncryptedDatabase,
+} from "./encrypted-database";
 export {
   type CreateImportArtifactInput,
   type ImportArtifactRecord,

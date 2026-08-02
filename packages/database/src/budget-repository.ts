@@ -590,9 +590,9 @@ export class BudgetRepository {
                        ELSE 0
                      END), 0) AS aggregate_outflow,
                      MAX(CASE
-                       WHEN p.category_id = 'category-home-construction' THEN 1
+                       WHEN p.category_id IN ('category-home-construction', 'category-emergency-fund') THEN 1
                        ELSE 0
-                     END) AS is_home_construction_sheet
+                     END) AS is_owned_account_funding_sheet
               FROM journal_transactions t
               JOIN postings p ON p.transaction_id = t.id
               JOIN accounts a ON a.id = p.account_id
@@ -602,7 +602,7 @@ export class BudgetRepository {
             SELECT month, SUM(CASE
               WHEN origin = 'manual_transfer' THEN 0
               WHEN direct_primary_outflow > 0 THEN direct_primary_outflow
-              WHEN origin = 'expense_sheet_aggregate' AND is_home_construction_sheet = 1 THEN 0
+              WHEN origin = 'expense_sheet_aggregate' AND is_owned_account_funding_sheet = 1 THEN 0
               WHEN origin IN ('historical_aggregate', 'expense_sheet_aggregate') THEN aggregate_outflow
               ELSE 0
             END) AS amountPaise
@@ -762,10 +762,9 @@ export class BudgetRepository {
           ? "account-savings"
           : null;
     if (destinationAccountId) {
-      const existingTransferPaise =
-        categoryId === "category-home-construction"
-          ? this.getPrimaryToDestinationTransfers(month, destinationAccountId)
-          : 0;
+      // The sheet classifies an owned-account transfer; it must not fund the
+      // destination again when the user already recorded that transfer.
+      const existingTransferPaise = this.getPrimaryToDestinationTransfers(month, destinationAccountId);
       const fundingPaise = Math.max(0, desiredPaise - existingTransferPaise);
       if (fundingPaise === 0) {
         return;

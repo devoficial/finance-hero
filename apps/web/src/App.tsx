@@ -96,6 +96,7 @@ export function App() {
   const [installPrompt, setInstallPrompt] = useState<PwaInstallPromptEvent | null>(null);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [reportStatus, setReportStatus] = useState<"idle" | "generating" | "error">("idle");
   const health = useQuery({ queryKey: ["health"], queryFn: ({ signal }) => getHealth(signal) });
   const assistantStatus = useQuery({
     queryKey: ["assistant", "status"],
@@ -105,6 +106,10 @@ export function App() {
   const dashboard = useQuery({
     queryKey: ["dashboard", selectedMonth],
     queryFn: ({ signal }) => getDashboard(selectedMonth, signal),
+  });
+  const reportDashboard = useQuery({
+    queryKey: ["dashboard", ACTIVE_MONTH],
+    queryFn: ({ signal }) => getDashboard(ACTIVE_MONTH, signal),
   });
   const budget = useQuery({
     queryKey: ["budget", selectedMonth],
@@ -242,6 +247,26 @@ export function App() {
     }
   }
 
+  async function downloadSummary() {
+    if (!reportDashboard.data || !accounts.data || !liabilities.data || !wealth.data) return;
+    setReportStatus("generating");
+    try {
+      const { downloadFinancialReport } = await import("./lib/financial-report");
+      await downloadFinancialReport({
+        generatedOn: new Date(),
+        dashboard: reportDashboard.data,
+        accounts: accounts.data,
+        liabilities: liabilities.data,
+        wealth: wealth.data,
+      });
+    } catch (error) {
+      console.error("Unable to generate financial summary PDF", error);
+      setReportStatus("error");
+      return;
+    }
+    setReportStatus("idle");
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -287,6 +312,25 @@ export function App() {
             <h1>{activeNav === "Home" ? `${greeting}, Debasis.` : activeNav}</h1>
           </div>
           <div className="top-actions">
+            <button
+              aria-label="Download complete financial summary PDF"
+              className="report-button"
+              disabled={
+                reportStatus === "generating" ||
+                !reportDashboard.data ||
+                !accounts.data ||
+                !liabilities.data ||
+                !wealth.data
+              }
+              onClick={downloadSummary}
+              title="Download complete financial summary PDF"
+              type="button"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v4h14v-4" />
+              </svg>
+              <span>{reportStatus === "generating" ? "Building PDF" : "PDF summary"}</span>
+            </button>
             {!isInstalled && (
               <button className="install-button" onClick={installApp} type="button">
                 Install app
@@ -304,6 +348,15 @@ export function App() {
             </button>
           </div>
         </header>
+
+        {reportStatus === "error" && (
+          <section aria-live="assertive" className="report-error" role="alert">
+            The PDF could not be generated. Your financial data was not sent anywhere. Please try again.
+            <button onClick={() => setReportStatus("idle")} type="button">
+              Dismiss
+            </button>
+          </section>
+        )}
 
         {showInstallHelp && (
           <section className="install-guide" aria-label="Install Finance Hero">

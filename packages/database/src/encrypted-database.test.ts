@@ -2,7 +2,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
+import {
+  DatabaseUnlockError,
+  foundationSchemaNeedsMigration,
+  initializeFoundationSchema,
+  openEncryptedDatabase,
+} from "./encrypted-database";
 
 const temporaryDirectories: string[] = [];
 
@@ -27,9 +32,10 @@ describe("encrypted database", () => {
     expect(() => {
       const invalid = openEncryptedDatabase(filename, wrongKey);
       invalid.close();
-    }).toThrow();
+    }).toThrow(DatabaseUnlockError);
 
     const reopened = openEncryptedDatabase(filename, correctKey);
+    expect(foundationSchemaNeedsMigration(reopened)).toBe(false);
     const row = reopened.connection.prepare("SELECT value FROM app_metadata WHERE key = ?").get("schema_version") as {
       value: string;
     };
@@ -93,7 +99,9 @@ describe("encrypted database", () => {
       ) STRICT;
     `);
 
+    expect(foundationSchemaNeedsMigration(database)).toBe(true);
     expect(() => initializeFoundationSchema(database)).not.toThrow();
+    expect(foundationSchemaNeedsMigration(database)).toBe(false);
     const columns = (
       database.connection.prepare("PRAGMA table_info(import_candidates)").all() as Array<{ name: string }>
     ).map((column) => column.name);

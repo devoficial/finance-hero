@@ -16,6 +16,20 @@ export interface ParsedStatement {
   rows: ParsedStatementRow[];
   message: string;
   reconciliation: ParsedStatementReconciliation;
+  diagnostics: StatementParserDiagnostic[];
+}
+
+export interface StatementParserDiagnostic {
+  code: string;
+  severity: "info" | "warning";
+  message: string;
+  source?: string;
+}
+
+export interface StatementInstitutionProfile {
+  id: string;
+  displayName: string;
+  requiredHeaderGroups: readonly (readonly string[])[];
 }
 
 export interface ParsedStatementReconciliation {
@@ -85,12 +99,38 @@ const AMOUNT_HEADERS = ["amount", "transactionamount", "txnamount"];
 const DIRECTION_HEADERS = ["direction", "type", "drcr", "debitcredit"];
 const BALANCE_HEADERS = ["balance", "closingbalance", "availablebalance", "runningbalance", "bal"];
 
+// Profiles only identify known layouts. Column aliases remain generic, so adding an
+// institution never forks the transaction parser.
+const GENERIC_STATEMENT_PROFILE: StatementInstitutionProfile = {
+  id: "generic-bank",
+  displayName: "Generic bank or card statement",
+  requiredHeaderGroups: [DATE_HEADERS, DESCRIPTION_HEADERS, [...DEBIT_HEADERS, ...CREDIT_HEADERS, ...AMOUNT_HEADERS]],
+};
+
+export const STATEMENT_INSTITUTION_PROFILES: readonly StatementInstitutionProfile[] = [
+  {
+    id: "axis-bank",
+    displayName: "Axis Bank",
+    requiredHeaderGroups: [["trandate"], ["particulars"], ["dr", "debit"], ["cr", "credit"], ["bal", "balance"]],
+  },
+  GENERIC_STATEMENT_PROFILE,
+] as const;
+
 function normalizeHeader(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function findColumn(headers: string[], aliases: string[]): number {
   return headers.findIndex((header) => aliases.includes(normalizeHeader(header)));
+}
+
+function detectInstitutionProfile(headers: string[]): StatementInstitutionProfile {
+  const normalized = new Set(headers.map(normalizeHeader));
+  return (
+    STATEMENT_INSTITUTION_PROFILES.find((profile) =>
+      profile.requiredHeaderGroups.every((group) => group.some((alias) => normalized.has(alias))),
+    ) ?? GENERIC_STATEMENT_PROFILE
+  );
 }
 
 function parseDelimited(text: string, delimiter: string): string[][] {
@@ -304,6 +344,13 @@ export function parseStatementOcrPages(pages: OcrStatementPage[]): ParsedStateme
     rows,
     message: `${rows.length} low-confidence transaction candidate${rows.length === 1 ? "" : "s"} extracted with local Apple Vision OCR. Verify every row before approval.`,
     reconciliation: statementReconciliation(rows, balancePoints),
+    diagnostics: [
+      {
+        code: "ocr.low_confidence",
+        severity: "warning",
+        message: `${rows.length} row${rows.length === 1 ? "" : "s"} require manual verification after OCR.`,
+      },
+    ],
   };
 }
 
@@ -345,6 +392,7 @@ export function parseStatementTable(table: string[][], sourceName?: string): Par
   }
 
   const headers = table[headerRow] ?? [];
+  const profile = detectInstitutionProfile(headers);
   const dateIndex = findColumn(headers, DATE_HEADERS);
   const descriptionIndex = findColumn(headers, DESCRIPTION_HEADERS);
   const debitIndex = findColumn(headers, DEBIT_HEADERS);
@@ -440,12 +488,45 @@ export function parseStatementTable(table: string[][], sourceName?: string): Par
   if (rows.length === 0) {
     throw new Error("No transaction rows with valid amounts were found.");
   }
+  const nonEmptyDataRows = table.slice(headerRow + 1).filter((values) => values.some((value) => value.trim())).length;
+  const skippedRows = Math.max(0, nonEmptyDataRows - rows.length);
+  const diagnostics: StatementParserDiagnostic[] = [
+    {
+      code: "table.header_detected",
+      severity: "info",
+      message: `Transaction header detected on row ${headerRow + 1}.`,
+      source: sourceName,
+    },
+    {
+      code: "profile.detected",
+      severity: "info",
+      message: `${profile.displayName} layout detected.`,
+      source: sourceName,
+    },
+  ];
+  if (swapDebitCredit) {
+    diagnostics.push({
+      code: "table.direction_corrected",
+      severity: "warning",
+      message: "Debit and credit labels were reversed using running-balance evidence.",
+      source: sourceName,
+    });
+  }
+  if (skippedRows > 0) {
+    diagnostics.push({
+      code: "table.rows_skipped",
+      severity: "warning",
+      message: `${skippedRows} non-empty row${skippedRows === 1 ? " was" : "s were"} skipped because no valid transaction amount was found.`,
+      source: sourceName,
+    });
+  }
   return {
     rows,
     message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted.${
       swapDebitCredit ? " Debit and credit labels were corrected from running balance movements." : ""
     }`,
     reconciliation: statementReconciliation(rows, balancePoints, findExplicitOpeningBalance(table)),
+    diagnostics,
   };
 }
 
@@ -468,7 +549,20 @@ export function parseStatementDelimitedFile(content: Buffer, filename: string): 
   if (table.length < 2) {
     throw new Error("The statement does not contain a header and transaction rows.");
   }
-  return parseStatementTable(table);
+  const parsed = parseStatementTable(table, filename);
+  const delimiterName = delimiter === "\t" ? "tab" : delimiter === ";" ? "semicolon" : "comma";
+  return {
+    ...parsed,
+    diagnostics: [
+      {
+        code: "delimited.delimiter_detected",
+        severity: "info",
+        message: `${delimiterName} delimiter detected.`,
+        source: filename,
+      },
+      ...parsed.diagnostics,
+    ],
+  };
 }
 
 function assertSafeXlsxArchive(content: Buffer) {
@@ -516,6 +610,8 @@ export function parseStatementExcelFile(content: Buffer, filename: string): Pars
   const rows: ParsedStatementRow[] = [];
   const parsedSheets: string[] = [];
   const reconciliations: ParsedStatementReconciliation[] = [];
+  const diagnostics: StatementParserDiagnostic[] = [];
+  const skippedSheets: string[] = [];
   for (const sheetName of workbook.SheetNames) {
     const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) continue;
@@ -529,18 +625,28 @@ export function parseStatementExcelFile(content: Buffer, filename: string): Pars
       const parsed = parseStatementTable(table, `${filename} / ${sheetName}`);
       parsedSheets.push(sheetName);
       reconciliations.push(parsed.reconciliation);
+      diagnostics.push(...parsed.diagnostics);
       for (const row of parsed.rows) {
         rows.push({ ...row, sourceRow: rows.length + 1 });
       }
-    } catch {
-      // Summary and instruction sheets are common; only recognized transaction tables are imported.
+    } catch (error) {
+      skippedSheets.push(sheetName);
+      diagnostics.push({
+        code: "excel.sheet_skipped",
+        severity: "info",
+        message: error instanceof Error ? error.message : "The worksheet could not be parsed.",
+        source: `${filename} / ${sheetName}`,
+      });
     }
     if (rows.length > MAXIMUM_STATEMENT_ROWS) {
       throw new Error(`The statement exceeds the ${MAXIMUM_STATEMENT_ROWS.toLocaleString("en-IN")} row safety limit.`);
     }
   }
   if (rows.length === 0) {
-    throw new Error("No worksheet with recognizable date, description, and amount columns was found.");
+    const detail = diagnostics[0]?.message;
+    throw new Error(
+      `No worksheet with recognizable date, description, and amount columns was found.${detail ? ` First diagnostic: ${detail}` : ""}`,
+    );
   }
   const orderedReconciliations = reconciliations
     .filter((item) => item.periodStart && item.periodEnd)
@@ -551,7 +657,7 @@ export function parseStatementExcelFile(content: Buffer, filename: string): Pars
     .at(-1);
   return {
     rows,
-    message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted from ${parsedSheets.length} worksheet${parsedSheets.length === 1 ? "" : "s"}.`,
+    message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted from ${parsedSheets.length} worksheet${parsedSheets.length === 1 ? "" : "s"}.${skippedSheets.length > 0 ? ` ${skippedSheets.length} non-transaction worksheet${skippedSheets.length === 1 ? " was" : "s were"} skipped.` : ""}`,
     reconciliation: {
       periodStart: firstReconciliation?.periodStart ?? null,
       periodEnd: lastReconciliation?.periodEnd ?? null,
@@ -559,6 +665,7 @@ export function parseStatementExcelFile(content: Buffer, filename: string): Pars
       openingBalanceLiabilityPaise: firstReconciliation?.openingBalanceLiabilityPaise ?? null,
       closingBalancePaise: lastReconciliation?.closingBalancePaise ?? null,
     },
+    diagnostics,
   };
 }
 
@@ -695,6 +802,8 @@ export async function parseStatementPdfFile(content: Buffer, password?: string):
 
     const rows: ParsedStatementRow[] = [];
     const reconciliations: ParsedStatementReconciliation[] = [];
+    const diagnostics: StatementParserDiagnostic[] = [];
+    const skippedPages: number[] = [];
     let extractedTextItems = 0;
     let inheritedColumns: Array<{ name: string; x: number }> | undefined;
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
@@ -717,11 +826,18 @@ export async function parseStatementPdfFile(content: Buffer, password?: string):
         inheritedColumns = reconstructed.columns;
         const parsed = parseStatementTable(reconstructed.table, `PDF page ${pageNumber}`);
         reconciliations.push(parsed.reconciliation);
+        diagnostics.push(...parsed.diagnostics);
         for (const row of parsed.rows) {
           rows.push({ ...row, sourceRow: rows.length + 1 });
         }
-      } catch {
-        // Statements may have cover or summary pages without a transaction table.
+      } catch (error) {
+        skippedPages.push(pageNumber);
+        diagnostics.push({
+          code: "pdf.page_skipped",
+          severity: "info",
+          message: error instanceof Error ? error.message : "The page could not be parsed.",
+          source: `PDF page ${pageNumber}`,
+        });
       }
       page.cleanup();
       if (rows.length > MAXIMUM_STATEMENT_ROWS) {
@@ -742,7 +858,7 @@ export async function parseStatementPdfFile(content: Buffer, password?: string):
       .at(-1);
     return {
       rows,
-      message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted from PDF.`,
+      message: `${rows.length} transaction candidate${rows.length === 1 ? "" : "s"} extracted from PDF.${skippedPages.length > 0 ? ` ${skippedPages.length} non-transaction page${skippedPages.length === 1 ? " was" : "s were"} skipped.` : ""}`,
       reconciliation: {
         periodStart: firstReconciliation?.periodStart ?? null,
         periodEnd: lastReconciliation?.periodEnd ?? null,
@@ -750,6 +866,7 @@ export async function parseStatementPdfFile(content: Buffer, password?: string):
         openingBalanceLiabilityPaise: firstReconciliation?.openingBalanceLiabilityPaise ?? null,
         closingBalancePaise: lastReconciliation?.closingBalancePaise ?? null,
       },
+      diagnostics,
     };
   } catch (error) {
     if (error instanceof PasswordException) {

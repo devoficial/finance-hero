@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -21,6 +22,8 @@ const DATABASE_PATH = join(DATA_DIRECTORY, "finance-hero.db");
 const RUNTIME_PATH = join(DATA_DIRECTORY, ".runtime.json");
 const LOG_DIRECTORY = join(DATA_DIRECTORY, "logs");
 const LOG_PATH = join(LOG_DIRECTORY, "finance-hero.log");
+const BACKUP_DIRECTORY = join(DATA_DIRECTORY, "backups");
+const RECOVERY_DIRECTORY = join(DATA_DIRECTORY, "recovery");
 const KEYCHAIN_SERVICE = "finance-hero.database";
 const KEYCHAIN_ACCOUNT = "primary";
 const API_URL = "http://127.0.0.1:4317/api/v1/health";
@@ -158,10 +161,97 @@ async function validateExistingDatabaseKey(key) {
   try {
     database = openEncryptedDatabase(DATABASE_PATH, Buffer.from(key, "utf8"));
   } catch {
-    throw new Error("the supplied key cannot open the existing encrypted database.");
+    throw new Error(
+      "the supplied key cannot open the existing encrypted database, or the file is damaged. " +
+        "The database was left unchanged. Recover the original Keychain item or verify a backup before continuing.",
+    );
   } finally {
     database?.close();
   }
+}
+
+async function requireStoppedApp() {
+  const [apiOpen, webOpen] = await Promise.all([portIsOpen(4317), portIsOpen(4318)]);
+  if (apiOpen || webOpen) {
+    throw new Error("stop Finance Hero with `pnpm stop:local` before this database operation.");
+  }
+}
+
+function availableBackups() {
+  if (!existsSync(BACKUP_DIRECTORY)) return [];
+  const directories = [BACKUP_DIRECTORY, join(BACKUP_DIRECTORY, "automatic"), join(BACKUP_DIRECTORY, "manual")];
+  return directories
+    .flatMap((directory) =>
+      existsSync(directory)
+        ? readdirSync(directory)
+            .filter((name) => name.endsWith(".db"))
+            .map((name) => join(directory, name))
+        : [],
+    )
+    .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
+}
+
+function requestedOrLatestBackup(requestedPath) {
+  if (requestedPath) return resolve(requestedPath);
+  const latest = availableBackups()[0];
+  if (!latest) throw new Error("no local encrypted backups are available.");
+  return latest;
+}
+
+async function backup() {
+  ensureMacOS();
+  await requireStoppedApp();
+  if (!existsSync(DATABASE_PATH) || statSync(DATABASE_PATH).size === 0) {
+    throw new Error("the active encrypted database does not exist or is empty.");
+  }
+  const key = readKeychainKey();
+  const databaseModule = ensureDatabaseBuild();
+  const { createVerifiedEncryptedBackup, openEncryptedDatabase } = await import(pathToFileURL(databaseModule).href);
+  const database = openEncryptedDatabase(DATABASE_PATH, Buffer.from(key, "utf8"));
+  try {
+    const result = createVerifiedEncryptedBackup({
+      database,
+      databasePath: DATABASE_PATH,
+      key: Buffer.from(key, "utf8"),
+      backupDirectory: join(BACKUP_DIRECTORY, "manual"),
+      reason: "manual",
+    });
+    print("Verified encrypted backup created.");
+    print(result.backupPath);
+    print(`Manifest: ${result.manifestPath}`);
+  } finally {
+    database.close();
+  }
+}
+
+async function verifyBackup(requestedPath) {
+  ensureMacOS();
+  const backupPath = requestedOrLatestBackup(requestedPath);
+  const key = readKeychainKey();
+  const databaseModule = ensureDatabaseBuild();
+  const { verifyEncryptedBackup } = await import(pathToFileURL(databaseModule).href);
+  const result = verifyEncryptedBackup({ backupPath, key: Buffer.from(key, "utf8") });
+  print("Encrypted backup verified successfully.");
+  print(backupPath);
+  print(`SHA-256: ${result.sha256}`);
+  print(`Schema: ${result.schemaVersion ?? "pre-versioned"}`);
+}
+
+async function stageRestore(requestedPath) {
+  ensureMacOS();
+  await requireStoppedApp();
+  const backupPath = requestedOrLatestBackup(requestedPath);
+  const key = readKeychainKey();
+  const databaseModule = ensureDatabaseBuild();
+  const { stageVerifiedDatabaseRestore } = await import(pathToFileURL(databaseModule).href);
+  const result = stageVerifiedDatabaseRestore({
+    backupPath,
+    key: Buffer.from(key, "utf8"),
+    recoveryRoot: RECOVERY_DIRECTORY,
+  });
+  print("Verified restore staged without changing the active database.");
+  print(result.recoveryDirectory);
+  print("Review RESTORE_READY.json and the recovery runbook before any manual activation.");
 }
 
 async function setup() {
@@ -442,8 +532,16 @@ async function main() {
     await status();
   } else if (command === "logs") {
     logs();
+  } else if (command === "backup") {
+    await backup();
+  } else if (command === "verify-backup") {
+    await verifyBackup(process.argv[3]);
+  } else if (command === "stage-restore") {
+    await stageRestore(process.argv[3]);
   } else {
-    print("Usage: node scripts/local-control.mjs <setup|start|stop|status|logs>");
+    print(
+      "Usage: node scripts/local-control.mjs <setup|start|stop|status|logs|backup|verify-backup|stage-restore> [backup-path]",
+    );
   }
 }
 

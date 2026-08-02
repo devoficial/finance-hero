@@ -182,6 +182,15 @@ interface ArtifactRow extends Omit<ImportArtifactRecord, "reconciliation"> {
   reconciledAt: string | null;
 }
 
+interface AggregateReplacementRecord {
+  transactionId: string;
+  expensePostingId: string;
+  balancingPostingId: string;
+  displacedAmountPaise: number;
+}
+
+const AGGREGATE_REPLACEMENTS_SOURCE_KEY = "__financeHeroAggregateReplacements";
+
 function parseJson<T>(value: string, fallback: T): T {
   try {
     return JSON.parse(value) as T;
@@ -454,12 +463,12 @@ export class ImportRepository {
     );
   }
 
-  private rebaseExpenseAggregate(
+  private replaceExpenseAggregate(
     month: string,
     splits: Array<{ categoryId: string; amountPaise: number }>,
-    detailedDelta: 1 | -1,
     now: string,
-  ) {
+  ): AggregateReplacementRecord[] {
+    const replacements: AggregateReplacementRecord[] = [];
     for (const split of splits) {
       const aggregateIds = [
         `migration-expense-history-${month}-${split.categoryId}`,
@@ -480,10 +489,18 @@ export class ImportRepository {
         | { id: string; expensePostingId: string; amountPaise: number; balancingPostingId: string }
         | undefined;
       if (!aggregate) continue;
-      const nextAmount = aggregate.amountPaise - detailedDelta * split.amountPaise;
+      const displacedAmountPaise = Math.min(Math.max(aggregate.amountPaise, 0), split.amountPaise);
+      if (displacedAmountPaise === 0) continue;
+      const nextAmount = aggregate.amountPaise - displacedAmountPaise;
       if (nextAmount === 0) {
-        this.database.connection.prepare("DELETE FROM postings WHERE transaction_id = ?").run(aggregate.id);
-        this.database.connection.prepare("DELETE FROM journal_transactions WHERE id = ?").run(aggregate.id);
+        this.database.connection
+          .prepare(`
+            UPDATE journal_transactions
+            SET status = 'reversed', origin = 'expense_sheet_aggregate',
+                memo = 'Monthly aggregate fully replaced by detailed statement transactions.'
+            WHERE id = ?
+          `)
+          .run(aggregate.id);
       } else {
         this.database.connection
           .prepare("UPDATE postings SET amount_paise = ? WHERE id = ?")
@@ -500,17 +517,73 @@ export class ImportRepository {
           `)
           .run(aggregate.id);
       }
+      replacements.push({
+        transactionId: aggregate.id,
+        expensePostingId: aggregate.expensePostingId,
+        balancingPostingId: aggregate.balancingPostingId,
+        displacedAmountPaise,
+      });
       this.audit(
         "expense_aggregate.rebased",
         "budget_period",
         month,
         {
           categoryId: split.categoryId,
-          detailedDelta,
           detailedAmountPaise: split.amountPaise,
+          displacedAmountPaise,
           previousAggregatePaise: aggregate.amountPaise,
           nextAggregatePaise: nextAmount,
         },
+        now,
+      );
+    }
+    return replacements;
+  }
+
+  private restoreExpenseAggregates(replacements: AggregateReplacementRecord[], now: string) {
+    for (const replacement of replacements) {
+      const aggregate = this.database.connection
+        .prepare(`
+          SELECT t.status, p.amount_paise AS amountPaise
+          FROM journal_transactions t
+          JOIN postings p ON p.id = ? AND p.transaction_id = t.id
+          WHERE t.id = ?
+        `)
+        .get(replacement.expensePostingId, replacement.transactionId) as
+        | { status: "posted" | "reversed"; amountPaise: number }
+        | undefined;
+      if (!aggregate) {
+        throw new Error("The monthly expense aggregate needed to undo this import no longer exists.");
+      }
+      if (aggregate.status !== "posted" && aggregate.status !== "reversed") {
+        throw new Error("The monthly expense aggregate needed to undo this import is not restorable.");
+      }
+      if (!Number.isSafeInteger(replacement.displacedAmountPaise) || replacement.displacedAmountPaise <= 0) {
+        throw new Error("The stored monthly expense aggregate replacement is invalid.");
+      }
+      const restoredAmount =
+        aggregate.status === "reversed"
+          ? replacement.displacedAmountPaise
+          : aggregate.amountPaise + replacement.displacedAmountPaise;
+      this.database.connection
+        .prepare("UPDATE postings SET amount_paise = ? WHERE id = ?")
+        .run(restoredAmount, replacement.expensePostingId);
+      this.database.connection
+        .prepare("UPDATE postings SET amount_paise = ? WHERE id = ?")
+        .run(-restoredAmount, replacement.balancingPostingId);
+      this.database.connection
+        .prepare(`
+          UPDATE journal_transactions
+          SET status = 'posted', origin = 'expense_sheet_aggregate',
+              memo = 'Monthly expense total imported from the editable expense register.'
+          WHERE id = ?
+        `)
+        .run(replacement.transactionId);
+      this.audit(
+        "expense_aggregate.restored",
+        "journal_transaction",
+        replacement.transactionId,
+        { displacedAmountPaise: replacement.displacedAmountPaise, restoredAmountPaise: restoredAmount },
         now,
       );
     }
@@ -558,10 +631,12 @@ export class ImportRepository {
                 .all(...rawSplits.map((split) => split.categoryId)) as Array<{ id: string; name: string }>
             ).map((category) => [category.id, category.name]),
           );
+    const source = parseJson<Record<string, string>>(row.sourceJson, {});
+    delete source[AGGREGATE_REPLACEMENTS_SOURCE_KEY];
     return {
       ...row,
       warnings: parseJson<string[]>(row.warningsJson, ["Source warnings could not be read"]),
-      source: parseJson<Record<string, string>>(row.sourceJson, {}),
+      source,
       splits: rawSplits.map((split) => ({
         ...split,
         categoryName: categoryNames.get(split.categoryId) ?? null,
@@ -952,7 +1027,8 @@ export class ImportRepository {
     this.database.connection
       .prepare(`
         UPDATE import_candidates
-        SET account_id = ?, version = version + 1, updated_at = ?
+        SET account_id = ?, duplicate_resolution = 'none', duplicate_of_candidate_id = NULL,
+            duplicate_confidence = NULL, version = version + 1, updated_at = ?
         WHERE artifact_id = ? AND status = 'pending'
       `)
       .run(input.accountId, now, id);
@@ -1186,23 +1262,29 @@ export class ImportRepository {
           idempotencyKey: `import-candidate:${candidate.id}:v${candidate.version}`,
         });
         const now = new Date().toISOString();
+        let aggregateReplacements: AggregateReplacementRecord[] = [];
         if (candidate.direction === "debit") {
-          this.rebaseExpenseAggregate(
+          aggregateReplacements = this.replaceExpenseAggregate(
             candidate.occurredOn.slice(0, 7),
             splits.length > 0
               ? splits
               : [{ categoryId: candidate.categoryId as string, amountPaise: candidate.amountPaise }],
-            1,
             now,
           );
+        }
+        const source = parseJson<Record<string, string>>(candidate.sourceJson, {});
+        if (aggregateReplacements.length > 0) {
+          source[AGGREGATE_REPLACEMENTS_SOURCE_KEY] = JSON.stringify(aggregateReplacements);
+        } else {
+          delete source[AGGREGATE_REPLACEMENTS_SOURCE_KEY];
         }
         this.database.connection
           .prepare(`
             UPDATE import_candidates
-            SET status = 'approved', transaction_id = ?, updated_at = ?
+            SET status = 'approved', transaction_id = ?, source_json = ?, updated_at = ?
             WHERE id = ?
           `)
-          .run(transaction.id, now, candidate.id);
+          .run(transaction.id, JSON.stringify(source), now, candidate.id);
         this.invalidateArtifactReconciliation(candidate.artifactId);
         this.audit(
           "import.candidate_approved",
@@ -1253,54 +1335,51 @@ export class ImportRepository {
     if (uniqueIds.length === 0) {
       throw new Error("Select at least one import candidate.");
     }
-    for (const id of uniqueIds) {
-      const candidate = this.getCandidateRow(id);
-      if (candidate.status === "pending") {
-        throw new Error("This import candidate is already pending.");
-      }
-      let reversedTransactionId: string | null = null;
-      if (candidate.status === "approved") {
-        if (!candidate.transactionId) {
-          throw new Error("The approved candidate has no linked ledger transaction.");
+    const write = this.database.connection.transaction(() => {
+      for (const id of uniqueIds) {
+        const candidate = this.getCandidateRow(id);
+        if (candidate.status === "pending") {
+          throw new Error("This import candidate is already pending.");
         }
-        const linked = this.database.connection
-          .prepare("SELECT status FROM journal_transactions WHERE id = ?")
-          .get(candidate.transactionId) as { status: string } | undefined;
-        if (!linked) {
-          throw new Error("The approved candidate's ledger transaction does not exist.");
-        }
-        if (linked.status === "posted") {
-          if (candidate.direction === "debit" && candidate.occurredOn) {
-            const splits = parseJson<Array<{ categoryId: string; amountPaise: number }>>(candidate.splitsJson, []);
-            this.rebaseExpenseAggregate(
-              candidate.occurredOn.slice(0, 7),
-              splits.length > 0
-                ? splits
-                : [{ categoryId: candidate.categoryId as string, amountPaise: candidate.amountPaise }],
-              -1,
-              new Date().toISOString(),
-            );
+        const now = new Date().toISOString();
+        let reversedTransactionId: string | null = null;
+        const source = parseJson<Record<string, string>>(candidate.sourceJson, {});
+        if (candidate.status === "approved") {
+          if (!candidate.transactionId) {
+            throw new Error("The approved candidate has no linked ledger transaction.");
           }
-          this.ledger.reverseTransaction(candidate.transactionId, {
-            reason: "Import approval moved back to pending",
-            idempotencyKey: `import-candidate-reset:${candidate.id}:v${candidate.version}`,
-          });
-          reversedTransactionId = candidate.transactionId;
-        } else if (linked.status !== "reversed") {
-          throw new Error("The linked ledger transaction cannot be moved back to pending.");
+          const linked = this.database.connection
+            .prepare("SELECT status FROM journal_transactions WHERE id = ?")
+            .get(candidate.transactionId) as { status: string } | undefined;
+          if (!linked) {
+            throw new Error("The approved candidate's ledger transaction does not exist.");
+          }
+          const replacements = parseJson<AggregateReplacementRecord[]>(
+            source[AGGREGATE_REPLACEMENTS_SOURCE_KEY] ?? "[]",
+            [],
+          );
+          this.restoreExpenseAggregates(replacements, now);
+          if (linked.status === "posted") {
+            this.ledger.reverseTransaction(candidate.transactionId, {
+              reason: "Import approval moved back to pending",
+              idempotencyKey: `import-candidate-reset:${candidate.id}:v${candidate.version}`,
+            });
+            reversedTransactionId = candidate.transactionId;
+          } else if (linked.status !== "reversed") {
+            throw new Error("The linked ledger transaction cannot be moved back to pending.");
+          }
         }
-      }
-      const now = new Date().toISOString();
-      const write = this.database.connection.transaction(() => {
+        delete source[AGGREGATE_REPLACEMENTS_SOURCE_KEY];
         this.database.connection
           .prepare(`
             UPDATE import_candidates
             SET status = 'pending', transaction_id = NULL, rejection_reason = NULL,
+                source_json = ?,
                 duplicate_resolution = 'none', duplicate_of_candidate_id = NULL,
                 duplicate_confidence = NULL, version = version + 1, updated_at = ?
             WHERE id = ?
           `)
-          .run(now, candidate.id);
+          .run(JSON.stringify(source), now, candidate.id);
         this.invalidateArtifactReconciliation(candidate.artifactId);
         this.refreshDuplicateMatches(now);
         this.audit(
@@ -1310,9 +1389,9 @@ export class ImportRepository {
           { previousStatus: candidate.status, reversedTransactionId },
           now,
         );
-      });
-      write.immediate();
-    }
+      }
+    });
+    write.immediate();
     return this.getQueue();
   }
 

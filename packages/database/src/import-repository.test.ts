@@ -350,6 +350,72 @@ describe("import repository", () => {
     database.close();
   });
 
+  it("never makes a monthly aggregate negative and restores the exact baseline on reset", () => {
+    const { database, ledger, repository } = createRepository();
+    const aggregateId = "migration-expense-history-2026-06-category-groceries";
+    const postings = database.connection
+      .prepare("SELECT id, amount_paise AS amountPaise FROM postings WHERE transaction_id = ? ORDER BY amount_paise")
+      .all(aggregateId) as Array<{ id: string; amountPaise: number }>;
+    expect(postings).toHaveLength(2);
+    for (const posting of postings) {
+      database.connection
+        .prepare("UPDATE postings SET amount_paise = ? WHERE id = ?")
+        .run(posting.amountPaise < 0 ? -10000 : 10000, posting.id);
+    }
+    const before = ledger.getDashboard("2026-06", 30);
+    repository.createArtifact({
+      filename: "aggregate-overrun.csv",
+      contentHash: "aggregate-overrun",
+      mimeType: "text/csv",
+      sizeBytes: 100,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-06-15",
+          payee: "Synthetic grocery detail",
+          amountPaise: 15000,
+          direction: "debit",
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: { Description: "Synthetic grocery detail" },
+        },
+      ],
+    });
+    const candidate = repository.getQueue().candidates[0];
+    if (!candidate) throw new Error("Expected aggregate overrun candidate.");
+
+    const approved = repository.approveCandidates([candidate.id]);
+
+    expect(ledger.getDashboard("2026-06", 30).regularExpensePaise).toBe(before.regularExpensePaise + 5000);
+    expect(
+      database.connection
+        .prepare("SELECT COUNT(*) AS count FROM postings WHERE transaction_id = ? AND amount_paise < 0")
+        .get(aggregateId),
+    ).toEqual({ count: 1 });
+    expect(
+      database.connection.prepare("SELECT status FROM journal_transactions WHERE id = ?").get(aggregateId),
+    ).toEqual({ status: "reversed" });
+    expect(approved.candidates.find((item) => item.id === candidate.id)?.source).toEqual({
+      Description: "Synthetic grocery detail",
+    });
+
+    repository.resetCandidatesToPending([candidate.id]);
+
+    expect(ledger.getDashboard("2026-06", 30).regularExpensePaise).toBe(before.regularExpensePaise);
+    expect(
+      database.connection.prepare("SELECT status FROM journal_transactions WHERE id = ?").get(aggregateId),
+    ).toEqual({ status: "posted" });
+    expect(
+      database.connection
+        .prepare("SELECT amount_paise AS amountPaise FROM postings WHERE transaction_id = ? ORDER BY amount_paise")
+        .all(aggregateId),
+    ).toEqual([{ amountPaise: -10000 }, { amountPaise: 10000 }]);
+    database.close();
+  });
+
   it("detects the same transaction across differently encoded source files and requires resolution", () => {
     const { database, repository } = createRepository();
     const base = {
@@ -393,6 +459,110 @@ describe("import repository", () => {
 
     repository.resolveDuplicate(duplicate?.id ?? "", "merge");
     expect(repository.getQueue()).toMatchObject({ pendingCount: 1, rejectedCount: 1 });
+    database.close();
+  });
+
+  it("prevents a repeated upload after the canonical row is already approved", () => {
+    const { database, ledger, repository } = createRepository();
+    const base = {
+      sizeBytes: 120,
+      accountId: "account-primary-bank",
+      status: "parsed" as const,
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-07-20",
+          payee: "UPI/P2M/123456789/SYNTHETIC CAFE PAYMENT",
+          amountPaise: 42500,
+          direction: "debit" as const,
+          categoryId: "category-groceries",
+          confidence: 85,
+          warnings: [],
+          source: {},
+        },
+      ],
+    };
+    repository.createArtifact({
+      ...base,
+      filename: "first.pdf",
+      contentHash: "approved-duplicate-pdf",
+      mimeType: "application/pdf",
+    });
+    const canonical = repository.getQueue().candidates[0];
+    if (!canonical) throw new Error("Expected canonical candidate.");
+    repository.approveCandidates([canonical.id]);
+    const postedBefore = ledger.listTransactions("2026-07").filter((item) => item.payee.includes("SYNTHETIC CAFE"));
+
+    repository.createArtifact({
+      ...base,
+      filename: "repeat.csv",
+      contentHash: "approved-duplicate-csv",
+      mimeType: "text/csv",
+    });
+    const repeated = repository
+      .getQueue()
+      .candidates.find((candidate) => candidate.id !== canonical.id && candidate.status === "pending");
+
+    expect(repeated).toMatchObject({ duplicateResolution: "suspected", duplicateOfCandidateId: canonical.id });
+    expect(() => repository.approveCandidates([repeated?.id ?? ""])).toThrow("matches an existing transaction");
+    repository.resolveDuplicate(repeated?.id ?? "", "merge");
+    expect(ledger.listTransactions("2026-07").filter((item) => item.payee.includes("SYNTHETIC CAFE"))).toHaveLength(
+      postedBefore.length,
+    );
+    database.close();
+  });
+
+  it("rechecks a distinct decision whenever statement reconciliation changes the account", () => {
+    const { database, repository } = createRepository();
+    const create = (filename: string, hash: string) =>
+      repository.createArtifact({
+        filename,
+        contentHash: hash,
+        mimeType: "text/csv",
+        sizeBytes: 100,
+        accountId: "account-savings",
+        status: "parsed",
+        rows: [
+          {
+            sourceRow: 2,
+            occurredOn: "2026-07-20",
+            payee: "SYNTHETIC TRANSFER",
+            amountPaise: 5000,
+            direction: "debit",
+            categoryId: "category-transport",
+            confidence: 85,
+            warnings: [],
+            source: {},
+          },
+        ],
+      });
+    create("first.csv", "reconcile-duplicate-first");
+    const secondArtifact = create("second.csv", "reconcile-duplicate-second").artifact;
+    const second = repository.getQueue().candidates.find((candidate) => candidate.artifactId === secondArtifact.id);
+    repository.resolveDuplicate(second?.id ?? "", "keep_distinct");
+
+    repository.updateStatementReconciliation(secondArtifact.id, {
+      accountId: "account-primary-bank",
+      periodStart: "2026-07-01",
+      periodEnd: "2026-07-31",
+      openingBalancePaise: 100000,
+      closingBalancePaise: 95000,
+    });
+    expect(repository.getQueue().candidates.find((candidate) => candidate.id === second?.id)).toMatchObject({
+      duplicateResolution: "none",
+      duplicateOfCandidateId: null,
+    });
+
+    repository.updateStatementReconciliation(secondArtifact.id, {
+      accountId: "account-savings",
+      periodStart: "2026-07-01",
+      periodEnd: "2026-07-31",
+      openingBalancePaise: 100000,
+      closingBalancePaise: 95000,
+    });
+    expect(repository.getQueue().candidates.find((candidate) => candidate.id === second?.id)).toMatchObject({
+      duplicateResolution: "suspected",
+    });
     database.close();
   });
 
@@ -474,7 +644,9 @@ describe("import repository", () => {
         expect.objectContaining({ categoryId: "category-medical", amountPaise: 30000 }),
       ]),
     );
-    expect(ledger.getDashboard("2026-07", 31).regularExpensePaise).toBe(before.regularExpensePaise);
+    // Groceries only had Rs 568 in the migrated aggregate, so the extra Rs 132
+    // from the detailed split is real new spending rather than a negative aggregate.
+    expect(ledger.getDashboard("2026-07", 31).regularExpensePaise).toBe(before.regularExpensePaise + 13200);
     database.close();
   });
 

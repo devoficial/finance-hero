@@ -187,9 +187,13 @@ h2 {
 }
 .top-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
 }
 .install-button,
+.report-button,
 .add-button,
 .ghost-button,
 .sync-button {
@@ -198,6 +202,37 @@ h2 {
   padding: 0 15px;
   cursor: pointer;
   background: rgba(241, 238, 229, 0.74);
+}
+.top-actions > button {
+  flex: 0 0 auto;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.report-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-color: var(--green);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+}
+.report-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 1.8;
+}
+.report-button:hover:not(:disabled) {
+  background: var(--green);
+  color: white;
+}
+.report-button:disabled {
+  cursor: wait;
+  opacity: 0.48;
 }
 .install-button {
   border-color: var(--green);
@@ -242,6 +277,29 @@ h2 {
   font:
     10px "DM Mono",
     monospace;
+}
+.report-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 14px;
+  border: 1px solid rgba(181, 58, 42, 0.45);
+  border-left: 5px solid var(--red);
+  padding: 10px 13px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 700;
+}
+.report-error button {
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  padding: 2px 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 800;
 }
 
 .install-guide {
@@ -5575,7 +5633,7 @@ h2 {
 }
 .account-card {
   display: grid;
-  grid-template-columns: minmax(210px, 1.35fr) minmax(140px, 0.65fr) minmax(390px, 2fr) auto;
+  grid-template-columns: minmax(230px, 1.2fr) minmax(210px, 0.9fr) minmax(390px, 1.8fr) auto;
   align-items: stretch;
   min-width: 0;
   min-height: 86px;
@@ -5627,12 +5685,20 @@ h2 {
 .account-balance {
   display: flex;
   align-items: center;
+  container-type: inline-size;
+  min-width: 0;
   margin: 0;
   border-left: 1px solid var(--line);
   padding: 12px 16px;
   color: var(--green);
-  font-size: clamp(18px, 1.65vw, 25px);
+  font-size: 22px;
   line-height: 1;
+  overflow: hidden;
+}
+.account-balance > span {
+  display: block;
+  max-width: 100%;
+  font-size: clamp(16px, 9cqi, 25px);
   white-space: nowrap;
 }
 .account-card-meta {
@@ -5700,6 +5766,127 @@ h2 {
   font:
     600 9px "DM Mono",
     monospace;
+}
+.accounts-table-scroll {
+  overflow-x: auto;
+  border-top: 1px solid var(--line);
+  padding: 0 18px 16px;
+}
+.accounts-table {
+  width: 100%;
+  min-width: 650px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #f8f5ec;
+}
+.accounts-table th {
+  height: 34px;
+  background: #deddd5;
+  padding: 0 11px;
+  color: #5d6d66;
+  font:
+    600 8px "DM Mono",
+    monospace;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.accounts-table th:nth-child(1) {
+  width: 42%;
+}
+.accounts-table th:nth-child(2) {
+  width: 18%;
+}
+.accounts-table th:nth-child(3) {
+  width: 22%;
+}
+.accounts-table th:nth-child(4) {
+  width: 18%;
+}
+.accounts-table td {
+  height: 48px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 11px;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.accounts-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.accounts-table tbody tr.asset td:first-child {
+  border-left: 3px solid var(--green);
+}
+.accounts-table tbody tr.liability td:first-child {
+  border-left: 3px solid #d84a35;
+}
+.accounts-table tbody tr.inactive {
+  color: #7e8984;
+  opacity: 0.72;
+}
+.account-table-name > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+.account-table-name strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-table-name small {
+  display: block;
+  margin-top: 3px;
+  color: #6b7973;
+  font-size: 8px;
+}
+.account-table-balance {
+  display: block;
+  overflow: hidden;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+}
+.accounts-table strong.negative {
+  color: #b33b28;
+}
+.account-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.accounts-table th:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: #deddd5;
+}
+.accounts-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: #f8f5ec;
+}
+.account-table-actions .table-action {
+  min-width: 46px;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 9px;
+}
+.account-table-actions .account-remove-action {
+  min-height: 28px;
+  font-size: 8px;
+}
+.accounts-table .accounts-empty {
+  height: 72px;
+  color: #64736d;
+  text-align: center;
 }
 .purpose-trackers {
   display: grid;
@@ -6348,6 +6535,12 @@ h2 {
   .app-shell {
     grid-template-columns: 190px minmax(0, 1fr);
   }
+  .topbar {
+    flex-wrap: wrap;
+  }
+  .top-actions {
+    width: 100%;
+  }
   .expense-register-overview {
     grid-template-columns: 1fr 1fr;
   }
@@ -6660,6 +6853,34 @@ h2 {
 }
 
 @media (max-width: 720px) {
+  .accounts-table-scroll {
+    padding: 0 12px 12px;
+  }
+  .accounts-table {
+    min-width: 0;
+  }
+  .accounts-table th:nth-child(1) {
+    width: 48%;
+  }
+  .accounts-table th:nth-child(2) {
+    width: 24%;
+  }
+  .accounts-table th:nth-child(3),
+  .accounts-table td:nth-child(3) {
+    display: none;
+  }
+  .accounts-table th:nth-child(4) {
+    width: 28%;
+  }
+  .accounts-table th,
+  .accounts-table td {
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+  .account-table-name strong,
+  .account-table-balance {
+    font-size: 11px;
+  }
   .accounts-card-grid {
     gap: 10px;
     padding: 12px;
@@ -6683,6 +6904,9 @@ h2 {
     border-left: 0;
     padding: 13px 12px 7px;
     font-size: 19px;
+  }
+  .account-balance > span {
+    font-size: clamp(15px, 9cqi, 19px);
   }
   .account-card-meta {
     grid-column: 1 / -1;
@@ -6824,6 +7048,13 @@ h2 {
     grid-template-columns: repeat(8, minmax(90px, 1fr));
   }
   .ghost-button {
+    display: none;
+  }
+  .report-button {
+    min-width: 42px;
+    padding: 0 11px;
+  }
+  .report-button span {
     display: none;
   }
   .install-button {
@@ -7401,7 +7632,7 @@ h2 {
     padding: 0 12px 12px;
   }
   .account-card {
-    grid-template-columns: minmax(175px, 1.2fr) minmax(115px, 0.65fr) minmax(260px, 1.6fr) auto;
+    grid-template-columns: minmax(175px, 1.1fr) minmax(165px, 0.85fr) minmax(260px, 1.5fr) auto;
     min-height: 82px;
   }
   .account-form-shell {
@@ -7538,6 +7769,22 @@ h2 {
   .mobile-nav button.active {
     color: var(--yellow);
     box-shadow: inset 0 2px var(--yellow);
+  }
+}
+
+@media (max-width: 480px) {
+  .account-table-actions {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .account-table-actions .table-action,
+  .account-table-actions .account-remove-action {
+    min-width: 58px;
+    min-height: 24px;
+    padding: 2px 5px;
+  }
+  .accounts-table td {
+    height: 62px;
   }
 }
 

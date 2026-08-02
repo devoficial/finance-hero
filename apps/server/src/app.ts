@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   assistantChatRequestSchema,
@@ -60,7 +60,9 @@ import {
   AccountRepository,
   AssistantRepository,
   BudgetRepository,
+  createVerifiedEncryptedBackup,
   type FinanceHeroDatabase,
+  foundationSchemaNeedsMigration,
   ImportRepository,
   initializeFoundationSchema,
   LedgerRepository,
@@ -187,13 +189,26 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   let projects: ProjectRepository | undefined;
   let wealth: WealthRepository | undefined;
   let assistant: AssistantService | undefined;
+  let backupBeforeRisk: ((reason: string) => void) | undefined;
 
   if (options.config.databaseKey) {
     mkdirSync(options.config.dataDirectory, { recursive: true, mode: 0o700 });
-    database = openEncryptedDatabase(
-      join(options.config.dataDirectory, "finance-hero.db"),
-      Buffer.from(options.config.databaseKey, "utf8"),
-    );
+    const databasePath = join(options.config.dataDirectory, "finance-hero.db");
+    const databaseExisted = existsSync(databasePath) && statSync(databasePath).size > 0;
+    const databaseKey = Buffer.from(options.config.databaseKey, "utf8");
+    database = openEncryptedDatabase(databasePath, databaseKey);
+    backupBeforeRisk = (reason) => {
+      createVerifiedEncryptedBackup({
+        database: database as FinanceHeroDatabase,
+        databasePath,
+        key: databaseKey,
+        backupDirectory: join(options.config.dataDirectory, "backups", "automatic"),
+        reason,
+      });
+    };
+    if (databaseExisted && foundationSchemaNeedsMigration(database)) {
+      backupBeforeRisk("before-schema-migration");
+    }
     initializeFoundationSchema(database);
     seedAcceptedOpeningSnapshot(database);
     ledger = new LedgerRepository(database);
@@ -509,6 +524,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         }
         parsed = await parseScannedPdfWithLocalOcr(quarantinePath);
       }
+      backupBeforeRisk?.("before-import-parse-replacement");
       const updated = imports.replaceArtifactParseResult(id, {
         status: "parsed",
         parserMessage: parsed.message,
@@ -573,6 +589,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
     try {
       const input = importCandidateActionRequestSchema.parse(request.body);
+      backupBeforeRisk?.("before-import-approval");
       return reply.send(importQueueResponseSchema.parse(imports.approveCandidates(input.ids)));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Import candidates could not be approved.";
@@ -599,6 +616,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
     try {
       const input = importCandidateActionRequestSchema.parse(request.body);
+      backupBeforeRisk?.("before-import-reset");
       return reply.send(importQueueResponseSchema.parse(imports.resetCandidatesToPending(input.ids)));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Import candidates could not be reset.";

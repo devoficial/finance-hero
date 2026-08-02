@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -65,7 +65,7 @@ describe("statement import API", () => {
       url: "/api/v1/candidate-actions/approve",
       payload: { ids: queue.candidates.map((candidate) => candidate.id) },
     });
-    expect(approve.statusCode).toBe(200);
+    expect(approve.statusCode, approve.body).toBe(200);
     expect(importQueueResponseSchema.parse(approve.json()).approvedCount).toBe(2);
 
     const reset = await app.inject({
@@ -78,6 +78,12 @@ describe("statement import API", () => {
       pendingCount: 1,
       approvedCount: 1,
     });
+
+    const automaticBackupDirectory = join(dataDirectory, "backups", "automatic");
+    expect(existsSync(automaticBackupDirectory)).toBe(true);
+    const automaticBackupFiles = readdirSync(automaticBackupDirectory);
+    expect(automaticBackupFiles.filter((name) => name.endsWith(".db"))).toHaveLength(2);
+    expect(automaticBackupFiles.filter((name) => name.endsWith(".manifest.json"))).toHaveLength(2);
 
     const duplicate = await app.inject({
       method: "POST",

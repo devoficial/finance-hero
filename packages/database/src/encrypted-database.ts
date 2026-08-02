@@ -1,3 +1,4 @@
+import { existsSync, statSync } from "node:fs";
 import Database from "better-sqlite3-multiple-ciphers";
 
 export interface FinanceHeroDatabase {
@@ -6,12 +7,26 @@ export interface FinanceHeroDatabase {
 }
 
 const MINIMUM_KEY_BYTES = 32;
+export const FOUNDATION_SCHEMA_VERSION = "phase-5";
+
+export class DatabaseUnlockError extends Error {
+  readonly code = "DATABASE_UNLOCK_FAILED";
+
+  constructor() {
+    super(
+      "The configured key cannot unlock the existing encrypted database, or the database is damaged. " +
+        "Finance Hero did not replace or modify it. Restore the original key from macOS Keychain, then verify a backup before recovery.",
+    );
+    this.name = "DatabaseUnlockError";
+  }
+}
 
 export function openEncryptedDatabase(filename: string, key: Buffer): FinanceHeroDatabase {
   if (key.byteLength < MINIMUM_KEY_BYTES) {
     throw new Error(`Database key must contain at least ${MINIMUM_KEY_BYTES} bytes.`);
   }
 
+  const existingDatabase = existsSync(filename) && statSync(filename).size > 0;
   const connection = new Database(filename);
 
   try {
@@ -32,8 +47,59 @@ export function openEncryptedDatabase(filename: string, key: Buffer): FinanceHer
     };
   } catch (error) {
     connection.close();
+    if (existingDatabase) throw new DatabaseUnlockError();
     throw error;
   }
+}
+
+function tableColumns(database: FinanceHeroDatabase, table: string): Set<string> {
+  return new Set(
+    (database.connection.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
+      (column) => column.name,
+    ),
+  );
+}
+
+export function foundationSchemaNeedsMigration(database: FinanceHeroDatabase): boolean {
+  const tables = new Set(
+    (
+      database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+        name: string;
+      }>
+    ).map((row) => row.name),
+  );
+  if (tables.size === 0) return false;
+  if (!tables.has("app_metadata")) return true;
+  const version = database.connection.prepare("SELECT value FROM app_metadata WHERE key = 'schema_version'").get() as
+    | { value: string }
+    | undefined;
+  if (version?.value !== FOUNDATION_SCHEMA_VERSION) return true;
+
+  const requiredColumns: Record<string, string[]> = {
+    debts: ["original_amount_paise"],
+    financial_goals: ["target_mode", "coverage_months"],
+    import_candidates: [
+      "normalized_payee",
+      "fingerprint",
+      "duplicate_of_candidate_id",
+      "duplicate_confidence",
+      "duplicate_resolution",
+      "splits_json",
+    ],
+    import_artifacts: [
+      "statement_period_start",
+      "statement_period_end",
+      "opening_balance_asset_paise",
+      "opening_balance_liability_paise",
+      "closing_balance_paise",
+      "reconciled_at",
+    ],
+  };
+  return Object.entries(requiredColumns).some(([table, columns]) => {
+    if (!tables.has(table)) return true;
+    const available = tableColumns(database, table);
+    return columns.some((column) => !available.has(column));
+  });
 }
 
 export function initializeFoundationSchema(database: FinanceHeroDatabase): void {
@@ -45,7 +111,7 @@ export function initializeFoundationSchema(database: FinanceHeroDatabase): void 
     ) STRICT;
 
     INSERT INTO app_metadata (key, value, updated_at)
-    VALUES ('schema_version', 'phase-5', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    VALUES ('schema_version', '${FOUNDATION_SCHEMA_VERSION}', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     ON CONFLICT(key) DO UPDATE SET
       value = excluded.value,
       updated_at = excluded.updated_at;

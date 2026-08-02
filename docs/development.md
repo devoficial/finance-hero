@@ -91,6 +91,33 @@ verifies that a wrong key cannot read it.
 replace the Keychain item manually; setup verifies the key against existing data
 before updating it.
 
+If startup says that the supplied key cannot open the existing encrypted database, stop. Do not
+guess the key, create a new key, delete the database, or print candidate keys. The existing database
+is left unchanged. Recover the original Keychain item with service `finance-hero.database` and
+account `primary`, then validate it through `pnpm setup:local` or verify a known backup.
+
+## Backup and recovery commands
+
+Manual backup and restore staging require the local app to be stopped. Backup verification is
+read-only and may use an explicit snapshot or the newest snapshot on the Mac.
+
+```bash
+pnpm stop:local
+pnpm backup:local
+pnpm verify-backup:local
+pnpm verify-backup:local -- /absolute/path/to/snapshot.db
+pnpm stage-restore:local -- /absolute/path/to/snapshot.db
+```
+
+Snapshots are encrypted with the existing database key. Automatic pre-operation snapshots are in
+`data/backups/automatic`; manual snapshots are in `data/backups/manual`. Every accepted snapshot has
+a `.manifest.json` verification receipt.
+
+Restore staging writes a verified copy and `RESTORE_READY.json` under `data/recovery`. It never
+deletes or overwrites `data/finance-hero.db`. There is intentionally no one-command activation:
+review the staged receipt and financial summaries first, preserve the current database, and only
+then perform a separately authorized recovery operation.
+
 ## Current limitations
 
 - Monthly `Overall Total Expenses` cash outflows from September 2025 through July 2026 are

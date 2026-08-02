@@ -6,6 +6,7 @@ import {
   parseStatementOcrPages,
   parseStatementPdfFile,
 } from "./statement-parser";
+import { STATEMENT_INSTITUTION_FIXTURES } from "./test-fixtures/statement-institutions";
 
 function createTextPdfPages(pages: Array<Array<Array<{ text: string; x: number }>>>): Buffer {
   const escapePdfText = (value: string) => value.replace(/([\\()])/g, "\\$1");
@@ -54,6 +55,7 @@ function createTextPdf(lines: Array<Array<{ text: string; x: number }>>): Buffer
 
 function createStatementWorkbook(bookType: "xls" | "xlsx"): Buffer {
   const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["Synthetic statement instructions"]]), "Read me");
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.aoa_to_sheet([
@@ -172,6 +174,25 @@ describe("statement delimited parser", () => {
       amountPaise: 60000,
       direction: "debit",
     });
+    expect(parsed.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "delimited.delimiter_detected", message: "semicolon delimiter detected." }),
+      ]),
+    );
+  });
+
+  it.each(STATEMENT_INSTITUTION_FIXTURES)("parses the $id CSV fixture with an explicit profile", (fixture) => {
+    const parsed = parseStatementDelimitedFile(
+      Buffer.from(fixture.table.map((row) => row.join(",")).join("\n")),
+      `${fixture.filenameBase}.csv`,
+    );
+
+    expect(parsed.rows).toMatchObject(fixture.expectedRows);
+    expect(parsed.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "profile.detected", message: "Axis Bank layout detected." }),
+      ]),
+    );
   });
 });
 
@@ -207,6 +228,22 @@ describe("statement Excel parser", () => {
       amountPaise: 30000000,
       direction: "credit",
     });
+    expect(parsed.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "excel.sheet_skipped", source: `statement.${bookType} / Read me` }),
+      ]),
+    );
+  });
+
+  it.each(STATEMENT_INSTITUTION_FIXTURES)("parses the $id XLSX fixture", (fixture) => {
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(fixture.table), "Transactions");
+    const content = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+
+    const parsed = parseStatementExcelFile(content, `${fixture.filenameBase}.xlsx`);
+
+    expect(parsed.rows).toMatchObject(fixture.expectedRows);
+    expect(parsed.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: "profile.detected" })]));
   });
 });
 
@@ -314,6 +351,24 @@ describe("statement PDF parser", () => {
   it("flags PDFs without a text transaction table for OCR", async () => {
     await expect(parseStatementPdfFile(createTextPdf([[{ text: "Scanned statement cover", x: 50 }]]))).rejects.toThrow(
       "OCR is required",
+    );
+  });
+
+  it.each(STATEMENT_INSTITUTION_FIXTURES)("parses the $id PDF fixture and diagnoses cover pages", async (fixture) => {
+    const xPositions = [40, 150, 350, 440, 520];
+    const transactionPage = fixture.table.map((row) =>
+      row.flatMap((text, index) => (text ? [{ text, x: xPositions[index] ?? 40 }] : [])),
+    );
+    const pdf = createTextPdfPages([[[{ text: "Synthetic statement cover", x: 40 }]], transactionPage]);
+
+    const parsed = await parseStatementPdfFile(pdf);
+
+    expect(parsed.rows).toMatchObject(fixture.expectedRows);
+    expect(parsed.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "pdf.page_skipped", source: "PDF page 1" }),
+        expect.objectContaining({ code: "profile.detected", source: "PDF page 2" }),
+      ]),
     );
   });
 });

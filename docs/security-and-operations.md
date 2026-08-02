@@ -127,16 +127,22 @@ The user selected Mac-only storage with no external drive. The system therefore 
 rolling encrypted snapshots on the Mac while clearly warning that theft or total disk
 failure can destroy both primary data and backups.
 
-Proposed schedule while the app runs:
+Current operational baseline:
 
-- SQLite online backup after a successful import/migration and at most once per day;
-- seven daily, five weekly, and twelve monthly encrypted snapshots;
-- attachment manifest and incremental encrypted objects included;
-- integrity check plus isolated restore verification for new snapshots;
-- visible `last verified backup` status and overdue alert.
+- A timestamped encrypted database snapshot is created and verified before a schema migration.
+- A timestamped encrypted database snapshot is created and verified before import parse-result
+  replacement, candidate approval, and moving approved/rejected candidates back to pending.
+- Automatic snapshots live in `data/backups/automatic`; manual snapshots live in
+  `data/backups/manual`.
+- Each snapshot has a restrictive-permission manifest containing its filename, size, SHA-256,
+  schema version, reason, and timestamps. The manifest never contains the database key.
+- The source database must pass SQLite integrity and relationship checks, its WAL is checkpointed,
+  and the encrypted copy is reopened with the current key before the snapshot is accepted.
+- The current database is never deleted or overwritten by the backup or restore commands.
 
-A backup is only successful after verification. Restore never overwrites the current data
-until the restored copy passes schema, ledger-balance, attachment-hash, and audit-chain checks.
+The current implementation intentionally favors safety over retention automation. Rolling daily,
+weekly, and monthly pruning, attachment snapshots, and a visible backup-health indicator remain
+future work. Because all copies are on the same Mac, they do not protect against loss of that Mac.
 
 ## 12. Startup sequence
 
@@ -165,8 +171,33 @@ until the restored copy passes schema, ledger-balance, attachment-hash, and audi
 - immediately switch API to read-only maintenance mode;
 - preserve the damaged files and logs;
 - verify the latest snapshots newest to oldest;
-- restore into a separate directory and compare ledger/audit summaries;
-- activate only after explicit owner confirmation.
+- stage the selected snapshot into a separate recovery directory;
+- inspect `RESTORE_READY.json` and compare database/ledger summaries;
+- preserve the active database and activate a staged copy only through a separately reviewed,
+  explicit owner operation.
+
+### Local backup and staged recovery
+
+Stop Finance Hero before creating a manual snapshot or staging a recovery copy:
+
+```bash
+pnpm stop:local
+pnpm backup:local
+pnpm verify-backup:local -- /absolute/path/to/snapshot.db
+pnpm stage-restore:local -- /absolute/path/to/snapshot.db
+```
+
+`verify-backup:local` uses the latest local snapshot when no path is supplied. `stage-restore:local`
+creates `data/recovery/restore-<timestamp>-<id>/finance-hero.db` and a `RESTORE_READY.json` receipt.
+It does not rename, remove, or replace `data/finance-hero.db`. Activation is deliberately not
+automated; it requires an explicit recovery review so a good current database cannot be silently
+destroyed.
+
+All encrypted snapshots require the same original database key. If validation reports that the key
+cannot unlock a database, do not guess keys, generate a replacement, or paste secrets into logs or
+issues. Recover the original `finance-hero.database` / `primary` item from macOS Keychain or verify
+another snapshot. A key mismatch and physical database damage can produce similar low-level errors,
+so the application reports safe recovery steps without exposing cryptographic details.
 
 ### Lost/replaced iPhone
 

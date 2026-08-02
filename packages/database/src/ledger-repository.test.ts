@@ -343,6 +343,10 @@ describe("ledger repository", () => {
     expect(portfolio.clearedCount).toBe(2);
     expect(portfolio.totalPrincipalPaise).toBe(701040600);
     expect(portfolio.totalEmiPaise).toBe(11611100);
+    expect(repository.getDashboard("2026-07", 18)).toMatchObject({
+      debtPrincipalPaise: 701040600,
+      totalEmiPaise: 11611100,
+    });
 
     const clearAudit = database.connection
       .prepare(
@@ -360,6 +364,10 @@ describe("ledger repository", () => {
     expect(restored.canUndoClear).toBe(false);
     expect(repository.getLiabilities().totalPrincipalPaise).toBe(724854600);
     expect(repository.getLiabilities().totalEmiPaise).toBe(12745100);
+    expect(repository.getDashboard("2026-07", 18)).toMatchObject({
+      debtPrincipalPaise: 724854600,
+      totalEmiPaise: 12745100,
+    });
     const undoAudit = database.connection
       .prepare(
         "SELECT action FROM audit_events WHERE entity_id = 'debt-dmi' ORDER BY created_at DESC, rowid DESC LIMIT 1",

@@ -173,6 +173,13 @@ describe("budget repository", () => {
       closingBalancePaise: 1216050,
     });
     expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1216050);
+
+    repository.updateMonth("2026-07", {
+      lines: [{ categoryId: "category-rent", actualPaise: 1700000 }],
+    });
+    expect(repository.getMonth("2026-07").cashBridge.calculatedClosingBalancePaise).not.toBe(4566600);
+    expect(repository.getMonth("2026-07").cashBridge.closingBalancePaise).toBe(1216050);
+    expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1216050);
     database.close();
   });
 
@@ -264,6 +271,42 @@ describe("budget repository", () => {
     );
     expect(august.lines.find((line) => line.categoryId === "category-extra-savings")?.categoryName).toBe(
       "Lending / payback",
+    );
+    database.close();
+  });
+
+  it("counts an existing Axis to ICICI emergency transfer once", () => {
+    const { database, ledger, repository, wealth } = createRepository();
+    ledger.createManualTransaction({
+      occurredOn: "2026-08-01",
+      payee: "Fund ICICI emergency reserve",
+      kind: "transfer",
+      amountPaise: 2000000,
+      accountId: "account-primary-bank",
+      destinationAccountId: "account-icici-expense-reserve",
+      idempotencyKey: "budget-test:august-icici-transfer",
+    });
+
+    repository.updateMonth("2026-08", {
+      lines: [{ categoryId: "category-emergency-fund", actualPaise: 2000000 }],
+    });
+    // Saving the same sheet value again must remain idempotent.
+    const august = repository.updateMonth("2026-08", {
+      lines: [{ categoryId: "category-emergency-fund", actualPaise: 2000000 }],
+    });
+    const iciciMovement = database.connection
+      .prepare(
+        "SELECT COALESCE(SUM(amount_paise), 0) AS amountPaise FROM postings WHERE account_id = 'account-icici-expense-reserve'",
+      )
+      .get() as { amountPaise: number };
+    const emergencyGoal = wealth.getWealth("2026-08-02").goals.find((goal) => goal.targetMode === "emergency_cover");
+
+    expect(august.lines.find((line) => line.categoryId === "category-emergency-fund")?.spentPaise).toBe(2000000);
+    expect(august.cashBridge.primaryAccountOutflowPaise).toBe(0);
+    expect(august.cashBridge.primaryTransferMovementPaise).toBe(-2000000);
+    expect(iciciMovement.amountPaise).toBe(2000000);
+    expect(emergencyGoal?.allocations).toContainEqual(
+      expect.objectContaining({ assetId: "asset-icici-expense-reserve", amountPaise: 2000000 }),
     );
     database.close();
   });

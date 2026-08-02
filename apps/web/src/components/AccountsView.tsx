@@ -48,19 +48,6 @@ function balanceSourceLabel(account: FinancialAccount): string {
   return "Direct valuation";
 }
 
-function allocationPolicyLabel(policy: WealthResponse["assets"][number]["allocationPolicy"]): string {
-  const labels = {
-    emergency_only: "Emergency only",
-    construction_only: "Construction only",
-    retirement: "Retirement only",
-    long_term_wealth: "Long-term wealth",
-    short_term: "Short-term goals",
-    flexible: "Flexible",
-    none: "Not allocatable",
-  } as const;
-  return labels[policy];
-}
-
 export function AccountsView({
   data,
   loading,
@@ -141,11 +128,6 @@ export function AccountsView({
       return filterMatches && searchMatches;
     });
   }, [data?.accounts, filter, search]);
-  const wealthByAccountId = useMemo(
-    () => new Map((wealth?.assets ?? []).map((asset) => [asset.accountId, asset])),
-    [wealth?.assets],
-  );
-
   if (loading || !data) {
     return <section className="panel loading-panel">Reading the account registry...</section>;
   }
@@ -347,65 +329,68 @@ export function AccountsView({
           ))}
         </fieldset>
 
-        <div className="accounts-card-grid" ref={tableRef}>
-          {filteredAccounts.map((account) => (
-            <article
-              className={`account-card ${account.accountClass} ${!account.isActive ? "inactive" : ""}`}
-              key={account.id}
-            >
-              <div className="account-card-heading">
-                <div className="account-name-line">
-                  <strong>{account.name}</strong>
-                  <span className={`account-class ${account.accountClass}`}>{account.accountClass}</span>
-                </div>
-                <small>{accountTypeLabel(account)}</small>
-              </div>
-              <strong
-                className={`account-balance money-value ${
-                  account.accountClass === "liability" && account.balancePaise > 0
-                    ? "negative liability-value"
-                    : account.balancePaise < 0
-                      ? "negative"
-                      : ""
-                }`}
-              >
-                {money(account.balancePaise)}
-              </strong>
-              <div className="account-card-meta">
-                <span>
-                  <small>OWNER</small>
-                  <strong>{account.institution || "Independent"}</strong>
-                </span>
-                <span>
-                  <small>SOURCE</small>
-                  <strong>{balanceSourceLabel(account)}</strong>
-                </span>
-                <span>
-                  <small>ACTIVITY</small>
-                  <strong>
-                    {account.transactionCount} {account.transactionCount === 1 ? "entry" : "entries"}
-                  </strong>
-                </span>
-                {wealthByAccountId.get(account.id) && (
-                  <span>
-                    <small>GOAL RULE</small>
-                    <strong>
-                      {allocationPolicyLabel(wealthByAccountId.get(account.id)?.allocationPolicy ?? "none")}
+        <div className="accounts-table-scroll" ref={tableRef}>
+          <table className="accounts-table">
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th>Balance</th>
+                <th>Managed by</th>
+                <th aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAccounts.map((account) => (
+                <tr className={`${account.accountClass} ${!account.isActive ? "inactive" : ""}`} key={account.id}>
+                  <td className="account-table-name">
+                    <div>
+                      <strong title={account.name}>{account.name}</strong>
+                      <span className={`account-class ${account.accountClass}`}>{account.accountClass}</span>
+                    </div>
+                    <small>
+                      {account.institution || "Independent"} · {accountTypeLabel(account)}
+                    </small>
+                  </td>
+                  <td>
+                    <strong
+                      className={`account-table-balance money-value ${
+                        account.accountClass === "liability" && account.balancePaise > 0
+                          ? "negative liability-value"
+                          : account.balancePaise < 0
+                            ? "negative"
+                            : ""
+                      }`}
+                      title={money(account.balancePaise)}
+                    >
+                      {money(account.balancePaise)}
                     </strong>
-                  </span>
-                )}
-              </div>
-              <div className="account-row-actions">
-                <button className="table-action" onClick={() => openEditForm(account)} type="button">
-                  Edit
-                </button>
-                <button className="account-remove-action" onClick={() => setAccountToDelete(account)} type="button">
-                  Remove
-                </button>
-              </div>
-            </article>
-          ))}
-          {filteredAccounts.length === 0 && <p className="accounts-empty">No accounts match this filter.</p>}
+                  </td>
+                  <td>{balanceSourceLabel(account)}</td>
+                  <td>
+                    <div className="account-table-actions">
+                      <button className="table-action" onClick={() => openEditForm(account)} type="button">
+                        Edit
+                      </button>
+                      <button
+                        className="account-remove-action"
+                        onClick={() => setAccountToDelete(account)}
+                        type="button"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredAccounts.length === 0 && (
+                <tr>
+                  <td className="accounts-empty" colSpan={4}>
+                    No accounts match this filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
