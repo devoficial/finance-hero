@@ -32,7 +32,12 @@ Never commit `.env`, databases, certificates, statements, exports, or personal f
 pnpm start:local
 ```
 
-- PWA: `http://127.0.0.1:4318`
+- PWA: `http://127.0.0.1:4318` before phone access is configured, or
+  `https://127.0.0.1:4318` after `pnpm setup:phone`
+
+The `scripts/Start Finance Hero.command` launcher selects the correct mode automatically.
+After phone access is configured, desktop and iPhone access both use the HTTPS server so
+the installed PWA origin remains consistent.
 - Local API: `http://127.0.0.1:4317`
 - Health contract: `http://127.0.0.1:4317/api/v1/health`
 - Dashboard: `http://127.0.0.1:4317/api/v1/dashboard?month=2026-07`

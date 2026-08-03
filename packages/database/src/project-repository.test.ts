@@ -2,10 +2,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { AccountRepository } from "./account-repository";
 import { initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
 import { LedgerRepository } from "./ledger-repository";
 import { seedAcceptedOpeningSnapshot } from "./opening-seed";
 import { ProjectRepository } from "./project-repository";
+import { WealthRepository } from "./wealth-repository";
 
 const temporaryDirectories: string[] = [];
 
@@ -120,6 +122,8 @@ describe("project repository", () => {
 
   it("consolidates Jupiter transfers and construction spending into the project fund", () => {
     const { database, ledger, repository } = createRepository();
+    const accounts = new AccountRepository(database);
+    const wealth = new WealthRepository(database);
     const initialFund = repository.getHomeConstruction().fundBalancePaise;
 
     ledger.createManualTransaction({
@@ -132,6 +136,12 @@ describe("project repository", () => {
       idempotencyKey: "project-test:jupiter-funding",
     });
     expect(repository.getHomeConstruction().fundBalancePaise).toBe(initialFund + 500000);
+    const fundedAccountBalance = accounts.getAccounts().accounts.find(
+      (account) => account.id === "account-savings",
+    )?.balancePaise;
+    const fundedWealthBalance = wealth
+      .getWealth("2026-07-20")
+      .assets.find((asset) => asset.id === "asset-savings")?.currentValuePaise;
 
     repository.createExpense({
       occurredOn: "2026-07-21",
@@ -143,6 +153,12 @@ describe("project repository", () => {
     const project = repository.getHomeConstruction();
     expect(project.fundBalancePaise).toBe(initialFund + 375000);
     expect(project.actualExpensePaise).toBe(122706000);
+    expect(accounts.getAccounts().accounts.find((account) => account.id === "account-savings")?.balancePaise).toBe(
+      (fundedAccountBalance ?? 0) - 125000,
+    );
+    expect(
+      wealth.getWealth("2026-07-21").assets.find((asset) => asset.id === "asset-savings")?.currentValuePaise,
+    ).toBe((fundedWealthBalance ?? 0) - 125000);
     const julyProjectExpensePostings = database.connection
       .prepare(`
         SELECT COALESCE(SUM(p.amount_paise), 0) AS amountPaise

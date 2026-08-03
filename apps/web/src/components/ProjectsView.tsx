@@ -69,6 +69,16 @@ export function ProjectsView({ data, referenceData, loading, money }: ProjectsVi
     await queryClient.invalidateQueries({ queryKey: ["projects", "home-construction"] });
   };
 
+  const refreshProjectFinancials = async (month: string) => {
+    await Promise.all([
+      refreshProjects(),
+      queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+      queryClient.invalidateQueries({ queryKey: ["wealth"] }),
+      queryClient.invalidateQueries({ queryKey: ["dashboard", month] }),
+      queryClient.invalidateQueries({ queryKey: ["expenses", "year", month.slice(0, 4)] }),
+    ]);
+  };
+
   const expenseMutation = useMutation({
     mutationFn: createProjectExpense,
     onSuccess: async (expense) => {
@@ -77,18 +87,16 @@ export function ProjectsView({ data, referenceData, loading, money }: ProjectsVi
       setExpenseAmount("");
       setFormError(null);
       const month = expense.occurredOn.slice(0, 7);
-      await Promise.all([
-        refreshProjects(),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", month] }),
-        queryClient.invalidateQueries({ queryKey: ["expenses", "year", month.slice(0, 4)] }),
-      ]);
+      await refreshProjectFinancials(month);
     },
   });
 
   const reviewMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: Parameters<typeof updateProjectExpense>[1] }) =>
       updateProjectExpense(id, input),
-    onSuccess: refreshProjects,
+    onSuccess: async (expense) => {
+      await refreshProjectFinancials(expense.occurredOn.slice(0, 7));
+    },
   });
 
   const vendorMutation = useMutation({
