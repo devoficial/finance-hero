@@ -1,7 +1,46 @@
 import { readFileSync } from "node:fs";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+
+function staleServiceWorkerCleanup(): Plugin {
+  const cleanupWorker = `
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+    await self.registration.unregister();
+    await self.clients.claim();
+    const windows = await self.clients.matchAll({ type: "window" });
+    await Promise.allSettled(windows.map((client) => client.navigate(client.url)));
+  })());
+});
+self.addEventListener("fetch", (event) => {
+  event.respondWith(fetch(event.request));
+});
+`;
+
+  return {
+    name: "finance-hero-stale-worker-cleanup",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+        if (pathname !== "/sw.js") {
+          next();
+          return;
+        }
+
+        response.statusCode = 200;
+        response.setHeader("Content-Type", "application/javascript; charset=utf-8");
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        response.setHeader("Service-Worker-Allowed", "/");
+        response.end(cleanupWorker);
+      });
+    },
+  };
+}
 
 const certificatePath = process.env.FINANCE_HERO_WEB_CERT;
 const keyPath = process.env.FINANCE_HERO_WEB_KEY;
@@ -15,6 +54,7 @@ const https =
 
 export default defineConfig({
   plugins: [
+    staleServiceWorkerCleanup(),
     react(),
     VitePWA({
       registerType: "prompt",
@@ -27,8 +67,7 @@ export default defineConfig({
         "favicon-32.png",
       ],
       devOptions: {
-        enabled: true,
-        type: "module",
+        enabled: false,
       },
       manifest: {
         id: "/",
@@ -65,6 +104,9 @@ export default defineConfig({
       workbox: {
         navigateFallback: "/index.html",
         globPatterns: ["**/*.{js,css,html,svg,png,woff,woff2}"],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
       },
     }),
   ],

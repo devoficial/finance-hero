@@ -108,19 +108,23 @@ describe("ledger repository", () => {
     database.close();
   });
 
-  it("uses the bank-confirmed closing balance as dashboard cash", () => {
+  it("uses the live calculated closing balance as dashboard cash while retaining bank reconciliation", () => {
     const { database, repository } = createRepository();
-    new BudgetRepository(database).updateMonth("2026-07", {
+    const budgets = new BudgetRepository(database);
+    budgets.updateMonth("2026-07", {
       reconciliation: {
         statementBalancePaise: 368768,
         reconciledOn: "2026-07-28",
       },
     });
 
+    const month = budgets.getMonth("2026-07");
+    expect(month.cashBridge.statementBalancePaise).toBe(368768);
+
     expect(repository.getDashboard("2026-07", 28)).toMatchObject({
-      cashBalancePaise: 368768,
-      cashBalanceSource: "bank_statement",
-      cashBalanceAsOf: "2026-07-28",
+      cashBalancePaise: month.cashBridge.closingBalancePaise,
+      cashBalanceSource: "calculated",
+      cashBalanceAsOf: null,
     });
     database.close();
   });

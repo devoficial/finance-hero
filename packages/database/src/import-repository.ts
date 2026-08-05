@@ -476,10 +476,11 @@ export class ImportRepository {
   ): AggregateReplacementRecord[] {
     const replacements: AggregateReplacementRecord[] = [];
     for (const split of splits) {
-      const aggregateIds = [
-        `migration-expense-history-${month}-${split.categoryId}`,
-        `expense-sheet-${month}-${split.categoryId}`,
-      ];
+      // Imported statement rows replace only the historical migration placeholder.
+      // Live expense-sheet rows are user-maintained totals and must remain intact;
+      // otherwise approving a statement silently subtracts the same amount from the
+      // sheet and makes the approved transaction appear to add nothing.
+      const aggregateId = `migration-expense-history-${month}-${split.categoryId}`;
       const aggregate = this.database.connection
         .prepare(`
           SELECT t.id, p.id AS expensePostingId, p.amount_paise AS amountPaise,
@@ -487,11 +488,10 @@ export class ImportRepository {
           FROM journal_transactions t
           JOIN postings p ON p.transaction_id = t.id AND p.category_id = ?
           JOIN postings balancing ON balancing.transaction_id = t.id AND balancing.id <> p.id
-          WHERE t.id IN (?, ?) AND t.status = 'posted'
-          ORDER BY CASE t.id WHEN ? THEN 0 ELSE 1 END
+          WHERE t.id = ? AND t.status = 'posted'
           LIMIT 1
         `)
-        .get(split.categoryId, ...aggregateIds, aggregateIds[0]) as
+        .get(split.categoryId, aggregateId) as
         | { id: string; expensePostingId: string; amountPaise: number; balancingPostingId: string }
         | undefined;
       if (!aggregate) continue;

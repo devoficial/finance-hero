@@ -220,7 +220,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
   const primaryCashMovement = draftPrimaryAccountOutflow - (budget?.cashBridge.primaryTransferMovementPaise ?? 0);
   const calculatedClosingBalance = fundsAvailable - primaryCashMovement;
   const parsedStatementBalance = statementBalance.trim() ? parseRupeeExpression(statementBalance) : null;
-  const closingBalance = parsedStatementBalance ?? calculatedClosingBalance;
+  const closingBalance = calculatedClosingBalance;
   const hasReconciliation = parsedStatementBalance != null;
   const reconciliationDifference =
     parsedStatementBalance == null ? 0 : parsedStatementBalance - calculatedClosingBalance;
@@ -244,7 +244,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
       setSavedMessage(`Saved ${formatUpdated(saved.updatedAt)}`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["budget"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard", saved.month] }),
+          queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
         queryClient.invalidateQueries({ queryKey: ["expenses", "year", saved.month.slice(0, 4)] }),
         queryClient.invalidateQueries({ queryKey: ["imports"] }),
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
@@ -613,8 +613,8 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
           </div>
           <div className="cash-balance-hero">
             <span>Current balance</span>
-            <strong className={closingBalance < 0 ? "negative" : ""}>{money(closingBalance)}</strong>
-            <small>{hasReconciliation ? "Bank confirmed" : "Calculated from this register"}</small>
+            <strong className={closingBalance < 0 ? "negative" : "positive"}>{money(closingBalance)}</strong>
+            <small>Calculated from this register</small>
           </div>
           <div className="cash-overview-formula">
             <article className={budget.cashBridge.carryoverPaise < 0 ? "negative" : ""}>
@@ -637,23 +637,9 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               <strong>{money(calculatedClosingBalance)}</strong>
             </article>
           </div>
-          <div
-            className={`cash-overview-signal ${
-              hasReconciliation && reconciliationDifference === 0 ? "reconciled" : "attention"
-            }`}
-          >
-            <span>
-              {!hasReconciliation
-                ? "Bank balance not confirmed"
-                : reconciliationDifference === 0
-                  ? "Statement reconciled"
-                  : "Difference to investigate"}
-            </span>
-            <strong>
-              {!hasReconciliation
-                ? "—"
-                : `${reconciliationDifference > 0 ? "+" : ""}${money(reconciliationDifference)}`}
-            </strong>
+          <div className={`cash-overview-signal ${hasReconciliation ? "reconciled" : "attention"}`}>
+            <span>{hasReconciliation ? "Bank statement snapshot" : "Bank balance not confirmed"}</span>
+            <strong>{parsedStatementBalance == null ? "—" : money(parsedStatementBalance)}</strong>
           </div>
         </div>
 
@@ -738,7 +724,7 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
               <h4>
                 {parsedStatementBalance == null
                   ? "Confirm the real bank balance"
-                  : "Statement balance verifies the calculation"}
+                  : "Statement snapshot kept for reference"}
               </h4>
               <small>
                 Current balance always equals carryover plus receipts minus outflow. The statement remains a separate
@@ -776,14 +762,15 @@ export function BudgetEditor({ budget, emiPaise, historical, loading, money }: B
                 value={reconciliationDate}
               />
             </label>
-            <div className="reconciliation-result">
-              <span>Difference to investigate</span>
-              <strong>
-                {reconciliationDifference >= 0 ? "+" : ""}
-                {money(reconciliationDifference)}
-              </strong>
-              <small>{reconciliationDifference === 0 ? "Reconciled" : "Sheet estimate versus bank statement"}</small>
-            </div>
+              <div className="reconciliation-result">
+                <span>Snapshot variance</span>
+                <strong>{money(reconciliationDifference)}</strong>
+                <small>
+                  {reconciliationDifference === 0
+                    ? "Matched on this snapshot"
+                    : "Dated statement versus current register"}
+                </small>
+              </div>
           </div>
           <div className="cash-adjustment-list">
             <div className="cash-adjustment-list-heading">

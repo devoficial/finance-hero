@@ -618,6 +618,8 @@ export class BudgetRepository {
     let selectedPrimaryOutflow = 0;
     let selectedPrimaryTransferMovement = 0;
     let selectedCalculatedClosing = 0;
+    let selectedClosing = 0;
+    let selectedReconciliationDifference = 0;
     let selectedReconciliation: { statementBalancePaise: number; reconciledOn: string } | undefined;
     for (const item of months) {
       const carryover = overrides.get(item.month) ?? previousClosing;
@@ -629,6 +631,13 @@ export class BudgetRepository {
       const primaryTransferMovement = primaryAccountTransfers.get(item.month) ?? 0;
       const calculatedClosing = carryover + adjustmentTotal - primaryAccountOutflow + primaryTransferMovement;
       const reconciliation = reconciliations.get(item.month);
+      // The expense register is the source of truth for the selected month's
+      // live balance. A confirmed statement anchors the following month's
+      // carryover without replacing the selected month's calculated balance.
+      const reconciliationDifference = reconciliation
+        ? reconciliation.statementBalancePaise - calculatedClosing
+        : 0;
+      const closing = calculatedClosing;
       previousClosing = reconciliation?.statementBalancePaise ?? calculatedClosing;
       if (item.month === month) {
         selectedCarryover = carryover;
@@ -636,6 +645,8 @@ export class BudgetRepository {
         selectedPrimaryOutflow = primaryAccountOutflow;
         selectedPrimaryTransferMovement = primaryTransferMovement;
         selectedCalculatedClosing = calculatedClosing;
+        selectedClosing = closing;
+        selectedReconciliationDifference = reconciliationDifference;
         selectedReconciliation = reconciliation;
       }
     }
@@ -651,11 +662,9 @@ export class BudgetRepository {
       primaryTransferMovementPaise: selectedPrimaryTransferMovement,
       calculatedClosingBalancePaise: selectedCalculatedClosing,
       statementBalancePaise: selectedReconciliation?.statementBalancePaise ?? null,
-      reconciliationDifferencePaise: selectedReconciliation
-        ? selectedReconciliation.statementBalancePaise - selectedCalculatedClosing
-        : 0,
+      reconciliationDifferencePaise: selectedReconciliationDifference,
       reconciledOn: selectedReconciliation?.reconciledOn ?? null,
-      closingBalancePaise: selectedReconciliation?.statementBalancePaise ?? selectedCalculatedClosing,
+      closingBalancePaise: selectedClosing,
     };
   }
 

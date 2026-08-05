@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { BudgetRepository } from "./budget-repository";
 import { initializeFoundationSchema, openEncryptedDatabase } from "./encrypted-database";
 import { ImportRepository } from "./import-repository";
 import { LedgerRepository } from "./ledger-repository";
@@ -567,6 +568,57 @@ describe("import repository", () => {
     );
     repository.resetCandidatesToPending([candidate.id]);
     expect(ledger.getDashboard("2026-06", 30).regularExpensePaise).toBe(juneBefore.regularExpensePaise);
+    database.close();
+  });
+
+  it("adds approved EMI and insurance rows to a live expense sheet", () => {
+    const { database, repository } = createRepository();
+    const budgets = new BudgetRepository(database);
+    budgets.updateMonth("2026-08", {
+      lines: [
+        { categoryId: "category-emi-payments", actualPaise: 100000 },
+        { categoryId: "category-insurance", actualPaise: 50000 },
+      ],
+    });
+    repository.createArtifact({
+      filename: "august-statement.csv",
+      contentHash: "august-emi-insurance",
+      mimeType: "text/csv",
+      sizeBytes: 180,
+      accountId: "account-primary-bank",
+      status: "parsed",
+      rows: [
+        {
+          sourceRow: 2,
+          occurredOn: "2026-08-02",
+          payee: "Loan EMI",
+          amountPaise: 20000,
+          direction: "debit",
+          categoryId: "category-emi-payments",
+          confidence: 90,
+          warnings: [],
+          source: {},
+        },
+        {
+          sourceRow: 3,
+          occurredOn: "2026-08-02",
+          payee: "Insurance premium",
+          amountPaise: 30000,
+          direction: "debit",
+          categoryId: "category-insurance",
+          confidence: 90,
+          warnings: [],
+          source: {},
+        },
+      ],
+    });
+    const candidates = repository.getQueue().candidates;
+
+    repository.approveCandidates(candidates.map((candidate) => candidate.id));
+
+    const august = budgets.getMonth("2026-08");
+    expect(august.lines.find((line) => line.categoryId === "category-emi-payments")?.spentPaise).toBe(120000);
+    expect(august.lines.find((line) => line.categoryId === "category-insurance")?.spentPaise).toBe(80000);
     database.close();
   });
 

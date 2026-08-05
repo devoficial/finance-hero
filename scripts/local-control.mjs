@@ -18,11 +18,17 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createConnection } from "node:net";
+import { connect as createTlsConnection } from "node:tls";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DATA_DIRECTORY = resolve(process.env.FINANCE_HERO_DATA_DIR ?? join(ROOT, "data"));
+const PACKAGE_MANAGER =
+  JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).packageManager ?? "pnpm@10.28.2";
+const PINNED_PNPM = PACKAGE_MANAGER.startsWith("pnpm@") ? PACKAGE_MANAGER : "pnpm@10.28.2";
+const RUNTIME_BIN_DIRECTORY = join(DATA_DIRECTORY, ".runtime-bin");
+const PINNED_PNPM_SHIM_PATH = join(RUNTIME_BIN_DIRECTORY, "pnpm");
 const DATABASE_PATH = join(DATA_DIRECTORY, "finance-hero.db");
 const RUNTIME_PATH = join(DATA_DIRECTORY, ".runtime.json");
 const LOG_DIRECTORY = join(DATA_DIRECTORY, "logs");
@@ -174,12 +180,37 @@ function promptHidden(message) {
   });
 }
 
+function executablePath(name) {
+  const result = spawnSync("which", [name], { encoding: "utf8" });
+  const executable = result.status === 0 ? result.stdout.trim() : "";
+  if (!executable) {
+    throw new Error(`${name} is required to run Finance Hero.`);
+  }
+  return executable;
+}
+
+function ensurePinnedPnpmShim() {
+  const corepackPath = executablePath("corepack");
+  mkdirSync(RUNTIME_BIN_DIRECTORY, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    PINNED_PNPM_SHIM_PATH,
+    `#!/bin/sh\nexec ${JSON.stringify(corepackPath)} ${JSON.stringify(PINNED_PNPM)} "$@"\n`,
+    { mode: 0o700 },
+  );
+  chmodSync(PINNED_PNPM_SHIM_PATH, 0o700);
+  return RUNTIME_BIN_DIRECTORY;
+}
+
 function ensureDatabaseBuild({ quiet = false } = {}) {
   const databaseModule = join(ROOT, "packages/database/dist/index.js");
-  const result = spawnSync("pnpm", ["--filter", "@finance-hero/database", "build"], {
-    cwd: ROOT,
-    stdio: quiet ? "ignore" : "inherit",
-  });
+  const result = spawnSync(
+    executablePath("corepack"),
+    [PINNED_PNPM, "--filter", "@finance-hero/database", "build"],
+    {
+      cwd: ROOT,
+      stdio: quiet ? "ignore" : "inherit",
+    },
+  );
   if (result.status !== 0 || !existsSync(databaseModule)) {
     throw new Error("the encrypted database verifier could not be built.");
   }
@@ -457,11 +488,38 @@ function portIsOpen(port) {
   });
 }
 
+function tlsPortIsOpen(port) {
+  return new Promise((resolvePort) => {
+    let socket;
+    let settled = false;
+    const finish = (open) => {
+      if (settled) return;
+      settled = true;
+      socket?.destroy();
+      resolvePort(open);
+    };
+
+    socket = createTlsConnection({
+      host: "127.0.0.1",
+      port,
+      rejectUnauthorized: false,
+      servername: "localhost",
+    });
+    socket.setTimeout(1000);
+    socket.once("secureConnect", () => finish(true));
+    socket.once("error", () => finish(false));
+    socket.once("timeout", () => finish(false));
+  });
+}
+
 async function webIsReady(secure = WEB_SECURE, url = WEB_URL) {
   // Node does not consistently use the macOS trust store for a local mkcert
   // certificate. A successful TLS listener is sufficient for launcher health;
   // the browser still performs the certificate validation.
-  if (secure) return portIsOpen(4318);
+  if (secure) {
+    const parsedUrl = new URL(url);
+    return tlsPortIsOpen(Number(parsedUrl.port || 443));
+  }
   return (await fetchState(url))?.ok === true;
 }
 
@@ -588,10 +646,12 @@ async function start() {
   // The secure launcher does not inherit variables from an interactive shell.
   // Load the uncommitted local configuration while preserving explicit overrides.
   const environment = { ...readDotEnvEnvironment(), ...process.env };
+  const runtimeBinDirectory = ensurePinnedPnpmShim();
   delete environment.FINANCE_HERO_DATABASE_KEY;
   // Turbo runs each workspace task from its package directory. Keep every
   // process pinned to the single canonical encrypted database at the repo root.
   environment.FINANCE_HERO_DATA_DIR = DATA_DIRECTORY;
+  environment.PATH = `${runtimeBinDirectory}:${environment.PATH ?? ""}`;
   let ollamaPid = null;
   if (!(await portIsOpen(11434))) {
     const ollamaExecutable = spawnSync("which", ["ollama"], { encoding: "utf8" }).stdout.trim();

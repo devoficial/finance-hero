@@ -12,9 +12,157 @@
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Finance Hero</title>
+    <style>
+      #finance-hero-boot {
+        min-height: 100vh;
+        box-sizing: border-box;
+        display: grid;
+        place-items: center;
+        padding: 32px;
+        background: #f1eee5;
+        color: #10231e;
+        font-family: Georgia, "Times New Roman", serif;
+      }
+
+      #finance-hero-boot-card {
+        width: min(560px, 100%);
+        border: 1px solid #b9b9ae;
+        border-top: 5px solid #164b3c;
+        background: #faf8f1;
+        padding: 28px;
+      }
+
+      #finance-hero-boot h1 {
+        margin: 0 0 10px;
+        font-size: clamp(30px, 6vw, 48px);
+      }
+
+      #finance-hero-boot p {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        line-height: 1.55;
+      }
+
+      #finance-hero-recovery {
+        display: none;
+        margin-top: 22px;
+      }
+
+      #finance-hero-recovery[data-visible="true"] {
+        display: block;
+      }
+
+      #finance-hero-recovery-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      #finance-hero-recovery button {
+        min-height: 44px;
+        border: 1px solid #164b3c;
+        background: transparent;
+        color: #10231e;
+        padding: 0 16px;
+        font: 700 14px ui-monospace, SFMono-Regular, Menlo, monospace;
+        cursor: pointer;
+      }
+
+      #finance-hero-recovery button:first-child {
+        background: #164b3c;
+        color: #fffdf5;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="root">
+      <main id="finance-hero-boot" role="status" aria-live="polite">
+        <section id="finance-hero-boot-card">
+          <p>FINANCE HERO / LOCAL</p>
+          <h1>Starting your dashboard...</h1>
+          <p>Your encrypted financial data stays untouched while the local app starts.</p>
+          <div id="finance-hero-recovery" data-visible="false">
+            <p id="finance-hero-recovery-message">Startup is taking longer than expected.</p>
+            <div id="finance-hero-recovery-actions">
+              <button id="finance-hero-retry" type="button">Retry startup</button>
+              <button id="finance-hero-repair" type="button">Repair cached app</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script>
+      (() => {
+        const recovery = document.getElementById("finance-hero-recovery");
+        const message = document.getElementById("finance-hero-recovery-message");
+
+        const showRecovery = (text) => {
+          if (!document.getElementById("finance-hero-boot")) return;
+          message.textContent = text;
+          recovery.dataset.visible = "true";
+        };
+
+        window.addEventListener("error", () => {
+          showRecovery("The interface could not start. Retry it or safely clear only the cached app files.");
+        });
+        window.addEventListener("unhandledrejection", () => {
+          showRecovery("The interface could not start. Retry it or safely clear only the cached app files.");
+        });
+
+        window.setTimeout(() => {
+          showRecovery("Startup is taking longer than expected. The local API may be stopped or the installed app cache may be stale.");
+        }, 5000);
+
+        document.getElementById("finance-hero-retry").addEventListener("click", () => {
+          window.location.reload();
+        });
+
+        document.getElementById("finance-hero-repair").addEventListener("click", async () => {
+          message.textContent = "Repairing cached app files...";
+          try {
+            if ("serviceWorker" in navigator) {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(registrations.map((registration) => registration.unregister()));
+            }
+            if ("caches" in window) {
+              const cacheNames = await caches.keys();
+              await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+            }
+          } finally {
+            window.location.reload();
+          }
+        });
+      })();
+    </script>
+    <script type="module">
+      const recovery = document.getElementById("finance-hero-recovery");
+      const message = document.getElementById("finance-hero-recovery-message");
+      const isDesktopLocalOrigin =
+        (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") &&
+        window.location.port === "4318";
+
+      try {
+        // The desktop app is served by Vite, so an old production worker must never
+        // be allowed to keep serving a stale shell on the permanent local origin.
+        if (isDesktopLocalOrigin) {
+          if ("serviceWorker" in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+          }
+
+          if ("caches" in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+          }
+        }
+
+        await import("/src/main.tsx");
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        message.textContent = `Startup failed: ${detail}`;
+        recovery.dataset.visible = "true";
+      }
+    </script>
   </body>
 </html>

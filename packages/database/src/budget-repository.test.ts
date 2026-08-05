@@ -155,7 +155,7 @@ describe("budget repository", () => {
     database.close();
   });
 
-  it("uses a reconciled bank statement as the trusted closing balance and next carryover", () => {
+  it("keeps the live closing balance ledger-calculated while retaining statement audit data", () => {
     const { database, repository } = createRepository();
 
     const july = repository.updateMonth("2026-07", {
@@ -170,15 +170,18 @@ describe("budget repository", () => {
       statementBalancePaise: 1216050,
       reconciliationDifferencePaise: -3350550,
       reconciledOn: "2026-07-26",
-      closingBalancePaise: 1216050,
+      closingBalancePaise: 4566600,
     });
     expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1216050);
 
     repository.updateMonth("2026-07", {
       lines: [{ categoryId: "category-rent", actualPaise: 1700000 }],
     });
-    expect(repository.getMonth("2026-07").cashBridge.calculatedClosingBalancePaise).not.toBe(4566600);
-    expect(repository.getMonth("2026-07").cashBridge.closingBalancePaise).toBe(1216050);
+    const updatedJuly = repository.getMonth("2026-07");
+    expect(updatedJuly.cashBridge.calculatedClosingBalancePaise).not.toBe(4566600);
+    expect(updatedJuly.cashBridge.closingBalancePaise).toBe(
+      updatedJuly.cashBridge.calculatedClosingBalancePaise,
+    );
     expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1216050);
     database.close();
   });
@@ -515,6 +518,7 @@ describe("budget repository", () => {
     const dashboardAfter = ledger.getDashboard("2026-07", 18);
     expect(dashboardAfter.regularExpensePaise).toBe(dashboardBefore.regularExpensePaise + 43200);
     expect(dashboardAfter.cashOutflowPaise).toBe(dashboardBefore.cashOutflowPaise + 43200);
+    expect(dashboardAfter.cashBalancePaise).toBe(dashboardBefore.cashBalancePaise - 43200);
     expect(dashboardAfter.regularBudgetPaise).toBe(6054800);
     expect(ledger.getExpenseYear("2026").months[6]).toMatchObject({
       regularExpensePaise: dashboardAfter.regularExpensePaise,
@@ -655,9 +659,10 @@ describe("budget repository", () => {
     });
 
     expect(repository.getMonth("2026-07").cashBridge).toMatchObject({
+      calculatedClosingBalancePaise: 4666600,
       statementBalancePaise: 1216050,
       reconciliationDifferencePaise: -3450550,
-      closingBalancePaise: 1216050,
+      closingBalancePaise: 4666600,
     });
     expect(repository.getMonth("2026-08").cashBridge.carryoverPaise).toBe(1216050);
     database.close();
